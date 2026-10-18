@@ -163,8 +163,7 @@ npm start
 | 3333/tcp | 统一入口：HTTP/HTTPS API、WebSocket、前端页面、`/live` FLV 代理         | 是    |
 | 3333/udp | LiveKit 语音聊天需要                       | 是    |
 | 3334     | OBS 推流使用                         | 是    |
-| 3335     | HTTP-FLV 拉流（Node Media Server 内部端口）                       | 否    |
-| 5349     | TURN/TLS 媒体中继（可选启用，语音聊天tcp模式需要）                     | 是    |
+| 3335     | HTTP-FLV 拉流（Node Media Server 内部端口）                       | 否     |
 | 3337/tcp | LiveKit TCP模式时需要 | 按需   |
 
 
