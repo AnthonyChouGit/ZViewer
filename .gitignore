@@ -9,6 +9,9 @@ __pycache__/
 *.pyc
 .DS_Store
 .docs/
+
+# ---- 文档（仅本地保留，不进仓库）----
+docs/
 # ---- 环境配置（含密钥，禁止提交） ----
 .env
 .env.local
