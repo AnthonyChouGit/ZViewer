@@ -224,17 +224,26 @@ jobs:
         # 配合 generate_release_notes: true，GitHub 还会追加「New Contributors」
         # 与「Full Changelog」对比链接等结构化信息。
         shell: bash
+        # 注意：本步骤 shell 为 `bash -e -o pipefail`，任何一步非零退出都会让整个
+        # 步骤静默失败。故这里不出现 grep / head 这类会产生非零退出码的管道：
+        # - 取上一 tag 用 git describe（tag 不存在时用 `|| true` 兜住）
+        # - 截断用 git log --max-count（避免 head 提前关管道触发 SIGPIPE 141）
         run: |
-          CURRENT_TAG=${GITHUB_REF#refs/tags/}
-          # 按创建时间倒序列出所有 tag，跳过当前 tag，取第一个即为上一个 tag
-          PREV_TAG=$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags | grep -v "^${CURRENT_TAG}$" | head -1)
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${CURRENT_TAG#v}"
+
+          # checkout(fetch-depth: 0) 通常已取全 tag；显式再拉一次，防止浅取场景缺 tag
+          git fetch --tags --force --quiet || true
+
+          # 取「当前 tag 所在提交的最近祖先 tag」，不依赖 tag 创建时间先后
+          PREV_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)
+
           if [ -n "$PREV_TAG" ]; then
-            LOG=$(git log --pretty=format:"- %s" "${PREV_TAG}..${CURRENT_TAG}" | head -100)
+            LOG=$(git log --max-count=100 --pretty=format:"- %s" "${PREV_TAG}..${CURRENT_TAG}" || true)
           else
-            # 没有上一个 tag（首次发布），列出当前 tag 指向提交的全部历史
-            LOG=$(git log --pretty=format:"- %s" "${CURRENT_TAG}" | head -100)
+            # 没有上一个 tag（首次发布），列出当前 tag 指向提交的最近 100 条
+            LOG=$(git log --max-count=100 --pretty=format:"- %s" "${CURRENT_TAG}" || true)
           fi
-          VERSION="${GITHUB_REF#refs/tags/v}"
           {
             echo "## 更新内容"
             echo ""
