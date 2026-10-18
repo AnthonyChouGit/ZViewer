@@ -1,11 +1,9 @@
 import { Space } from '@/components/ui/Space'
 import type { UnionMount } from '@/modules/mounts'
 import {
-  DirectTransferField,
-  InternalNotice,
   MountPicker,
   PathInput,
-  PlaybackModeField,
+  PathPlaybackModeField,
   SingleLineInput,
 } from './shared'
 
@@ -76,18 +74,13 @@ export function PathMountSourceForm({
         selectedMountId={selectedMountId}
         onEnter={onSubmitPath}
       />
-      <PlaybackModeField
+      <PathPlaybackModeField
         directLink={directLink}
-        onChange={onChangeDirectLink}
+        onChangeDirectLink={onChangeDirectLink}
+        directLinkProxy={directLinkProxy}
+        onChangeDirectLinkProxy={onChangeDirectLinkProxy}
         directDisabled={isInternal}
       />
-      {directLink && !isInternal && (
-        <DirectTransferField
-          proxy={directLinkProxy}
-          onChange={onChangeDirectLinkProxy}
-        />
-      )}
-      {isInternal && <InternalNotice />}
     </Space>
   )
 }
