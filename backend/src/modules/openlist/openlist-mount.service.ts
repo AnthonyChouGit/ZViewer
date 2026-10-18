@@ -3,7 +3,14 @@
  * 路由层只保留参数校验与响应组装；密码规范化与直链模式裁决在此。
  */
 import { hashAlistPassword, isAlistHashedPassword } from '../../services/openlist-client';
-import { isInternalOpenListServer } from '../../services/openlist';
+
+/**
+ * 解析 directLink，内网地址强制使用服务器中转。
+ *
+ * 与 WebDAV 共用同一实现（modules/shared/mount-utils），此处保留 re-export
+ * 以维持 OpenList 侧的既有导入路径。
+ */
+export { resolveDirectLinkWithInternalCheck } from '../shared/mount-utils';
 
 /**
  * 规范化密码：明文 → AList 哈希格式。
@@ -25,24 +32,4 @@ export function normalizePasswordForStorage(password: string | null | undefined)
   if (isAlistHashedPassword(password)) return password;
   // 明文密码 → 哈希
   return hashAlistPassword(password);
-}
-
-/**
- * 解析 directLink，内网地址强制使用服务器中转。
- *
- * 当 OpenList 服务器为内网/回环地址（127.0.0.1、10.x、172.16-31.x、192.168.x、localhost、::1 等）时，
- * 浏览器无法直接访问其 raw_url 直链，必须强制通过后端 /stream 端点中转。
- *
- * @param serverUrl  规范化后的 OpenList 服务器地址
- * @param directLink 用户请求的 directLink 值
- * @returns 实际生效的 directLink（内网时强制为 false）
- */
-export function resolveDirectLinkWithInternalCheck(
-  serverUrl: string,
-  directLink: boolean,
-): boolean {
-  if (directLink && isInternalOpenListServer(serverUrl)) {
-    return false;
-  }
-  return directLink;
 }

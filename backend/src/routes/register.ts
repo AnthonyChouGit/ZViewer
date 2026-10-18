@@ -18,7 +18,7 @@ import kazumiRoutes from './kazumi';
 import cmsRoutes from './cms';
 import serverFilesRoutes from './serverFiles';
 import { createMusicRouter } from '../modules/music/music.routes';
-import { createMountRouter } from './webdav';
+import webdavRoutes from './webdav';
 import openlistRoutes from './openlist';
 import directResolveRoutes from './direct-resolve';
 import ftpRoutes from './ftp';
@@ -65,15 +65,7 @@ export function registerHttpRoutes(app: Express, io: SocketIOServer): void {
   app.use('/api/openlist', openlistRoutes);
   // 直链实时解析：前端播放时按 movieId 获取新鲜直链（openlist/webdav）
   app.use('/api/direct-resolve', directResolveRoutes);
-  app.use(
-    '/api/webdav',
-    createMountRouter({
-      type: 'webdav',
-      proxyPrefix: '/api/webdav',
-      logTag: 'webdav',
-      displayName: 'WebDAV',
-    }),
-  );
+  app.use('/api/webdav', webdavRoutes);
   app.use('/api/emby', embyRoutes);
   app.use('/api/jellyfin', jellyfinRoutes);
   app.use('/api/ftp', ftpRoutes);

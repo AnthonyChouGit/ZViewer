@@ -5,6 +5,7 @@
  */
 import { AppDataSource } from '../../data-source';
 import { UserMount } from '../../entities/UserMount';
+import { isInternalOpenListServer } from '../../services/openlist-errors';
 import { TtlCache } from '../../utils/ttl-cache';
 
 /** 移除挂载对象的密码字段，返回安全的响应对象。 */
@@ -16,6 +17,26 @@ export function stripPassword(mount: UserMount): Omit<UserMount, 'password'> {
 /** 从未知错误对象中提取错误消息。 */
 export function extractErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
+}
+
+/**
+ * 解析 directLink，内网地址强制使用服务器中转（WebDAV / OpenList 共用）。
+ *
+ * 当源站为内网/回环地址（127.0.0.1、10.x、172.16-31.x、192.168.x、localhost、::1 等）时，
+ * 浏览器无法直接访问其直链，必须强制通过后端 /stream 端点中转。
+ *
+ * @param serverUrl  规范化后的服务器地址
+ * @param directLink 用户请求的 directLink 值
+ * @returns 实际生效的 directLink（内网时强制为 false）
+ */
+export function resolveDirectLinkWithInternalCheck(
+  serverUrl: string,
+  directLink: boolean,
+): boolean {
+  if (directLink && isInternalOpenListServer(serverUrl)) {
+    return false;
+  }
+  return directLink;
 }
 
 /** HTTPS 能力探测超时（毫秒） */
