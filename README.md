@@ -117,7 +117,7 @@ ZViewerCLI 是一个运行在用户本地的 Go 程序，用于解决浏览器�
 
 ## 安装与启动
 
-首次启动自动创建ROOT管理员：用户名 `root`，密码 `root`。**生产环境部署后立即修改密码。**
+首次启动自动创建ROOT管理员：用户名 `root`，密码 `root`。**正常安装后请立即修改密码。**
 
 ### 单文件版（推荐）
 
@@ -161,13 +161,12 @@ npm start
 | 端口       | 用途                                                        | 是否对外 |
 | -------- | --------------------------------------------------------- | ---- |
 | 3333/tcp | 统一入口：HTTP/HTTPS API、WebSocket、前端页面、`/live` FLV 代理         | 是    |
-| 3333/udp | LiveKit WebRTC 媒体传输（语音聊天，与页面同号不同协议）                       | 是    |
-| 3334     | RTMP 推流（OBS，TCP 二进制协议无法与 HTTP 复用）                         | 是    |
+| 3333/udp | LiveKit 语音聊天需要                       | 是    |
+| 3334     | OBS 推流使用                         | 是    |
 | 3335     | HTTP-FLV 拉流（Node Media Server 内部端口）                       | 否    |
-| 5349     | TURN/TLS 媒体中继（可选启用，UDP 被拦时的 TCP 兜底通道）                     | 是    |
-| 3337/tcp | LiveKit ICE/TCP 媒体直连（管理端切换「语音传输模式 = TCP」时启用；UDP 被墙时的直连兜底） | 按需   |
+| 5349     | TURN/TLS 媒体中继（可选启用，语音聊天tcp模式需要）                     | 是    |
+| 3337/tcp | LiveKit TCP模式时需要 | 按需   |
 
-OBS 推流地址：`rtmp://<host>:3334/live`。语音聊天的信令经 3333 的 `/rtc` 反代，无需额外端口。
 
 ## Docker 部署
 
@@ -193,7 +192,7 @@ services:
       - "3333:3333"      # 统一入口：API + WebSocket + 前端页面 + /live FLV 代理 + /rtc 语音信令反代
       - "3333:3333/udp"  # LiveKit WebRTC 媒体传输（与页面同号，协议不同）
       - "3334:3334"      # RTMP 推流 (OBS)
-      - "3337:3337"    	 # ICE/TCP 媒体直连：管理端「语音传输模式 = TCP」
+      - "3337:3337"    	 # 语音聊天使用tcp时需放行
     volumes:
       - zviewer-data:/app/config
     restart: unless-stopped
@@ -292,15 +291,15 @@ STUN 探测失败（纯内网部署且无出网、特殊 NAT）时，ICE 会广�
 | `LIVEKIT_BIND`           | 内嵌 LiveKit 监听地址                                                   | `::`（双栈）                |
 | `LIVEKIT_NODE_IP`        | ICE 广播地址；留空时自动启用 LiveKit 原生 STUN 外部 IP 发现（需可出网），NAT 复杂环境手动指定公网 IP | 空（自动）                   |
 | `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 端口（管理端「语音传输模式 = TCP」时开启的直连兜底通道）                           | `3337`                  |
-| `LIVEKIT_TURN_DOMAIN`    | TURN/TLS 域名（与 CERT/KEY 三者齐全即启用 TCP 5349 兜底中继，域名寻址不依赖公网 IP）        | —                       |
-| `LIVEKIT_TURN_CERT`      | TURN TLS 证书路径（必须正式证书，自签不被浏览器 WebRTC 信任）                           | —                       |
+| `LIVEKIT_TURN_DOMAIN`    | TURN/TLS 域名        | —                       |
+| `LIVEKIT_TURN_CERT`      | TURN TLS 证书路径                           | —                       |
 | `LIVEKIT_TURN_KEY`       | TURN TLS 私钥路径                                                     | —                       |
 
 ## 构建和更新
 
-- **构建**：`build-all.js` 将前后端编译为单文件版本（`zviewer-backend` / `zviewer-cert`，打包目标 node26），并下载 LiveKit 伴生二进制随包分发（语音聊天下箱即用）；启动脚本模板在 `packaging/`。
-- **CI**：push `main` → 构建双平台单文件（node26），Linux 版推 Docker Hub（`0.0.0-dev.<sha>` 预发布）；打 `v*` tag → 正式版 + GitHub Release。CI 下 LiveKit 下载失败会硬失败，保证产物含完整语音能力。
-- **更新**：后端从 GitHub Releases 检测新版本（管理后台可关预发布），下载后替换程序文件并重启进程；也支持手动上传压缩包更新。数据库与配置在 `config/`，更新不覆盖。
+- **构建**：`build-all.js` 将前后端编译为单文件版本（`zviewer-backend` / `zviewer-cert`，并下载 LiveKit 伴生二进制随包分发（语音聊天下箱即用）；启动脚本模板在 `packaging/`。
+- **CI**：push `main` → 构建双平台单文件（node26），Linux 版推 Docker Hub（`0.0.0-dev.<sha>` 预发布）；打 `v*` tag → 正式版 + GitHub Release
+- **更新**：后端从 GitHub Releases ，下载后替换程序文件并重启进程；也支持手动上传压缩包更新。数据库与配置在 `config/`。
 
 ## 本地开发
 
