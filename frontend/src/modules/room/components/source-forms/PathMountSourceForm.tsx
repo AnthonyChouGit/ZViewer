@@ -24,8 +24,6 @@ interface PathMountSourceFormProps {
   onSubmitPath?: () => void
   directLink: boolean
   onChangeDirectLink: (directLink: boolean) => void
-  directLinkProxy: boolean
-  onChangeDirectLinkProxy: (proxy: boolean) => void
   /** 内网地址：强制服务器转发 */
   isInternal: boolean
 }
@@ -47,8 +45,6 @@ export function PathMountSourceForm({
   onSubmitPath,
   directLink,
   onChangeDirectLink,
-  directLinkProxy,
-  onChangeDirectLinkProxy,
   isInternal,
 }: PathMountSourceFormProps) {
   return (
@@ -77,8 +73,6 @@ export function PathMountSourceForm({
       <PathPlaybackModeField
         directLink={directLink}
         onChangeDirectLink={onChangeDirectLink}
-        directLinkProxy={directLinkProxy}
-        onChangeDirectLinkProxy={onChangeDirectLinkProxy}
         directDisabled={isInternal}
       />
     </Space>

@@ -20,7 +20,6 @@ import { useSystemSettingsStore } from '@/store/systemSettingsStore'
 import type { QualityOption } from './resolveSource'
 import { buildServerFileProxyUrl } from '@/modules/server-files/serverFilesApi'
 import { resolveMovieDirectUrl } from '@/modules/direct-link/directLinkApi'
-import { buildProxyUrl } from '@/modules/player/services/url-proxy'
 import { resolveAniSubsEpisode, buildAniSubsProxyUrl } from '@/modules/anisubs'
 import { resolveCmsEpisode, buildCmsProxyUrl } from '@/modules/cms/api'
 import type { CmsSourceMeta } from '@/modules/cms/types'
@@ -578,20 +577,6 @@ export async function resolveMovieSource({
   }
   const inferredFormat = movie.format || detectMediaFormat(effectiveUrl)
 
-  // 服务器中转开关（directLink=true 且 directLinkProxy=true）：媒体一律
-  // 经服务器中转，不做「先直连失败再回退」——非清单类格式（m3u8/mpd 的
-  // 相对路径在代理 URL 下会解析到代理端点导致拼接错误）直接预包装为
-  // 服务器代理 URL；HLS/mpd 由引擎全量代理（hls-engine 的 ProxyLoader
-  // 在 noProxyFallback=false 时对清单+子资源无条件包装）。
-  if (
-    movie.directLink === true &&
-    movie.directLinkProxy === true &&
-    inferredFormat !== 'hls' &&
-    inferredFormat !== 'dash'
-  ) {
-    effectiveUrl = buildProxyUrl(effectiveUrl)
-  }
-
   return {
     sourceUrl: effectiveUrl,
     audioUrl: movie.audioUrl,
@@ -605,10 +590,8 @@ export async function resolveMovieSource({
     headers: undefined,
     reusedRecoveryUrl: false,
     playsvideoEnabled: movie.playsvideoEnabled !== false,
-    // 挂载直链模式（movie.directLink）：默认强制直链直连（noProxyFallback），
-    // 直连失败不回退服务器代理，直接提示。「服务器中转」开关
-    // （directLinkProxy）开启时媒体流一律经服务器中转，不做直连尝试。
-    noProxyFallback:
-      movie.directLink === true && movie.directLinkProxy !== true,
+    // 挂载直链模式（movie.directLink）：强制直链直连（noProxyFallback），
+    // 直连失败不回退服务器代理，直接提示。
+    noProxyFallback: movie.directLink === true,
   }
 }

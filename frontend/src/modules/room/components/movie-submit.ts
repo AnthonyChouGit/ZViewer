@@ -68,7 +68,6 @@ export interface SubmitMovieContext {
   openlistDirectLink: boolean
   embyDirectLink: boolean
   jellyfinDirectLink: boolean
-  directLinkProxy: boolean
   isWebdavInternal: boolean
   isOpenlistInternal: boolean
 }
@@ -158,11 +157,9 @@ export async function addMp4Movie(ctx: SubmitMovieContext) {
     title,
     source: 'mp4',
     format: detectedFormat !== 'unknown' ? detectedFormat : undefined,
-    // 视频直链影片统一走直链模式：默认强制直链直连（noProxyFallback），
-    // 「服务器中转」开关开启（directLinkProxy=true）时媒体流一律经
-    // 服务器中转（解析层预包装代理 URL），不做直连尝试
+    // 视频直链影片统一走直链模式：强制直链直连（noProxyFallback），
+    // 直连失败不回退服务器代理，直接报错
     directLink: true,
-    directLinkProxy: ctx.directLinkProxy,
   })
   ctx.resetForm()
   message.success('影片已添加')
@@ -230,7 +227,6 @@ export async function addPathMountMovie(ctx: SubmitMovieContext) {
     serverUrl: mountServerUrl,
     path: mountPath,
     directLink: isDirect,
-    directLinkProxy: isDirect ? ctx.directLinkProxy : undefined,
   })
   ctx.resetForm()
   message.success('影片已添加')

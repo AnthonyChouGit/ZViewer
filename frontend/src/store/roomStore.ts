@@ -77,12 +77,6 @@ export interface Movie {
   username?: string | null
   directLink?: boolean
   /**
-   * 直链模式的媒体传输方式（仅 directLink=true 时有意义）。
-   * - false（默认）：强制直链直连，直连失败直接报错不回退中转
-   * - true：媒体流一律经服务器中转，不做直连尝试
-   */
-  directLinkProxy?: boolean
-  /**
    * 数据源影片（ani-subs / Kazumi / CMS 采集源）的服务器中转模式。
    * - false（默认）：一律直连源站，不自动兜底服务器代理（带防盗链的源需开启）
    * - true：媒体流一律经服务器中转
@@ -154,12 +148,6 @@ export interface MovieDto {
   username: string | null
   directLink: boolean
   /**
-   * 直链模式的媒体传输方式（仅 directLink=true 时有意义）。
-   * - false（默认）：强制直链直连，直连失败直接报错不回退中转
-   * - true：媒体流一律经服务器中转，不做直连尝试
-   */
-  directLinkProxy?: boolean
-  /**
    * 数据源影片（ani-subs / Kazumi / CMS 采集源）的服务器中转模式。
    * - false（默认）：一律直连源站，不自动兜底服务器代理（带防盗链的源需开启）
    * - true：媒体流一律经服务器中转
@@ -191,7 +179,6 @@ export function mapDtoToMovie(dto: MovieDto): Movie {
     path: dto.path,
     username: dto.username,
     directLink: dto.directLink,
-    directLinkProxy: dto.directLinkProxy === true,
     serverProxy: dto.serverProxy === true,
     playsvideoEnabled: dto.playsvideoEnabled !== false,
     cliOnly: dto.cliOnly === true,
@@ -434,8 +421,6 @@ interface RoomState {
       username?: string
       password?: string
       directLink?: boolean
-      /** 直链模式传输方式：false（默认）强制直链直连，true 一律经服务器中转 */
-      directLinkProxy?: boolean
       /** 数据源影片（ani/kazumi/cms）服务器中转模式：true 时媒体流一律经服务器 */
       serverProxy?: boolean
       /** Emby/Jellyfin 专属：是否存在多版本；false 时不渲染清晰度选择框 */
@@ -481,8 +466,6 @@ interface RoomState {
       username?: string
       password?: string
       directLink?: boolean
-      /** 直链模式传输方式：false（默认）强制直链直连，true 一律经服务器中转 */
-      directLinkProxy?: boolean
       /** 数据源影片（ani/kazumi/cms）服务器中转模式：true 时媒体流一律经服务器 */
       serverProxy?: boolean
       sourceMeta?: AniSubsSourceMeta | CmsSourceMeta | null

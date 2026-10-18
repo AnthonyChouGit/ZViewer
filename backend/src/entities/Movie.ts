@@ -131,18 +131,6 @@ export class Movie {
   directLink!: boolean;
 
   /**
-   * 直链模式的媒体传输方式（仅 directLink=true 时有意义）。
-   *
-   * - false（默认）：强制直链直连——浏览器直连源站，服务器零媒体流量；
-   *   直连失败（CORS/防盗链/签名过期）直接向用户报错，不回退服务器中转
-   * - true：媒体流一律经服务器中转——非清单类格式（m3u8/mpd）解析层
-   *   预包装为服务器代理 URL，不做直连尝试；m3u8 清单/分片由 hls-engine
-   *   ProxyLoader 全量代理
-   */
-  @Column({ type: 'boolean', default: false })
-  directLinkProxy!: boolean;
-
-  /**
    * 数据源影片（ani-subs / Kazumi / CMS 采集源）的服务器中转模式。
    *
    * - false（默认）：一律直连源站，不自动兜底服务器代理（带防盗链的源

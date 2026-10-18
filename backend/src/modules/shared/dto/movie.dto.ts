@@ -91,12 +91,6 @@ export interface MovieDto {
   /** 是否为直链 */
   directLink?: boolean;
   /**
-   * 直链模式的媒体传输方式（仅 directLink=true 时有意义）。
-   * - false（默认）：强制直链直连，失败不回退服务器中转
-   * - true：媒体流一律经服务器中转，不做直连尝试
-   */
-  directLinkProxy?: boolean;
-  /**
    * 数据源影片（ani-subs / Kazumi / CMS 采集源）的服务器中转模式。
    * - false（默认）：一律直连源站，不自动兜底服务器代理（带防盗链的源需开启）
    * - true：媒体流一律经服务器中转

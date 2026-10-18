@@ -189,7 +189,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
   const [webdavDirectLink, setWebdavDirectLink] = useState(false)
   const [openlistDirectLink, setOpenlistDirectLink] = useState(false)
   // 直链模式的媒体传输方式：false（默认）强制直链直连，true 一律经服务器中转
-  const [directLinkProxy, setDirectLinkProxy] = useState(false)
   // 数据源影片（ani/kazumi/cms）服务器中转模式：true 时媒体流一律经服务器
   const [serverProxy, setServerProxy] = useState(false)
   const [embyDirectLink, setEmbyDirectLink] = useState(false)
@@ -949,7 +948,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
                 serverUrl,
                 path: normalizedPath,
                 directLink: true,
-                directLinkProxy,
               })
             } else {
               // 代理模式：resolve 返回相对 proxy URL，后端随后用 movieId 重写为 stream URL
@@ -1053,7 +1051,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
       addEmbySeriesCard,
       webdav.serverUrl,
       webdavDirectLink,
-      directLinkProxy,
       isWebdavInternal,
       ftp.serverUrl,
       ftp.username,
@@ -1161,7 +1158,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
         openlistDirectLink,
         embyDirectLink,
         jellyfinDirectLink,
-        directLinkProxy,
         isWebdavInternal,
         isOpenlistInternal,
       }
@@ -1239,8 +1235,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
             onPatch={(patch) => setWebdav((prev) => ({ ...prev, ...patch }))}
             directLink={webdavDirectLink}
             onChangeDirectLink={setWebdavDirectLink}
-            directLinkProxy={directLinkProxy}
-            onChangeDirectLinkProxy={setDirectLinkProxy}
             isInternal={isWebdavInternal}
           />
         )
@@ -1260,8 +1254,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
             onSubmitPath={() => void handleAddMovie()}
             directLink={openlistDirectLink}
             onChangeDirectLink={setOpenlistDirectLink}
-            directLinkProxy={directLinkProxy}
-            onChangeDirectLinkProxy={setDirectLinkProxy}
             isInternal={isOpenlistInternal}
           />
         )
@@ -1385,49 +1377,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           {renderSourceForm()}
 
           {renderActionButton()}
-
-          {/* 服务器中转开关：仅「视频直链」源显示。默认关闭——一律直连
-              源站、服务器零媒体流量（m3u8 分片/MP4 均源站直传，直连失败
-              直接报错）；开启后媒体流一律经服务器中转，不做直连尝试
-              （非 HLS 预包装代理 URL，HLS 由引擎 ProxyLoader 全量代理）。
-              底层走 directLinkProxy（与数据源开关方向相反，UI 已统一为
-              「开=中转」）。挂载类源的同类开关在各源表单内（直链模式 →
-              直链传输方式）。 */}
-          {sourceType === 'mp4' && (
-            <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[var(--md-sys-shape-corner)] bg-[var(--md-sys-color-surface-container-high)]">
-              <div className="min-w-0">
-                <Text className="block text-xs font-medium">服务器中转</Text>
-                <Text
-                  type="secondary"
-                  className="block text-[11px] leading-snug mt-0.5"
-                >
-                  关闭（默认）：一律直连源站，服务器零媒体流量，直连失败直接报错。开启：媒体流一律经服务器中转，不做直连尝试。
-                </Text>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={directLinkProxy}
-                disabled={!isHost}
-                onClick={() => setDirectLinkProxy((prev) => !prev)}
-                className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                style={{
-                  backgroundColor: directLinkProxy
-                    ? 'var(--md-sys-color-primary)'
-                    : 'var(--md-sys-color-outline)',
-                }}
-              >
-                <span
-                  className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                  style={{
-                    transform: directLinkProxy
-                      ? 'translateX(18px)'
-                      : 'translateX(2px)',
-                  }}
-                />
-              </button>
-            </div>
-          )}
 
           {/* 服务器中转开关：仅数据源类（ani/kazumi/cms）显示。默认关闭——
               一律直连源站，服务器零媒体流量（带防盗链的源不开中转无法播放，

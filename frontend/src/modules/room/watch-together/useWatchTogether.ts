@@ -142,8 +142,6 @@ export function useWatchTogether({
   const lastLoadedMovieRef = useRef<{
     id: number
     url: string
-    /** 直链传输方式：纳入去重比较，切换「服务器中转」后自动重载生效 */
-    directLinkProxy?: boolean
   } | null>(null)
   // 房主刷新恢复：用于在 loadMovie 完成后应用 initialPlayback.currentTime 并暂停
   // 通过 ref 暂存，避免修改 effect 依赖导致 loadMovie 重新触发
@@ -852,13 +850,9 @@ export function useWatchTogether({
     if (!movie) return
 
     // 避免 movies 列表刷新时重复加载同一部影片。
-    // directLinkProxy 纳入比较：切换「服务器中转」开关后，
-    // noProxyFallback 语义变化需要重新 loadMovie 才能生效。
     if (
       lastLoadedMovieRef.current?.id === movie.id &&
-      lastLoadedMovieRef.current?.url === movie.url &&
-      lastLoadedMovieRef.current?.directLinkProxy ===
-        (movie.directLinkProxy === true)
+      lastLoadedMovieRef.current?.url === movie.url
     ) {
       return
     }
@@ -886,7 +880,6 @@ export function useWatchTogether({
     lastLoadedMovieRef.current = {
       id: movie.id,
       url: movie.url,
-      directLinkProxy: movie.directLinkProxy === true,
     }
 
     /** 带解析进度 UI 的在线解析（B站），读取 localStorage 中该影片的播放模式偏好 */

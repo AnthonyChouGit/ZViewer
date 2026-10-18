@@ -175,37 +175,24 @@ export function PlaybackModeField({
 }
 
 interface PathPlaybackModeFieldProps {
-  /** true=直链模式（直链直连/服务器中转），false=服务器转发 */
+  /** true=直链直连，false=服务器转发 */
   directLink: boolean
   onChangeDirectLink: (directLink: boolean) => void
-  /** true=直链解析但媒体经服务器中转，false=强制直链直连 */
-  directLinkProxy: boolean
-  onChangeDirectLinkProxy: (proxy: boolean) => void
   /** 内网地址：浏览器无法直连，仅允许「服务器转发」 */
   directDisabled?: boolean
 }
 
 /**
- * 路径型挂载（WebDAV / OpenList）的播放方式三选一。
- * 原「播放方式 + 直链传输方式」两个下拉合并为一个：
+ * 路径型挂载（WebDAV / OpenList）的播放方式二选一。
  * - 服务器转发：resolve 返回代理流 URL，媒体由服务器实时读取挂载文件
- * - 服务器中转：挂载直链解析，媒体数据一律经服务器转发（directLinkProxy）
  * - 直链直连：挂载直链解析，浏览器直接访问挂载服务器，失败不回退
  */
 export function PathPlaybackModeField({
   directLink,
   onChangeDirectLink,
-  directLinkProxy,
-  onChangeDirectLinkProxy,
   directDisabled = false,
 }: PathPlaybackModeFieldProps) {
-  const value = directDisabled
-    ? 'proxy'
-    : !directLink
-      ? 'proxy'
-      : directLinkProxy
-        ? 'relay'
-        : 'direct'
+  const value = directDisabled ? 'proxy' : directLink ? 'direct' : 'proxy'
   return (
     <>
       <Dropdown
@@ -217,25 +204,9 @@ export function PathPlaybackModeField({
             label: '直链直连（浏览器直接访问挂载服务器）',
             disabled: directDisabled,
           },
-          {
-            value: 'relay',
-            label: '服务器中转（直链解析，媒体经服务器）',
-            disabled: directDisabled,
-          },
           { value: 'proxy', label: '服务器转发（服务器读取挂载流）' },
         ]}
-        onChange={(next) => {
-          if (next === 'direct') {
-            onChangeDirectLink(true)
-            onChangeDirectLinkProxy(false)
-          } else if (next === 'relay') {
-            onChangeDirectLink(true)
-            onChangeDirectLinkProxy(true)
-          } else {
-            onChangeDirectLink(false)
-            onChangeDirectLinkProxy(false)
-          }
-        }}
+        onChange={(next) => onChangeDirectLink(next === 'direct')}
       />
       {directDisabled && <InternalNotice />}
     </>
