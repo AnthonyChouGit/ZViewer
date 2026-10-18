@@ -25,7 +25,6 @@ import { Modal, ConfirmModal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { Tag } from '@/components/ui/Tag'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Title, Text, Paragraph } from '@/components/ui/Typography'
 import { message } from '@/components/ui/message'
 import { useAuthStore, type User as AuthUser } from '@/store/authStore'
@@ -43,6 +42,8 @@ import ServerFileManager from '@/modules/server-files/ServerFileManager'
 import { BilibiliDownloadModal } from '@/modules/server-files/BilibiliDownloadModal'
 import { useNcmLogin, ncmVipLabel, type NcmQrStatus } from '@/modules/music'
 import { apiFetch } from '@/lib/api'
+import { CookieLoginModal } from './profile/CookieLoginModal'
+import { useCookieBinding } from './profile/useCookieBinding'
 
 /** 构建头像完整 URL（后端返回相对路径，前端拼接 API_URL） */
 function buildAvatarUrl(
@@ -67,7 +68,6 @@ export default function ProfilePage() {
   const navigate = useNavigate()
   const { user, setUser } = useAuthStore()
   const { betaFeaturesEnabled } = useSystemSettingsStore()
-  const copy = useCopyToClipboard()
 
   useEffect(() => {
     if (user?.role === 'guest') {
@@ -79,17 +79,6 @@ export default function ProfilePage() {
     null
   )
   const [bilibiliLoading, setBilibiliLoading] = useState(true)
-
-  // Cookie 登录
-  const [cookieModalOpen, setCookieModalOpen] = useState(false)
-  const [cookieInput, setCookieInput] = useState('')
-  const [cookieLoading, setCookieLoading] = useState(false)
-  const [cookieCopyLoading, setCookieCopyLoading] = useState(false)
-  // 网易云 Cookie 登录/复制
-  const [ncmCookieModalOpen, setNcmCookieModalOpen] = useState(false)
-  const [ncmCookieInput, setNcmCookieInput] = useState('')
-  const [ncmCookieLoading, setNcmCookieLoading] = useState(false)
-  const [ncmCookieCopyLoading, setNcmCookieCopyLoading] = useState(false)
 
   // B站视频下载 Popup（root 限定，位于「刷新绑定状态」旁）
   const [biliDownloadOpen, setBiliDownloadOpen] = useState(false)
@@ -167,64 +156,33 @@ export default function ProfilePage() {
     message.success('已退出网易云音乐登录')
   }, [ncmLogout])
 
-  /** 复制当前绑定的网易云 Cookie（GET /api/music/ncm-cookie） */
-  const handleCopyNcmCookie = useCallback(async () => {
-    setNcmCookieCopyLoading(true)
-    try {
+  // 网易云 Cookie 复制/登录（平台差异经回调注入，交互骨架见 useCookieBinding）
+  const ncmCookieBinding = useCookieBinding({
+    fetchCookie: async () => {
       const res = await apiFetch('/api/music/ncm-cookie')
       const data = (await res.json()) as { success: boolean; cookie?: string }
-      if (!data.success || !data.cookie) {
-        message.warning('未获取到 Cookie，请重新登录网易云音乐')
-        return
-      }
-      await copy(data.cookie, {
-        successMessage: 'Cookie 已复制到剪贴板',
-        errorMessage: '复制 Cookie 失败',
-      })
-    } catch {
-      message.error('复制 Cookie 失败')
-    } finally {
-      setNcmCookieCopyLoading(false)
-    }
-  }, [copy])
-
-  /** 网易云 Cookie 登录（POST /api/music/ncm-cookie-login） */
-  const handleNcmCookieLogin = useCallback(async () => {
-    const trimmed = ncmCookieInput.trim()
-    if (!trimmed) {
-      message.warning('请输入 Cookie')
-      return
-    }
-    setNcmCookieLoading(true)
-    try {
+      return data.success ? (data.cookie ?? null) : null
+    },
+    cookieUnavailableMessage: '未获取到 Cookie，请重新登录网易云音乐',
+    loginWithCookie: async (cookie) => {
       const res = await apiFetch('/api/music/ncm-cookie-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie: trimmed }),
+        body: JSON.stringify({ cookie }),
       })
       const data = (await res.json()) as {
         success: boolean
         message?: string
       }
       if (!data.success) {
-        message.error(data.message ?? 'Cookie 登录失败')
-        return
+        throw new Error(data.message ?? 'Cookie 登录失败')
       }
-      message.success('网易云音乐 Cookie 登录成功')
-      setNcmCookieModalOpen(false)
-      setNcmCookieInput('')
-      await ncmFetchLoginStatus()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Cookie 登录失败')
-    } finally {
-      setNcmCookieLoading(false)
-    }
-  }, [ncmCookieInput, ncmFetchLoginStatus])
+    },
+    loginSuccessMessage: '网易云音乐 Cookie 登录成功',
+    loginFailedMessage: 'Cookie 登录失败',
+    refreshStatus: ncmFetchLoginStatus,
+  })
 
-  const handleCloseNcmCookieModal = useCallback(() => {
-    setNcmCookieModalOpen(false)
-    setNcmCookieInput('')
-  }, [])
   const [passwordLoading, setPasswordLoading] = useState(false)
 
   const [newUsername, setNewUsername] = useState('')
@@ -270,49 +228,19 @@ export default function ProfilePage() {
     }
   }, [])
 
-  const handleCopyCookie = useCallback(async () => {
-    setCookieCopyLoading(true)
-    try {
-      const cookie = await getBilibiliCookie()
-      if (!cookie) {
-        message.warning('未获取到 Cookie，请重新登录 B站')
-        return
-      }
-      await copy(cookie, {
-        successMessage: 'Cookie 已复制到剪贴板',
-        errorMessage: '复制 Cookie 失败',
-      })
-    } catch {
-      message.error('复制 Cookie 失败')
-    } finally {
-      setCookieCopyLoading(false)
-    }
-  }, [copy])
-
-  const handleCookieLogin = useCallback(async () => {
-    const trimmed = cookieInput.trim()
-    if (!trimmed) {
-      message.warning('请输入 Cookie')
-      return
-    }
-    setCookieLoading(true)
-    try {
-      await loginBilibiliWithCookie(trimmed)
-      message.success('B站 Cookie 登录成功')
-      setCookieModalOpen(false)
-      setCookieInput('')
+  // B站 Cookie 复制/登录（与网易云共用 useCookieBinding 交互骨架）
+  const biliCookieBinding = useCookieBinding({
+    fetchCookie: () => getBilibiliCookie(),
+    cookieUnavailableMessage: '未获取到 Cookie，请重新登录 B站',
+    loginWithCookie: async (cookie) => {
+      await loginBilibiliWithCookie(cookie)
+    },
+    loginSuccessMessage: 'B站 Cookie 登录成功',
+    loginFailedMessage: 'Cookie 登录失败',
+    refreshStatus: async () => {
       await loadBilibiliUser()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Cookie 登录失败')
-    } finally {
-      setCookieLoading(false)
-    }
-  }, [cookieInput, loadBilibiliUser])
-
-  const handleCloseCookieModal = useCallback(() => {
-    setCookieModalOpen(false)
-    setCookieInput('')
-  }, [])
+    },
+  })
 
   const handleChangePassword = useCallback(async () => {
     if (!oldPassword || !newPassword) {
@@ -659,8 +587,8 @@ export default function ProfilePage() {
                       size="sm"
                       className="w-8 justify-center px-0"
                       icon={<Cookie className="h-4 w-4" />}
-                      onClick={handleCopyNcmCookie}
-                      loading={ncmCookieCopyLoading}
+                      onClick={ncmCookieBinding.copyCookie}
+                      loading={ncmCookieBinding.copyLoading}
                       title="复制当前绑定的网易云 Cookie（可用于其他设备登录或备份）"
                       aria-label="复制 Cookie"
                     />
@@ -692,7 +620,7 @@ export default function ProfilePage() {
                     <Button
                       size="sm"
                       icon={<Cookie className="h-4 w-4" />}
-                      onClick={() => setNcmCookieModalOpen(true)}
+                      onClick={ncmCookieBinding.openModal}
                     >
                       Cookie 登录
                     </Button>
@@ -746,8 +674,8 @@ export default function ProfilePage() {
                       size="sm"
                       className="w-8 justify-center px-0"
                       icon={<Cookie className="h-4 w-4" />}
-                      onClick={handleCopyCookie}
-                      loading={cookieCopyLoading}
+                      onClick={biliCookieBinding.copyCookie}
+                      loading={biliCookieBinding.copyLoading}
                       title="复制当前绑定的 B站 Cookie（可用于其他设备登录或备份）"
                       aria-label="复制 Cookie"
                     />
@@ -781,7 +709,7 @@ export default function ProfilePage() {
                     variant="secondary"
                     size="sm"
                     icon={<Cookie className="h-4 w-4" />}
-                    onClick={() => setCookieModalOpen(true)}
+                    onClick={biliCookieBinding.openModal}
                   >
                     Cookie 登录
                   </Button>
@@ -892,52 +820,21 @@ export default function ProfilePage() {
       </Modal>
 
       {/* Cookie 登录 Modal */}
-      <Modal
-        open={cookieModalOpen}
-        onClose={handleCloseCookieModal}
+      <CookieLoginModal
+        open={biliCookieBinding.modalOpen}
+        onClose={biliCookieBinding.closeModal}
         title="Cookie 登录哔哩哔哩"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCloseCookieModal}
-              disabled={cookieLoading}
-            >
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleCookieLogin}
-              disabled={cookieLoading || !cookieInput.trim()}
-            >
-              {cookieLoading ? '验证中...' : '登录'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <Paragraph type="secondary" className="m-0 text-xs leading-relaxed">
-            1. 在浏览器中登录 bilibili.com
-            <br />
-            2. 按 F12 打开开发者工具 → Application → Cookies
-            <br />
-            3. 复制全部 Cookie（至少需包含 SESSDATA）
-          </Paragraph>
-          <textarea
-            value={cookieInput}
-            onChange={(e) => setCookieInput(e.target.value)}
-            placeholder="粘贴 B站 Cookie，如：SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
-            rows={5}
-            className="w-full resize-none rounded-[var(--md-sys-shape-corner)] border bg-[var(--md-sys-color-surface-container)] px-3 py-2 text-sm text-[var(--md-sys-color-on-surface)] placeholder:text-[var(--md-sys-color-on-surface-variant)] focus:outline-none focus:ring-1 focus:ring-[var(--md-sys-color-primary)]"
-            style={{
-              borderColor: 'var(--md-sys-color-outline-variant)',
-            }}
-            disabled={cookieLoading}
-          />
-        </div>
-      </Modal>
+        instructions={[
+          '1. 在浏览器中登录 bilibili.com',
+          '2. 按 F12 打开开发者工具 → Application → Cookies',
+          '3. 复制全部 Cookie（至少需包含 SESSDATA）',
+        ]}
+        placeholder="粘贴 B站 Cookie，如：SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
+        input={biliCookieBinding.cookieInput}
+        onInputChange={biliCookieBinding.setCookieInput}
+        loading={biliCookieBinding.loginLoading}
+        onSubmit={biliCookieBinding.loginWithCookieInput}
+      />
 
       {/* 网易云扫码登录 Modal（与一起听模块共用 useNcmLogin 与后端凭据） */}
       <Modal
@@ -997,52 +894,21 @@ export default function ProfilePage() {
       </Modal>
 
       {/* 网易云 Cookie 登录 Modal */}
-      <Modal
-        open={ncmCookieModalOpen}
-        onClose={handleCloseNcmCookieModal}
+      <CookieLoginModal
+        open={ncmCookieBinding.modalOpen}
+        onClose={ncmCookieBinding.closeModal}
         title="Cookie 登录网易云音乐"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCloseNcmCookieModal}
-              disabled={ncmCookieLoading}
-            >
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleNcmCookieLogin}
-              disabled={ncmCookieLoading || !ncmCookieInput.trim()}
-            >
-              {ncmCookieLoading ? '验证中...' : '登录'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <Paragraph type="secondary" className="m-0 text-xs leading-relaxed">
-            1. 在浏览器中登录 music.163.com
-            <br />
-            2. 按 F12 打开开发者工具 → Application → Cookies
-            <br />
-            3. 复制 Cookie（至少需包含 MUSIC_U），登录态有效性会在提交时校验
-          </Paragraph>
-          <textarea
-            value={ncmCookieInput}
-            onChange={(e) => setNcmCookieInput(e.target.value)}
-            placeholder="粘贴网易云 Cookie，如：MUSIC_U=xxx; __csrf=xxx"
-            rows={5}
-            className="w-full resize-none rounded-[var(--md-sys-shape-corner)] border bg-[var(--md-sys-color-surface-container)] px-3 py-2 text-sm text-[var(--md-sys-color-on-surface)] placeholder:text-[var(--md-sys-color-on-surface-variant)] focus:outline-none focus:ring-1 focus:ring-[var(--md-sys-color-primary)]"
-            style={{
-              borderColor: 'var(--md-sys-color-outline-variant)',
-            }}
-            disabled={ncmCookieLoading}
-          />
-        </div>
-      </Modal>
+        instructions={[
+          '1. 在浏览器中登录 music.163.com',
+          '2. 按 F12 打开开发者工具 → Application → Cookies',
+          '3. 复制 Cookie（至少需包含 MUSIC_U），登录态有效性会在提交时校验',
+        ]}
+        placeholder="粘贴网易云 Cookie，如：MUSIC_U=xxx; __csrf=xxx"
+        input={ncmCookieBinding.cookieInput}
+        onInputChange={ncmCookieBinding.setCookieInput}
+        loading={ncmCookieBinding.loginLoading}
+        onSubmit={ncmCookieBinding.loginWithCookieInput}
+      />
 
       <Modal
         open={editInfoModalOpen}
