@@ -55,6 +55,7 @@
 
 - [功能一览](#功能一览)
 - [安装与启动](#安装与启动)
+  - [交互菜单](#交互菜单)
 - [Docker 部署](#docker-部署)
 - [部署配置](#部署配置)
 
@@ -86,19 +87,38 @@
 
 ### 单文件版（推荐）
 
-从 [Releases](https://github.com/Zero-wyc/ZViewer/releases) 下载压缩包，解压后运行：
+从 [Releases](https://github.com/Zero-wyc/ZViewer/releases) 下载对应平台压缩包，解压后：
 
-```bash
-# Windows
-start.bat start         # 启动服务
-start.bat               # 交互菜单
+- **Windows**：双击 `start.bat`，进入交互菜单
+- **Linux**：执行 `./start.sh`（不带参数），进入交互菜单
 
-# Linux
-./start.sh start
-./start.sh              # 交互菜单
+在菜单中选择 `1` 启动服务，完成后访问 `http://localhost:3333`。
+
+也可以跳过菜单直接带命令执行，如 `start.bat start` / `./start.sh start`；完整命令见 `start.bat help`。
+
+#### 交互菜单
+
+```text
+  1) 启动服务              2) 仅启动后端
+  3) 停止服务              4) 重启服务
+  5) 查看状态              6) 查看日志
+  7) 一键签发 SSL 证书     8) HTTPS 启动（自动签发证书）
+  0) 退出
 ```
 
-访问 `http://localhost:3333`。
+| 编号 | 功能       | 说明                                                     |
+| -- | -------- | ------------------------------------------------------ |
+| 1  | 启动服务     | HTTP 启动，端口取 `.env` 的 `PORT`（默认 3333）                     |
+| 2  | 仅启动后端    | 先选 HTTP / HTTPS；跳过前端产物校验，适合前后端分离调试                      |
+| 3  | 停止服务     | 按记录的 PID 停止，端口被占用时兜底清理                                 |
+| 4  | 重启服务     | 停止后重新启动                                                |
+| 5  | 查看状态     | 端口监听、进程 PID、程序与证书是否齐全                                  |
+| 6  | 查看日志     | 输出 `log/backend.log` 末 50 行                             |
+| 7  | 签发 SSL 证书 | 选 `localhost` 自签，或公网域名 / 公网 IP 申请 Let's Encrypt 证书（需已解析且 80 端口可达；内网 IP 自动回退自签） |
+| 8  | HTTPS 启动 | 签发证书后以 HTTPS 启动                                        |
+| 0  | 退出       | 只关闭菜单窗口，后台服务继续运行；需要停止请选 `3`                            |
+
+> 每次操作结束后按回车返回菜单。
 
 ### 源码版
 
