@@ -8,11 +8,9 @@ import { createServer as createHttpsServer } from 'https';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import path from 'node:path';
 import fs from 'node:fs';
 import { AppDataSource } from './data-source';
 import {
-  PROJECT_ROOT,
   AVATARS_DIR,
   ensureDataDirs,
   migrateLegacyDataIfNeeded,
@@ -43,6 +41,10 @@ import {
   stopNcmApiService,
 } from './modules/music/ncm-api.service';
 import { PORT, HOST, CORS_ORIGIN, USE_HTTPS } from './services/server-env';
+import {
+  ensureSelfSignedCert,
+  getSslCertPaths,
+} from './services/ssl/self-signed-cert';
 
 /**
  * 后端启动入口（纯装配）。
@@ -139,16 +141,16 @@ async function bootstrap() {
 
   // ==================== HTTPS 模式 ====================
   // 当 HTTPS=true 时，使用自签证书创建 HTTPS 服务器。
+  // 证书缺失时自动生成本地自签证书（单文件版内置，无需独立证书工具）；
+  // 也可提前手动执行 `zviewer-backend --gen-cert [host]` 签发。
   let httpServer: ReturnType<typeof createHttpServer>;
   if (USE_HTTPS) {
-    const sslDir = path.resolve(PROJECT_ROOT, 'config/ssl');
-    const certPath = process.env.SSL_CERT_PATH || path.join(sslDir, 'cert.pem');
-    const keyPath = process.env.SSL_KEY_PATH || path.join(sslDir, 'key.pem');
+    const { certPath, keyPath } = getSslCertPaths();
 
     if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-      console.error(`[HTTPS] SSL 证书文件不存在: ${certPath}`);
-      console.error('[HTTPS] 请先运行 node scripts/generate-cert.js 生成证书');
-      process.exit(1);
+      console.log('[HTTPS] SSL 证书不存在，自动生成本地自签证书...');
+      ensureSelfSignedCert();
+      console.log('[HTTPS] 自签证书生成完成（浏览器首次访问需信任自签证书）');
     }
 
     console.log(`[HTTPS] 使用证书: ${certPath}`);
@@ -275,6 +277,32 @@ async function bootstrap() {
   process.on('unhandledRejection', (reason) => {
     console.error('[unhandledRejection]', reason);
   });
+}
+
+// ==================== --gen-cert CLI 模式 ====================
+// 签发本地自签证书后退出（替代原独立 zviewer-cert 工具）。
+// 用法：zviewer-backend --gen-cert [host] [--force]
+//   host     域名 / IP / localhost（缺省 localhost），写入证书 SAN
+//   --force  强制重新生成，不检查已有证书
+const cliArgs = process.argv.slice(2);
+if (cliArgs.includes('--gen-cert')) {
+  try {
+    const force = cliArgs.includes('--force') || cliArgs.includes('-f');
+    // host：--gen-cert 之后的第一个非选项参数
+    const genIdx = cliArgs.indexOf('--gen-cert');
+    const hostArg = cliArgs
+      .slice(genIdx + 1)
+      .find((a) => a !== '--force' && a !== '-f' && !a.startsWith('-'));
+    console.log(`  生成 SSL 证书（类型: ${hostArg || 'localhost'}，自签）...`);
+    const result = ensureSelfSignedCert({ host: hostArg ?? null, force });
+    if (!result.generated) {
+      console.log(`  ${result.reason}`);
+    }
+    process.exit(0);
+  } catch (err) {
+    console.error('  [错误] 证书生成失败:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
 }
 
 bootstrap().catch((err) => {

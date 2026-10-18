@@ -110,7 +110,6 @@ echo [更新脚本] 停止现有服务...
 :: 去掉 /T 后只杀指定名称的进程本身，cmd.exe 不受影响，脚本继续执行。
 taskkill /F /IM zviewer-frontend.exe >nul 2>&1
 taskkill /F /IM zviewer-backend.exe >nul 2>&1
-taskkill /F /IM zviewer-cert.exe >nul 2>&1
 
 :: 停止 Node.js 开发模式进程
 if exist "%PIDS_FILE%" (
@@ -280,7 +279,6 @@ else
 fi`;
 export const SH_APPLY_DOCKER = `# 覆盖程序文件（后端已停止，不会截断运行中的二进制）
 cp -f "$EXTRACTED_DIR/zviewer-backend" "$ROOT/zviewer-backend" 2>/dev/null || true
-cp -f "$EXTRACTED_DIR/zviewer-cert" "$ROOT/zviewer-cert" 2>/dev/null || true
 # LiveKit 伴生二进制：旧构建包可能不含（缺失时保留镜像内原文件/原状态）
 if [ -f "$EXTRACTED_DIR/livekit-server" ]; then
   cp -f "$EXTRACTED_DIR/livekit-server" "$ROOT/livekit-server" 2>/dev/null || true
@@ -298,7 +296,7 @@ if [ -d "$EXTRACTED_DIR/frontend/dist" ]; then
   mkdir -p "$ROOT/frontend/dist"
   cp -rf "$EXTRACTED_DIR/frontend/dist/"* "$ROOT/frontend/dist/" 2>/dev/null || true
 fi
-chmod +x "$ROOT/zviewer-backend" "$ROOT/zviewer-cert" 2>/dev/null || true`;
+chmod +x "$ROOT/zviewer-backend" 2>/dev/null || true`;
 export const SH_FINISH_DOCKER = `echo "{{TAG}} 更新完成，entrypoint 将自动重启后端 $(date)"
 
 # 删除自身
@@ -315,12 +313,9 @@ for pid in $(pgrep -f "zviewer-frontend" 2>/dev/null); do
 done
 for pid in $(pgrep -f "zviewer-backend" 2>/dev/null); do
   [ "$pid" != "$SELF_PID" ] && kill -9 "$pid" 2>/dev/null || true
-done
-for pid in $(pgrep -f "zviewer-cert" 2>/dev/null); do
-  [ "$pid" != "$SELF_PID" ] && kill -9 "$pid" 2>/dev/null || true
 done`;
 export const SH_APPLY_LINUX = `cp -rf "$EXTRACTED_DIR/"* "$ROOT/" 2>/dev/null || true
-chmod +x "$ROOT/zviewer-frontend" "$ROOT/zviewer-backend" "$ROOT/zviewer-cert" 2>/dev/null || true`;
+chmod +x "$ROOT/zviewer-frontend" "$ROOT/zviewer-backend" 2>/dev/null || true`;
 export const SH_FINISH_LINUX = `echo "{{TAG}} 重新启动服务..."
 # 关键：必须传递 start 参数！
 # start.sh 无参数时默认进入交互菜单（read 等待输入），

@@ -10,7 +10,6 @@ cd "$(dirname "$0")" || exit 1
 
 ROOT_DIR=$(pwd)
 BACKEND_BIN="$ROOT_DIR/zviewer-backend"
-CERT_BIN="$ROOT_DIR/zviewer-cert"
 LOG_DIR="$ROOT_DIR/log"
 PIDS_FILE="$ROOT_DIR/.prod.pids.json"
 ENV_FILE="$ROOT_DIR/.env"
@@ -105,60 +104,27 @@ has_exe() {
 
 # ==================== 证书 ====================
 
-# 交互选择证书签发类型（localhost / 公网域名）
+# 交互输入要签发证书的主机（localhost / 内网 IP / 域名，均使用本地自签证书）
 select_cert_host() {
   echo ""
-  echo "  请选择证书签发类型："
-  echo "    [1] localhost（本机访问，默认，自签证书）"
-  echo "    [2] 公网域名或公网 IP（自动申请 Let's Encrypt 可信证书）"
-  echo "        - 域名：需已解析到本机，且 80 端口可访问（ACME HTTP-01 验证）"
-  echo "        - 公网 IP：Let's Encrypt 已支持（2026-01 GA），证书约 6 天有效，到期需重新签发"
-  echo "        - 内网 IP 无法通过 ACME 验证，请选 1 使用自签证书"
-  printf "  请输入 1 或 2（直接回车默认 1）: "
-  read CERT_CHOICE
-  if [ "$CERT_CHOICE" = "2" ]; then
-    printf "  请输入公网域名或公网 IP 地址: "
-    read CERT_HOST
-    CERT_HOST=$(echo "$CERT_HOST" | tr -d ' ')
-    if [ -z "$CERT_HOST" ]; then
-      echo "  [提示] 未输入地址，将使用 localhost（自签）"
-      CERT_HOST="localhost"
-    elif [ "$CERT_HOST" = "localhost" ]; then
-      echo "  [提示] localhost 请选 1 使用自签证书"
-      CERT_HOST="localhost"
-    elif is_private_ip "$CERT_HOST"; then
-      echo "  [提示] '$CERT_HOST' 是内网地址，Let's Encrypt 无法验证，将使用自签证书。"
-      echo "         公网域名或公网 IP 才能申请可信证书。"
-      CERT_HOST="localhost"
-    else
-      echo ""
-      echo "  [提示] 正在为 $CERT_HOST 自动申请 Let's Encrypt 可信证书..."
-      echo "         公网 IP 证书有效期约 6 天，到期后请重新签发。"
-    fi
-  else
+  echo "  请输入要签发证书的主机（localhost / IP / 域名，直接回车默认 localhost）"
+  echo "  [提示] 使用本地自签证书，SAN 始终包含 localhost / 127.0.0.1 / ::1"
+  printf "  请输入主机（回车默认 localhost）: "
+  read CERT_HOST
+  CERT_HOST=$(echo "$CERT_HOST" | tr -d ' ')
+  if [ -z "$CERT_HOST" ]; then
     CERT_HOST="localhost"
   fi
 }
 
-# 判断是否为内网/保留 IP 地址（IPv4 常见私网段 + IPv6 环回/链路本地）
-is_private_ip() {
-  case "$1" in
-    10.*|127.*|192.168.*) return 0 ;;
-    172.1[6-9].*|172.2[0-9].*|172.3[0-1].*) return 0 ;;
-    169.254.*|100.6[4-9].*|100.[7-9][0-9].*|100.1[0-1][0-9].*|100.12[0-7].*) return 0 ;;
-    ::1|fe80:*) return 0 ;;
-  esac
-  return 1
-}
-
 issue_cert() {
   # 返回码由 $CERT_RC 携带
-  if ! has_exe "$CERT_BIN" "证书工具 zviewer-cert"; then CERT_RC=1; return; fi
+  if ! has_exe "$BACKEND_BIN" "后端程序 zviewer-backend"; then CERT_RC=1; return; fi
   echo "  [证书] 签发类型: $CERT_HOST"
   if [ -n "$CERT_FORCE" ]; then
-    "$CERT_BIN" "$CERT_HOST" --force
+    "$BACKEND_BIN" --gen-cert "$CERT_HOST" --force
   else
-    "$CERT_BIN" "$CERT_HOST"
+    "$BACKEND_BIN" --gen-cert "$CERT_HOST"
   fi
   CERT_RC=$?
 }
@@ -208,9 +174,9 @@ do_start() {
     fi
   fi
 
-  # HTTPS 模式：先签发证书
+  # HTTPS 模式：先签发证书（后端启动时也会在证书缺失时自动补签，
+  # 此处提前签发以支持 host / --force 参数）
   if [ "$HTTPS_MODE" -eq 1 ]; then
-    if ! has_exe "$CERT_BIN" "证书工具 zviewer-cert"; then return 1; fi
     if [ -z "$CERT_HOST" ]; then
       select_cert_host
     fi
@@ -321,7 +287,7 @@ usage() {
   restart            重启服务
   status             查看运行状态
   logs               查看后端日志
-  cert [host]        一键签发 SSL 证书（localhost / 公网域名或公网 IP(Let's Encrypt)）
+  cert [host]        一键签发 SSL 证书（本地自签，localhost / IP / 域名）
   https [host]       签发证书后以 HTTPS 启动
   help               显示此帮助
   menu               交互菜单（无参数时自动进入）
@@ -336,8 +302,11 @@ start/restart/cert/https 选项:
   ./start.sh                    # 交互菜单
   ./start.sh start              # HTTP 启动
   ./start.sh backend            # 仅启动后端
-  ./start.sh https example.com  # 申请 Let's Encrypt 证书后 HTTPS 启动
-  ./start.sh cert example.com --force  # 为公网域名或公网 IP 强制重新签发 Let's Encrypt 证书
+  ./start.sh https 192.168.1.10  # 自签证书（SAN 含该 IP）后 HTTPS 启动
+  ./start.sh cert example.com --force  # 为指定域名强制重新自签
+
+提示: 公网部署需要浏览器可信的正式证书时，请使用 Cloudflare / Nginx /
+      Caddy / 宝塔 / 1Panel 等反代签发，再反代到本服务端口。
 EOF
 }
 

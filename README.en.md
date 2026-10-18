@@ -240,39 +240,40 @@ In production mode, **only ports 3333 (tcp+udp) and 3334 are exposed externally*
 
 ### Certificate Types
 
-The certificate tool (`zviewer-cert`, source at `scripts/generate-cert.js`) automatically selects the issuance method based on the address type:
+Self-signed certificates are generated locally (built into the backend exe; dev source uses `scripts/generate-cert.js`). The SAN always includes `localhost`, `127.0.0.1`, `::1`, plus the host you specify; validity is 10 years.
 
 | Address Type | Certificate | Description |
 |---|---|---|
 | `localhost` | Self-signed | SAN includes `localhost`, `127.0.0.1`, `::1`; 10-year validity |
-| Domain (e.g. `example.com`) | **Let's Encrypt CA-trusted** | Auto-request via built-in ACME client; no browser warning |
-| Public IP (e.g. `1.2.3.4`) | **Let's Encrypt CA-trusted** | Let's Encrypt supports IP certificates since 2025 |
-| Private IP (e.g. `192.168.1.1`) | Self-signed | SAN includes the IP |
+| Domain (e.g. `example.com`) | Self-signed | SAN includes the domain |
+| IP (e.g. `192.168.1.1`) | Self-signed | SAN includes the IP |
+
+> For internet-facing deployments, terminate TLS with a trusted certificate from **Cloudflare / Nginx / Caddy / aaPanel / 1Panel** and reverse-proxy to ZViewer's port instead of using self-signed certificates.
 
 ### CLI Usage
 
 ```bash
-# Domain → auto-request Let's Encrypt trusted certificate
-start.bat cert example.com
+# Self-signed certificate for localhost (default)
+start.bat cert
+./start.sh cert
+
+# Self-signed certificate including a custom host in the SAN
+start.bat cert 192.168.1.10
 ./start.sh cert example.com
-
-# Public IP → auto-request Let's Encrypt trusted certificate
-start.bat cert 1.2.3.4
-
-# Private IP → self-signed certificate
-start.bat cert 192.168.1.1
 
 # Force re-issue
 start.bat cert example.com --force
+./start.sh cert example.com --force
 ```
 
-### Prerequisites for Let's Encrypt
+HTTPS mode auto-generates a self-signed certificate on first start if none exists, so `start.bat https` / `./start.sh https` works out of the box. You can also issue directly via the backend binary:
 
-1. Domain resolves to your public IP, or the public IP is directly accessible.
-2. **Port 80** is open and firewall/security group allows it (ACME HTTP-01 challenge).
-3. Rate limit: 5 certificates per domain per week. Use `--staging` for testing.
+```bash
+zviewer-backend.exe --gen-cert [host] [--force]
+./zviewer-backend --gen-cert [host] [--force]
+```
 
-Certificate files are stored in `config/ssl/` (`cert.pem` chain, `key.pem` private key, `acme-account.key`).
+Certificate files are stored in `config/ssl/` (`cert.pem`, `key.pem`).
 
 ---
 
@@ -367,8 +368,8 @@ Automatic builds on every push to `main` or tag (`v*`):
 
 | Platform | Archive | Contents |
 |---|---|---|
-| Linux | `zviewer-linux-x64.tar.gz` | `zviewer-backend`, `zviewer-cert`, `livekit-server`, `start.sh` |
-| Windows | `zviewer-windows-x64.zip` | `zviewer-backend.exe`, `zviewer-cert.exe`, `livekit-server.exe`, `start.bat` |
+| Linux | `zviewer-linux-x64.tar.gz` | `zviewer-backend`, `livekit-server`, `start.sh` |
+| Windows | `zviewer-windows-x64.zip` | `zviewer-backend.exe`, `livekit-server.exe`, `start.bat` |
 | Docker | `zerowyc0721/zviewer:latest` | Docker image based on Linux single-file build (bundles LiveKit) |
 
 Builds target Node 26 (`node26-*-x64`). The `build-all.js` script downloads the LiveKit companion binary alongside the platform build; CI fails hard if the LiveKit download fails, guaranteeing voice capability in every artifact.
@@ -555,7 +556,7 @@ Parse BV/AV video links, with quality switching and premium content support. Con
 `localhost` and private IPs use self-signed certificates. Solutions:
 
 - Import `config/ssl/cert.pem` into the client's "Trusted Root Certification Authorities"; or
-- Use a domain or public IP with Let's Encrypt for a trusted certificate.
+- Use a trusted certificate issued by Cloudflare / Nginx / Caddy / aaPanel / 1Panel via reverse proxy.
 
 ### WebSocket connection fails
 

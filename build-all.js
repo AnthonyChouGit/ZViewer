@@ -449,47 +449,6 @@ function packageBackend(targetPlatforms, frontendDist) {
   return results;
 }
 
-// 打包证书生成工具（zviewer-cert），供产物目录的一键启动脚本签证书使用
-function packageCertTool(targetPlatforms) {
-  console.log('');
-  console.log('>>> 打包证书工具 zviewer-cert...');
-
-  const entry = path.join(ROOT, 'scripts', 'generate-cert.js');
-  if (!fs.existsSync(entry)) {
-    warn(`证书工具入口不存在: ${entry}`);
-    return;
-  }
-
-  for (const platform of targetPlatforms) {
-    for (const target of platform.targets) {
-      const outputFolder = path.join(DIST_EXE, platform.folder);
-      const outputName = `zviewer-cert${target.includes('win') ? '.exe' : ''}`;
-      const outputPath = path.join(outputFolder, outputName);
-
-      fs.mkdirSync(outputFolder, { recursive: true });
-
-      log(`打包证书工具 → ${target}...`);
-
-      const cmd = [
-        'npx', 'pkg',
-        JSON.stringify(entry),
-        '--targets', target,
-        '--output', JSON.stringify(outputPath),
-        // 禁用 v8 bytecode cache：保证 cross-compile 的产物在目标平台可运行
-        '--public',
-        '--public-packages', '"*"',
-      ].join(' ');
-
-      try {
-        execSync(cmd, { cwd: ROOT, stdio: 'inherit' });
-        success(`证书工具 ${target}: ${outputPath}`);
-      } catch (e) {
-        warn(`证书工具打包失败 (${target}): ${e.message}`);
-      }
-    }
-  }
-}
-
 // Copy per-platform one-click start scripts into the output folders.
 function copyStartScripts(targetPlatforms) {
   // 每个平台可复制多个文件（Windows: bat 转发器 + ps1 主逻辑）
@@ -676,9 +635,6 @@ async function main() {
   }
 
   // 4. 输出汇总
-
-  // 打包证书生成工具（一键启动脚本用它签证书）
-  packageCertTool(targetPlatforms);
 
   // 复制各平台一键启动脚本到产物目录
   copyStartScripts(targetPlatforms);
