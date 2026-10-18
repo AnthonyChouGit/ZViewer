@@ -8,7 +8,7 @@ coverage/
 __pycache__/
 *.pyc
 .DS_Store
-
+.docs/
 # ---- 环境配置（含密钥，禁止提交） ----
 .env
 .env.local
@@ -58,3 +58,4 @@ test-dev.sqlite
 .trae/
 .workbuddy/
 .update-temp/
+
