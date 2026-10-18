@@ -2,9 +2,11 @@
  * Emby API 层
  *
  * 与 webdav/openlist/ftp 挂载 API 结构对齐，路由前缀 /api/emby。
+ * 挂载 CRUD/browse/search/resolve/proxy 由 embyLikeApi 工厂生成
+ * （与 jellyfinApi 共用，对应后端 routes/emby-like-factory.ts）；
+ * 本文件保留 Emby 专属的影片级函数与工具。
  */
 import { apiFetch } from '@/lib/api'
-import { buildProxyUrl } from '@/modules/direct-link/directLinkApi'
 import type { MediaFormat } from '@/lib/mediaFormat'
 import type {
   EmbyMount,
@@ -14,179 +16,25 @@ import type {
   EmbyResolvedSource,
   EmbyVersionInfo,
 } from './types'
+import { createEmbyLikeApi } from './embyLikeApi'
 
-function jsonHeaders(): Record<string, string> {
-  return { 'Content-Type': 'application/json' }
-}
+const embyApi = createEmbyLikeApi<
+  EmbyMount,
+  EmbyMountFormPayload,
+  EmbyTestResult,
+  EmbyDirectoryEntry,
+  EmbyResolvedSource
+>('emby', 'Emby')
 
-export async function getEmbyMounts(): Promise<EmbyMount[]> {
-  const res = await apiFetch('/api/emby/mounts')
-  const data = (await res.json()) as {
-    success: boolean
-    mounts?: EmbyMount[]
-    message?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '获取 Emby 挂载列表失败')
-  }
-  return data.mounts || []
-}
-
-export async function createEmbyMount(
-  payload: EmbyMountFormPayload
-): Promise<EmbyMount & { warning?: string }> {
-  const res = await apiFetch('/api/emby/mounts', {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
-  })
-  const data = (await res.json()) as {
-    success: boolean
-    mount?: EmbyMount
-    message?: string
-    warning?: string
-  }
-  if (!res.ok || !data.success || !data.mount) {
-    throw new Error(data.message || '创建 Emby 挂载失败')
-  }
-  return { ...data.mount, warning: data.warning }
-}
-
-export async function updateEmbyMount(
-  id: number,
-  payload: EmbyMountFormPayload
-): Promise<EmbyMount & { warning?: string }> {
-  const res = await apiFetch(`/api/emby/mounts/${id}`, {
-    method: 'PUT',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
-  })
-  const data = (await res.json()) as {
-    success: boolean
-    mount?: EmbyMount
-    message?: string
-    warning?: string
-  }
-  if (!res.ok || !data.success || !data.mount) {
-    throw new Error(data.message || '更新 Emby 挂载失败')
-  }
-  return { ...data.mount, warning: data.warning }
-}
-
-export async function deleteEmbyMount(id: number): Promise<void> {
-  const res = await apiFetch(`/api/emby/mounts/${id}`, {
-    method: 'DELETE',
-  })
-  const data = (await res.json()) as { success: boolean; message?: string }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '删除 Emby 挂载失败')
-  }
-}
-
-export async function testEmbyMount(
-  payload: EmbyMountFormPayload
-): Promise<EmbyTestResult> {
-  const res = await apiFetch('/api/emby/mounts/test', {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
-  })
-  const data = (await res.json()) as {
-    success: boolean
-    userId?: string
-    userName?: string
-    serverId?: string
-    message?: string
-    code?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '测试 Emby 连接失败')
-  }
-  return {
-    success: true,
-    userId: data.userId,
-    userName: data.userName,
-    serverId: data.serverId,
-  }
-}
-
-export async function browseEmbyMount(
-  id: number,
-  path?: string
-): Promise<EmbyDirectoryEntry[]> {
-  const query = path ? `?path=${encodeURIComponent(path)}` : ''
-  const res = await apiFetch(`/api/emby/mounts/${id}/browse${query}`)
-  const data = (await res.json()) as {
-    success: boolean
-    entries?: EmbyDirectoryEntry[]
-    message?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '浏览 Emby 挂载失败')
-  }
-  return data.entries || []
-}
-
-/** 全库搜索（官方 API SearchTerm 递归检索，返回条目结构与 browse 一致） */
-export async function searchEmbyMount(
-  id: number,
-  term: string
-): Promise<EmbyDirectoryEntry[]> {
-  const res = await apiFetch(
-    `/api/emby/mounts/${id}/search?term=${encodeURIComponent(term)}`
-  )
-  const data = (await res.json()) as {
-    success: boolean
-    entries?: EmbyDirectoryEntry[]
-    message?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '搜索 Emby 失败')
-  }
-  return data.entries || []
-}
-
-export async function resolveEmby(
-  mountId: number,
-  path: string
-): Promise<EmbyResolvedSource> {
-  const query = new URLSearchParams({
-    mountId: String(mountId),
-    path,
-  }).toString()
-  const res = await apiFetch(`/api/emby/resolve?${query}`)
-  const data = (await res.json()) as {
-    success: boolean
-    message?: string
-    title?: string
-    videoUrl?: string
-    directUrl?: string
-    format?: MediaFormat
-    duration?: number
-    audioCodec?: string | null
-    needsAudioTranscode?: boolean
-    audioTranscodeDisabled?: boolean
-    multiVersion?: boolean
-  }
-  if (!res.ok || !data.success || !data.videoUrl) {
-    throw new Error(data.message || '解析 Emby 条目失败')
-  }
-  return {
-    title: data.title || '',
-    videoUrl: data.videoUrl,
-    directUrl: data.directUrl,
-    format: data.format || 'mp4',
-    duration: data.duration ?? 0,
-    audioCodec: data.audioCodec ?? null,
-    needsAudioTranscode: data.needsAudioTranscode === true,
-    audioTranscodeDisabled: data.audioTranscodeDisabled === true,
-    multiVersion: data.multiVersion === true,
-  }
-}
-
-export function buildEmbyProxyUrl(mountId: number, path: string): string {
-  return buildProxyUrl('emby', { mountId, path })
-}
+export const getEmbyMounts = embyApi.getMounts
+export const createEmbyMount = embyApi.createMount
+export const updateEmbyMount = embyApi.updateMount
+export const deleteEmbyMount = embyApi.deleteMount
+export const testEmbyMount = embyApi.testMount
+export const browseEmbyMount = embyApi.browseMount
+export const searchEmbyMount = embyApi.searchMount
+export const resolveEmby = embyApi.resolve
+export const buildEmbyProxyUrl = embyApi.buildProxyUrl
 
 export interface EmbyMovieSourceResult {
   title: string

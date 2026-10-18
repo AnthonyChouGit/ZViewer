@@ -1,11 +1,9 @@
 /**
  * Jellyfin API 层
  *
- * 路由前缀 /api/jellyfin。Jellyfin 是 Emby 开源分支，接口与 emby 一致。
+ * 路由前缀 /api/jellyfin。Jellyfin 是 Emby 开源分支，接口与 emby 一致——
+ * 挂载 CRUD/browse/search/resolve/proxy 全部由 embyLikeApi 工厂生成。
  */
-import { apiFetch } from '@/lib/api'
-import { buildProxyUrl } from '@/modules/direct-link/directLinkApi'
-import type { MediaFormat } from '@/lib/mediaFormat'
 import type {
   JellyfinMount,
   JellyfinMountFormPayload,
@@ -13,176 +11,22 @@ import type {
   JellyfinDirectoryEntry,
   JellyfinResolvedSource,
 } from './types'
+import { createEmbyLikeApi } from '../emby/embyLikeApi'
 
-function jsonHeaders(): Record<string, string> {
-  return { 'Content-Type': 'application/json' }
-}
+const api = createEmbyLikeApi<
+  JellyfinMount,
+  JellyfinMountFormPayload,
+  JellyfinTestResult,
+  JellyfinDirectoryEntry,
+  JellyfinResolvedSource
+>('jellyfin', 'Jellyfin')
 
-export async function getJellyfinMounts(): Promise<JellyfinMount[]> {
-  const res = await apiFetch('/api/jellyfin/mounts')
-  const data = (await res.json()) as {
-    success: boolean
-    mounts?: JellyfinMount[]
-    message?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '获取 Jellyfin 挂载列表失败')
-  }
-  return data.mounts || []
-}
-
-export async function createJellyfinMount(
-  payload: JellyfinMountFormPayload
-): Promise<JellyfinMount & { warning?: string }> {
-  const res = await apiFetch('/api/jellyfin/mounts', {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
-  })
-  const data = (await res.json()) as {
-    success: boolean
-    mount?: JellyfinMount
-    message?: string
-    warning?: string
-  }
-  if (!res.ok || !data.success || !data.mount) {
-    throw new Error(data.message || '创建 Jellyfin 挂载失败')
-  }
-  return { ...data.mount, warning: data.warning }
-}
-
-export async function updateJellyfinMount(
-  id: number,
-  payload: JellyfinMountFormPayload
-): Promise<JellyfinMount & { warning?: string }> {
-  const res = await apiFetch(`/api/jellyfin/mounts/${id}`, {
-    method: 'PUT',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
-  })
-  const data = (await res.json()) as {
-    success: boolean
-    mount?: JellyfinMount
-    message?: string
-    warning?: string
-  }
-  if (!res.ok || !data.success || !data.mount) {
-    throw new Error(data.message || '更新 Jellyfin 挂载失败')
-  }
-  return { ...data.mount, warning: data.warning }
-}
-
-export async function deleteJellyfinMount(id: number): Promise<void> {
-  const res = await apiFetch(`/api/jellyfin/mounts/${id}`, {
-    method: 'DELETE',
-  })
-  const data = (await res.json()) as { success: boolean; message?: string }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '删除 Jellyfin 挂载失败')
-  }
-}
-
-export async function testJellyfinMount(
-  payload: JellyfinMountFormPayload
-): Promise<JellyfinTestResult> {
-  const res = await apiFetch('/api/jellyfin/mounts/test', {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
-  })
-  const data = (await res.json()) as {
-    success: boolean
-    userId?: string
-    userName?: string
-    serverId?: string
-    message?: string
-    code?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '测试 Jellyfin 连接失败')
-  }
-  return {
-    success: true,
-    userId: data.userId,
-    userName: data.userName,
-    serverId: data.serverId,
-  }
-}
-
-export async function browseJellyfinMount(
-  id: number,
-  path?: string
-): Promise<JellyfinDirectoryEntry[]> {
-  const query = path ? `?path=${encodeURIComponent(path)}` : ''
-  const res = await apiFetch(`/api/jellyfin/mounts/${id}/browse${query}`)
-  const data = (await res.json()) as {
-    success: boolean
-    entries?: JellyfinDirectoryEntry[]
-    message?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '浏览 Jellyfin 挂载失败')
-  }
-  return data.entries || []
-}
-
-/** 全库搜索（官方 API SearchTerm 递归检索，返回条目结构与 browse 一致） */
-export async function searchJellyfinMount(
-  id: number,
-  term: string
-): Promise<JellyfinDirectoryEntry[]> {
-  const res = await apiFetch(
-    `/api/jellyfin/mounts/${id}/search?term=${encodeURIComponent(term)}`
-  )
-  const data = (await res.json()) as {
-    success: boolean
-    entries?: JellyfinDirectoryEntry[]
-    message?: string
-  }
-  if (!res.ok || !data.success) {
-    throw new Error(data.message || '搜索 Jellyfin 失败')
-  }
-  return data.entries || []
-}
-
-export async function resolveJellyfin(
-  mountId: number,
-  path: string
-): Promise<JellyfinResolvedSource> {
-  const query = new URLSearchParams({
-    mountId: String(mountId),
-    path,
-  }).toString()
-  const res = await apiFetch(`/api/jellyfin/resolve?${query}`)
-  const data = (await res.json()) as {
-    success: boolean
-    message?: string
-    title?: string
-    videoUrl?: string
-    directUrl?: string
-    format?: MediaFormat
-    duration?: number
-    audioCodec?: string | null
-    needsAudioTranscode?: boolean
-    audioTranscodeDisabled?: boolean
-    multiVersion?: boolean
-  }
-  if (!res.ok || !data.success || !data.videoUrl) {
-    throw new Error(data.message || '解析 Jellyfin 条目失败')
-  }
-  return {
-    title: data.title || '',
-    videoUrl: data.videoUrl,
-    directUrl: data.directUrl,
-    format: data.format || 'mp4',
-    duration: data.duration ?? 0,
-    audioCodec: data.audioCodec ?? null,
-    needsAudioTranscode: data.needsAudioTranscode === true,
-    audioTranscodeDisabled: data.audioTranscodeDisabled === true,
-    multiVersion: data.multiVersion === true,
-  }
-}
-
-export function buildJellyfinProxyUrl(mountId: number, path: string): string {
-  return buildProxyUrl('jellyfin', { mountId, path })
-}
+export const getJellyfinMounts = api.getMounts
+export const createJellyfinMount = api.createMount
+export const updateJellyfinMount = api.updateMount
+export const deleteJellyfinMount = api.deleteMount
+export const testJellyfinMount = api.testMount
+export const browseJellyfinMount = api.browseMount
+export const searchJellyfinMount = api.searchMount
+export const resolveJellyfin = api.resolve
+export const buildJellyfinProxyUrl = api.buildProxyUrl
