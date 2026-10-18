@@ -50,139 +50,23 @@ import { detectMediaFormat, getContentType } from '../services/mediaFormat';
 import { proxyHttpUpstream } from '../services/proxy/http-proxy';
 import { TtlCache } from '../utils/ttl-cache';
 import { mapMountErrorCodeToStatus, sendStreamMovieErrorResponse } from '../utils/stream-response';
+import {
+  getCachedRawUrl,
+  invalidateRawUrlCache,
+  invalidateRawUrlCacheOnUpstreamAuthError,
+  type RawUrlCacheEntry,
+} from '../modules/openlist/openlist-raw-url-cache';
+import {
+  normalizePasswordForStorage,
+  resolveDirectLinkWithInternalCheck,
+} from '../modules/openlist/openlist-mount.service';
 
 const router = Router();
 const userMountRepository = () => AppDataSource.getRepository(UserMount);
 
-/** raw_url 缓存条目：避免每次 /stream 都调用 /api/fs/get */
-interface RawUrlCacheEntry {
-  rawUrl: string;
-  name: string;
-  size: number;
-  /** 过期时间戳（毫秒） */
-  expireAt: number;
-}
-
-/**
- * raw_url 缓存（按 movieId|path 维度，5 分钟 TTL）。
- * 使用 TtlCache（LRU 上限）替代无界 Map：过期惰性清理 + 容量超限按最久未使用淘汰，
- * 避免长期运行（多房间多影片）下缓存条目只增不减。
- */
-const rawUrlCache = new TtlCache<RawUrlCacheEntry>({
-  ttlMs: 5 * 60 * 1000,
-  maxSize: 500,
-});
-const RAW_URL_TTL_MS = 5 * 60 * 1000;
-
-/** 单飞去重：并发解析同一 cacheKey（多人同时进房间/同影片并发 Range）时共享同一个上游 /api/fs/get */
-const rawUrlInFlight = new Map<string, Promise<RawUrlCacheEntry>>();
-
-/**
- * 获取 raw_url（带缓存 + 单飞去重）。
- * 优先从缓存读取；未命中或过期时调用 fetchOpenListFileInfo 获取新直链。
- * AList 的 raw_url 通常带签名（sign 参数），签名有效期取决于存储后端配置，
- * 5 分钟 TTL 在绝大多数场景下足够。
- */
-async function getCachedRawUrl(
-  serverUrl: string,
-  username: string | undefined,
-  password: string | undefined,
-  path: string,
-  cacheKey: string,
-): Promise<RawUrlCacheEntry> {
-  const cached = rawUrlCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  // 单飞：并发未命中只触发一次上游解析（对齐 movie-direct-resolver 的 inFlight 模式）
-  const pending = rawUrlInFlight.get(cacheKey);
-  if (pending) {
-    return pending;
-  }
-  const promise = (async () => {
-    const info = await fetchOpenListFileInfo(serverUrl, username, password, path);
-    const entry: RawUrlCacheEntry = {
-      rawUrl: info.rawUrl,
-      name: info.name,
-      size: info.size,
-      expireAt: Date.now() + RAW_URL_TTL_MS,
-    };
-    rawUrlCache.set(cacheKey, entry);
-    return entry;
-  })().finally(() => {
-    rawUrlInFlight.delete(cacheKey);
-  });
-  rawUrlInFlight.set(cacheKey, promise);
-  return promise;
-}
-
-/** 失效指定 movieId 的 raw_url 缓存 */
-function invalidateRawUrlCache(cacheKey: string): void {
-  rawUrlCache.delete(cacheKey);
-}
-
-/**
- * 上游认证/签名类错误（401/403/410）时失效 raw_url 缓存。
- * proxyHttpUpstream 在发头前已设置 res.statusCode 为上游状态码，调用点位于
- * 其 await 返回之后——此处仅做缓存失效，不重发响应（客户端下一次 Range
- * 请求自然拿到新直链）。
- */
-function invalidateRawUrlCacheOnUpstreamAuthError(
-  res: Response,
-  cacheKey: string,
-): void {
-  const status = res.statusCode;
-  if (status === 401 || status === 403 || status === 410) {
-    invalidateRawUrlCache(cacheKey);
-  }
-}
-
 router.use(authenticateToken);
 
 // ==================== 挂载 CRUD ====================
-
-/**
- * 规范化密码：明文 → AList 哈希格式。
- *
- * 参考 synctv/server/handlers/vendors/vendorAlist/login.go：
- * 后端在保存/使用密码前，将明文密码通过 SHA-256(password + salt) 转为哈希，
- * 与 AList /api/auth/login/hash 端点约定一致。
- *
- * - 若传入空值：原样返回（不哈希）
- * - 若传入已是哈希格式（64 位十六进制）：原样返回（幂等）
- * - 若传入明文：哈希后返回
- *
- * 这样存储层始终保存哈希密码，明文密码不会落盘；
- * 服务层 detectLoginMode 检测到哈希格式后自动走 /api/auth/login/hash 端点。
- */
-function normalizePasswordForStorage(password: string | null | undefined): string | null {
-  if (!password) return null;
-  // 已是哈希格式（兼容前端可能预先哈希的场景），直接返回
-  if (isAlistHashedPassword(password)) return password;
-  // 明文密码 → 哈希
-  return hashAlistPassword(password);
-}
-
-/**
- * 解析 directLink，内网地址强制使用服务器中转。
- *
- * 当 OpenList 服务器为内网/回环地址（127.0.0.1、10.x、172.16-31.x、192.168.x、localhost、::1 等）时，
- * 浏览器无法直接访问其 raw_url 直链，必须强制通过后端 /stream 端点中转。
- *
- * @param serverUrl  规范化后的 OpenList 服务器地址
- * @param directLink 用户请求的 directLink 值
- * @returns 实际生效的 directLink（内网时强制为 false）
- */
-function resolveDirectLinkWithInternalCheck(
-  serverUrl: string,
-  directLink: boolean,
-): boolean {
-  if (directLink && isInternalOpenListServer(serverUrl)) {
-    return false;
-  }
-  return directLink;
-}
 
 // GET /mounts - 列出挂载
 router.get('/mounts', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
