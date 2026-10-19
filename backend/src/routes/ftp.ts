@@ -1,4 +1,5 @@
 import { stripPassword, extractErrorMessage } from '../modules/shared/mount-utils';
+import { requireMovieReadAccess } from '../services/room-access';
 import { Router, Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { UserMount } from '../entities/UserMount';
@@ -437,7 +438,7 @@ router.get('/proxy', async (req: AuthenticatedRequest, res: Response): Promise<v
 // 基于影片 ID 的流代理 - GET /stream?movieId=
 // 与 /proxy 的区别：/stream 不依赖 userId 查挂载，而是直接从 Movie 表读取凭证，
 // 这样房间内任何成员（含观众）都能通过 movieId 访问影片流。
-router.get('/stream', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/stream', requireMovieReadAccess, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const movieIdRaw = req.query.movieId;
     if (movieIdRaw === undefined) {

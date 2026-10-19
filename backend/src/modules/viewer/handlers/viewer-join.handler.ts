@@ -22,6 +22,7 @@ import {
   type SocketEventHandler,
   safeAck,
 } from '../../socket';
+import { roomPermissionService } from '../../room/room-permission.service';
 import { roomSessionService } from '../../room/room-session.service';
 import { roomStateService } from '../../room/room-state.service';
 import { getSystemSettings } from '../../../services/system-settings';
@@ -150,6 +151,11 @@ export class ViewerJoinHandler implements SocketEventHandler {
             }
           }
 
+          const ownSession = await roomPermissionService.getActiveSession(socket);
+          if (ownSession?.roomId === payload.roomId) {
+            return safeAck(callback, { success: true, message: '已加入房间', data: { mode: room.mode, shareMethod: room.shareMethod } });
+          }
+
           // 人数上限校验
           const viewerCount = await roomSessionService.getViewerCount(
             payload.roomId,
@@ -232,7 +238,7 @@ export class ViewerJoinHandler implements SocketEventHandler {
 
           // 需审批：检查是否已被房主批准过（持久化白名单）
           const viewerUserId: number | null = socket.data.userId ?? null;
-          if (viewerUserId != null) {
+          if (viewerUserId != null && viewerUserId > 0) {
             let approvedList: number[] = [];
             try {
               approvedList = JSON.parse(room.approvedViewers || '[]');
@@ -291,6 +297,7 @@ export class ViewerJoinHandler implements SocketEventHandler {
           }
 
           // 未批准：向房主发送 join-request
+          socket.data.pendingRoomId = payload.roomId;
           io.to(sharer.socketId).emit('join-request', {
             viewerSocketId: socket.id,
           });

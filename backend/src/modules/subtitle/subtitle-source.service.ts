@@ -1,3 +1,5 @@
+import { resolveMovieStream } from '../../services/proxy';
+import { normalizeOpenListServerUrl } from '../../services/openlist';
 /**
  * 字幕来源服务（纯搬迁自 routes/subtitles.ts 的路由内业务编排）。
  *
@@ -90,28 +92,13 @@ async function loadRootRegistry(): Promise<RootRegistry> {
  */
 async function fillCredentialsFromMount(
   movie: Movie,
-): Promise<{ username?: string; password?: string }> {
+): Promise<{ username?: string; password?: string; port?: number }> {
   if (!movie.serverUrl) return {};
-  // 电影本身已有完整凭证，无需回退
-  if (movie.username && movie.password) {
-    return { username: movie.username, password: movie.password };
-  }
-  const source = (movie.source || '').toLowerCase();
-  const mountType = source === 'openlist' ? 'openlist' : source === 'ftp' ? 'ftp' : 'webdav';
-  const mount = await AppDataSource.getRepository(UserMount).findOneBy({
-    serverUrl: movie.serverUrl,
-    type: mountType as 'webdav' | 'openlist' | 'ftp',
-  });
-  if (mount) {
-    return {
-      username: movie.username || mount.username || undefined,
-      password: movie.password || mount.password || undefined,
-    };
-  }
-  return {
-    username: movie.username || undefined,
-    password: movie.password || undefined,
-  };
+  const { username, password, mount } = await resolveMovieStream(
+    movie.id, movie.source as 'ftp' | 'webdav' | 'openlist',
+    movie.source === 'openlist' ? { normalizeServerUrl: normalizeOpenListServerUrl } : undefined,
+  );
+  return { username, password, port: mount?.port ?? undefined };
 }
 
 /** 支持的字幕扩展名 */
@@ -310,7 +297,7 @@ export async function searchSubtitlesInMovieDir(movie: Movie): Promise<SubtitleS
     const params: FTPConnectionParams = {
       serverUrl: movie.serverUrl,
       path: dirPath,
-      port: undefined,
+      port: creds.port,
       username: creds.username,
       password: creds.password,
     };
@@ -328,7 +315,7 @@ export async function searchSubtitlesInMovieDir(movie: Movie): Promise<SubtitleS
         const readParams: FTPConnectionParams = {
           serverUrl: movie.serverUrl,
           path: filePath,
-          port: undefined,
+          port: creds.port,
           username: creds.username,
           password: creds.password,
         };
@@ -465,7 +452,7 @@ export async function browseMovieDirectory(
     const params: FTPConnectionParams = {
       serverUrl: movie.serverUrl,
       path: targetPath,
-      port: undefined,
+      port: creds.port,
       username: creds.username,
       password: creds.password,
     };
@@ -578,7 +565,7 @@ export async function loadSubtitleFile(
     const params: FTPConnectionParams = {
       serverUrl: movie.serverUrl,
       path: filePath,
-      port: undefined,
+      port: creds.port,
       username: creds.username,
       password: creds.password,
     };
@@ -631,10 +618,7 @@ async function resolveEmbyContext(movie: Movie): Promise<{
   if (!movie.serverUrl || !movie.path) {
     throw new Error('该影片未挂载服务器信息');
   }
-  const mount = await AppDataSource.getRepository(UserMount).findOneBy({
-    serverUrl: movie.serverUrl,
-    type: source === 'jellyfin' ? 'jellyfin' : 'emby',
-  });
+  const { mount } = await resolveMovieStream(movie.id, source);
   const client = await createEmbyClientFromMount({
     serverUrl: movie.serverUrl,
     apiKey: mount?.apiKey,

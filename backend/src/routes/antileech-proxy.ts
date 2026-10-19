@@ -31,6 +31,7 @@ export function createAntileechProxyHandler(logTag: string) {
     const q = req.query as Request['query'];
     await proxyHttpUpstream(req, res, {
       url: url.trim(),
+      publicOnly: true,
       headers: {
         referer: typeof q.referer === 'string' ? q.referer : undefined,
         origin: typeof q.origin === 'string' ? q.origin : undefined,

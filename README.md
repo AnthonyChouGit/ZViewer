@@ -209,3 +209,7 @@ services:
 - 默认音频走 3333/udp，防火墙需放行；可在管理端切换为 TCP，需额外放行 3337/tcp（Docker 需补端口映射）
 - 纯内网 / 特殊 NAT 环境 STUN 探测失败时，用 `LIVEKIT_NODE_IP` 指定服务器公网 IP
 - 需要 TURN/TLS 中继时，在 compose 中补 `5349` 端口并配置 `LIVEKIT_TURN_*` 三项变量
+
+## Windows 桌面控制台（可选）
+
+Windows 用户可构建带头像图标的目录 GUI，双击分发目录唯一的 `ZViewer.exe` 打开控制台，组件放在 `app/`，无需安装或自解包。控制台提供系统托盘、本机 HTTPS、自建 FRP、可保存的监听端口，以及直接在 GUI 内配置和扫码登录的 ZViewerCLI 高画质代理。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有服务端网页与命令行源码保持兼容。

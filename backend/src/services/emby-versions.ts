@@ -124,6 +124,7 @@ export async function buildEmbyResolvePayload(
     info.MediaSources.length > 1
       ? `&ms=${encodeURIComponent(source.Id)}`
       : '';
+  const upstreamMsQuery = msQuery.replace('&ms=', '&MediaSourceId=');
   const transcodeQuery = needsAudioTranscode ? '&at=1' : '';
 
   // 代理 URL（请求者需持有该挂载；添加影片时由 createMovie 重写为 stream 形式）
@@ -139,8 +140,8 @@ export async function buildEmbyResolvePayload(
 
   // 直连 URL（浏览器直连 Emby/Jellyfin；直链模式影片使用）
   const directUrlRaw = needsAudioTranscode
-    ? `${session.client.baseUrl}/emby/Videos/${encodeURIComponent(itemId)}/main.m3u8?api_key=${session.token}&AudioCodec=aac&TranscodingMaxAudioChannels=2&VideoBitrate=8000000&AudioBitrate=192000${msQuery}`
-    : `${session.client.baseUrl}/emby/Videos/${encodeURIComponent(itemId)}/stream?static=true&api_key=${session.token}${msQuery}`;
+    ? `${session.client.baseUrl}/emby/Videos/${encodeURIComponent(itemId)}/main.m3u8?api_key=${session.token}&AudioCodec=aac&TranscodingMaxAudioChannels=2&VideoBitrate=8000000&AudioBitrate=192000${upstreamMsQuery}`
+    : `${session.client.baseUrl}/emby/Videos/${encodeURIComponent(itemId)}/stream?static=true&api_key=${session.token}${upstreamMsQuery}`;
   // 升级前对 https 端点现场活性校验，防陈旧缓存产出不可达的 https 直链
   const directUrl = await upgradeDirectUrlValidated(mount, directUrlRaw);
 

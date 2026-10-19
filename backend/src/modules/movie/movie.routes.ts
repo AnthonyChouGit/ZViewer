@@ -16,6 +16,7 @@
  * - DELETE /api/rooms/:roomId/movies           清空全部影片
  * - DELETE /api/rooms/:roomId/movies/:movieId   删除影片
  */
+import { requireRoomReadAccess } from '../../services/room-access';
 import { Router, type Response } from 'express';
 import type { Server as SocketIOServer } from 'socket.io';
 import { AppDataSource } from '../../data-source';
@@ -36,13 +37,13 @@ import type { MovieDto } from '../shared';
  *
  * 与旧架构 routes/rooms.ts 的 canControlRoom 保持一致：
  * - root 角色：允许
- * - admin 角色 + room.ownerUserId === userId：允许
+ * - 已登录的房间 owner：允许
  * - 其他：拒绝
  */
 function canControlRoom(req: AuthenticatedRequest, room: Room): boolean {
   const role = req.user?.role;
   if (role === 'root') return true;
-  if (role === 'admin' && room.ownerUserId === req.user?.userId) return true;
+  if ((req.user?.userId ?? 0) > 0 && room.ownerUserId === req.user?.userId) return true;
   return false;
 }
 
@@ -60,6 +61,7 @@ export function createMovieRouter(io: SocketIOServer): Router {
   // GET /api/rooms/:roomId/movies - 获取影片列表
   router.get(
     '/:roomId/movies',
+    requireRoomReadAccess,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const roomId = req.params.roomId as string;

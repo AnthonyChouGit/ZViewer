@@ -1,3 +1,4 @@
+import { canReadRoom } from '../../services/room-access';
 /**
  * 房间 Session 管理服务。
  *
@@ -21,6 +22,7 @@ import { playbackMemoryService } from '../playback-memory';
  * 房间 Session 服务。
  */
 export class RoomSessionService {
+  private readonly admissions = new Map<string, Promise<unknown>>();
   /**
    * 注册房主（首次或重连）。
    *
@@ -114,25 +116,43 @@ export class RoomSessionService {
     roomId: string,
     userId?: number | null,
   ): Promise<Session | null> {
-    const sessionRepo = AppDataSource.getRepository(Session);
-    const roomRepo = AppDataSource.getRepository(Room);
+    const previous = this.admissions.get(roomId) ?? Promise.resolve();
+    const admission = previous.catch(() => undefined).then(async () => {
+      const sessionRepo = AppDataSource.getRepository(Session);
+      const roomRepo = AppDataSource.getRepository(Room);
 
-    // 更新房间最后访问时间
-    await roomRepo.update({ roomId }, { lastAccessedAt: new Date() });
+      const existing = await sessionRepo.findOneBy({ roomId, socketId: socket.id, endedAt: IsNull() });
+      if (existing) return existing;
+      const room = await roomRepo.findOneBy({ roomId, status: 'active' });
+      if (!room) throw new Error('房间已关闭');
+      if (!socket.connected) throw new Error('观看者已断开连接');
+      if (await this.getViewerCount(roomId) >= room.maxViewers) {
+        throw new Error('房间观看人数已达上限');
+      }
 
-    // 创建 viewer session
-    const session = sessionRepo.create({
-      roomId,
-      socketId: socket.id,
-      role: 'viewer',
-      userId: userId ?? null,
+      // 更新房间最后访问时间
+      await roomRepo.update({ roomId }, { lastAccessedAt: new Date() });
+
+      // 创建 viewer session
+      const session = sessionRepo.create({
+        roomId,
+        socketId: socket.id,
+        role: 'viewer',
+        userId: userId ?? null,
+        guestId: userId === 0 ? socket.data.guestId ?? null : null,
+      });
+      await sessionRepo.save(session);
+
+      // 加入 socket.io 房间
+      await socket.join(roomId);
+      delete socket.data.pendingRoomId;
+      roomPermissionService.invalidatePermissionCache(socket.id, roomId);
+
+      return session;
     });
-    await sessionRepo.save(session);
-
-    // 加入 socket.io 房间
-    await socket.join(roomId);
-
-    return session;
+    this.admissions.set(roomId, admission);
+    try { return await admission; }
+    finally { if (this.admissions.get(roomId) === admission) this.admissions.delete(roomId); }
   }
 
   /**
@@ -140,7 +160,7 @@ export class RoomSessionService {
    *
    * @returns 结束的 session 信息（用于判断是房主还是观众断线）
    */
-  async endSession(socketId: string): Promise<Session | null> {
+  async endSession(socketId: string, io?: SocketIOServer): Promise<Session | null> {
     const sessionRepo = AppDataSource.getRepository(Session);
     const session = await sessionRepo.findOneBy({
       socketId,
@@ -148,10 +168,19 @@ export class RoomSessionService {
     });
     if (!session) return null;
 
-    session.endedAt = new Date();
-    await sessionRepo.save(session);
+    await sessionRepo.update({ socketId, endedAt: IsNull() }, { endedAt: new Date() });
     // 失效权限缓存：session 结束后该 socket 的权限应即时清除
-    roomPermissionService.invalidatePermissionCache(socketId, session.roomId);
+    roomPermissionService.invalidatePermissionCache(socketId);
+    if (io) {
+      for (const panel of io.sockets.sockets.values()) {
+        if (!panel.data.panelRoomIds?.includes(session.roomId)) continue;
+        if (!(await canReadRoom(session.roomId, panel.data as any))) {
+          await panel.leave(session.roomId);
+          panel.data.panelRoomIds = panel.data.panelRoomIds.filter((id: string) => id !== session.roomId);
+          panel.emit('viewer-kicked', { reason: '房间主会话已结束' });
+        }
+      }
+    }
     return session;
   }
 
@@ -228,7 +257,7 @@ export class RoomSessionService {
     roomId: string,
     userId: number | null,
   ): Promise<Session | null> {
-    if (userId == null) return null;
+    if (userId == null || userId <= 0) return null;
     const sessionRepo = AppDataSource.getRepository(Session);
     return sessionRepo.findOneBy({
       roomId,
@@ -240,8 +269,8 @@ export class RoomSessionService {
   /**
    * 结束指定 viewer 的 session（踢出）。
    */
-  async endViewerSession(socketId: string): Promise<Session | null> {
-    return this.endSession(socketId);
+  async endViewerSession(socketId: string, io?: SocketIOServer): Promise<Session | null> {
+    return this.endSession(socketId, io);
   }
 
   /**

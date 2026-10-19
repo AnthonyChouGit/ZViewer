@@ -69,7 +69,7 @@ export class RoomSettingsHandler implements SocketEventHandler {
           // root 总是有权限；admin 仅对自己创建的房间有权限
           if (
             role !== 'root' &&
-            !(role === 'admin' && room.ownerUserId === userId)
+            !(userId > 0 && room.ownerUserId === userId)
           ) {
             return safeAck(callback, {
               success: false,
@@ -162,7 +162,7 @@ export class RoomSettingsHandler implements SocketEventHandler {
             room.password = trimmed ? await bcrypt.hash(trimmed, 10) : null;
           }
           if (typeof payload.maxViewers === 'number') {
-            if (payload.maxViewers < 1 || payload.maxViewers > 100) {
+            if (!Number.isInteger(payload.maxViewers) || payload.maxViewers < 1 || payload.maxViewers > 100) {
               return safeAck(callback, {
                 success: false,
                 message: '观众上限必须在 1-100 之间',

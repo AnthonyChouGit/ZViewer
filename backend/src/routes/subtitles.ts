@@ -20,6 +20,7 @@
  * v2 重构：OpenList 不再复用 WebDAV 协议，改用 AList HTTP API
  * （listOpenListDirectory / fetchOpenListFileInfo），密码使用 SHA-256 哈希。
  */
+import { requireMovieReadAccess } from '../services/room-access';
 import { Router, type Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Movie } from '../entities/Movie';
@@ -37,7 +38,7 @@ import {
 const router = Router();
 
 // 所有字幕搜索接口需要认证
-router.use(authenticateToken);
+router.use(authenticateToken, requireMovieReadAccess);
 
 /**
  * GET /search?movieId=

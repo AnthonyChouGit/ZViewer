@@ -190,7 +190,7 @@ export async function updateMount(
   const params = buildConnectionParams(
     body,
     serverUrl,
-    (typeof password === 'string' && password) || mount.password || undefined,
+    typeof password === 'string' ? password || undefined : mount.password || undefined,
   );
 
   // 测试连通性（含挂载 path 可访问性）

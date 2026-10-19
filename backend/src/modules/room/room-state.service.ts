@@ -1,3 +1,4 @@
+import { musicPlaybackMemoryService } from '../music/music-playback-memory.service';
 /**
  * 房间运行时状态管理服务。
  *
@@ -260,7 +261,7 @@ export class RoomStateService {
 
     await roomRepo.update({ roomId }, { status: 'closed' });
     await sessionRepo.update(
-      { roomId, role: 'sharer', endedAt: IsNull() },
+      { roomId, endedAt: IsNull() },
       { endedAt: new Date() },
     );
     // 失效权限缓存：房间关闭后所有 sharer session 已结束
@@ -272,6 +273,7 @@ export class RoomStateService {
 
     // 清理播放记忆持久化状态
     await playbackMemoryService.clearPlayback(roomId);
+    await musicPlaybackMemoryService.clear(roomId);
 
     const sockets = await io.in(roomId).fetchSockets();
     for (const sock of sockets) {

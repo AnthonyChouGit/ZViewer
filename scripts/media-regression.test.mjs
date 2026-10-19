@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
-import { parseMkvCueIndex, buildMkvKeyframeIndexFromBlob } from '../node_modules/playsvideo/dist/pipeline/mkv-keyframe-index.js';
-import { packetsFromAdtsData } from '../node_modules/playsvideo/dist/pipeline/audio-transcode.js';
+import { parseMkvCueIndex, buildMkvKeyframeIndexFromBlob } from '../frontend/vendor/playsvideo/dist/pipeline/mkv-keyframe-index.js';
+import { packetsFromAdtsData } from '../frontend/vendor/playsvideo/dist/pipeline/audio-transcode.js';
 import { decodePgsRle } from '../frontend/src/modules/subtitles/pgs-decoder.ts';
 
 function el(id, body) {

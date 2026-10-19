@@ -1,3 +1,4 @@
+v4.6.1挂载出现的2个服务器中转和转发是个bug，功能一样
 [使用前请务必查看这个教程文档](https://docx.zviewer.zero251.xyz/)
 
 [以及务必查看本章节](https://docx.zviewer.zero251.xyz/basic/network) 务必！

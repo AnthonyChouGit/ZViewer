@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { Request, Response, NextFunction } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,12 +8,18 @@ import jwt from 'jsonwebtoken';
 import type { UserRole } from '../entities/User';
 import { CONFIG_DIR } from '../services/paths';
 
+export const tokenRevocations = new EventEmitter();
+tokenRevocations.setMaxListeners(0);
+
 export interface JwtPayload {
+  exp?: number;
   userId: number;
   role: UserRole;
   username?: string;
   /** JWT 标准声明：签发时间（秒级 Unix 时间戳），由 jsonwebtoken.sign 自动写入 */
   iat?: number;
+  issuedAtMs?: number;
+  guestId?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -110,9 +117,10 @@ const GUEST_REFRESH_EXPIRES_IN: jwt.SignOptions['expiresIn'] = '7d';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-export function generateTokens(userId: number, role: UserRole, username?: string) {
-  const payload: JwtPayload = { userId, role, username };
+export function generateTokens(userId: number, role: UserRole, username?: string, guestId?: string) {
+  const payload: JwtPayload = { userId, role, username, issuedAtMs: Date.now() };
   const isGuest = userId === 0 && role === 'guest';
+  if (isGuest) payload.guestId = guestId || crypto.randomUUID();
   const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, {
     expiresIn: isGuest ? GUEST_ACCESS_EXPIRES_IN : JWT_ACCESS_EXPIRES_IN,
   });
@@ -130,59 +138,30 @@ export function verifyRefreshToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_REFRESH_SECRET) as JwtPayload;
 }
 
-// ==================== Token 失效检查（V4/V5） ====================
-
-/**
- * tokenInvalidBefore 的内存缓存（60s TTL）。
- * 避免每个认证请求都查一次 User 表；改密/管理操作调用 invalidateUserTokens
- * 更新缓存，未命中的 key 在 TTL 过期后从 DB 回源。
- */
-const invalidBeforeCache = new Map<number, { value: number | null; expireAt: number }>();
-const INVALID_CACHE_TTL_MS = 60 * 1000;
-
-/** 获取用户的 token 失效时间戳（毫秒），null 表示未设置或查询失败（fail-open 由调用方处理）。 */
-export function getTokenInvalidBefore(userId: number): number | null {
-  const cached = invalidBeforeCache.get(userId);
-  if (cached && cached.expireAt > Date.now()) {
-    return cached.value;
+/** Shared revocation/account check for HTTP, refresh and Socket.IO. */
+export async function assertTokenActive(payload: JwtPayload): Promise<void> {
+  if (payload.userId === 0 && payload.role === 'guest') {
+    if (!payload.guestId) throw new Error('游客身份需要刷新');
+    return;
   }
-  // 缓存未命中：同步返回 null（不阻塞请求），异步回源填充。
-  // 首次 miss 的容忍窗口 ≤ TTL；改密路径会主动写入缓存保证立即生效。
-  void (async () => {
-    try {
-      const { AppDataSource } = require('../data-source');
-      const user = await AppDataSource.getRepository('User').findOneBy({ id: userId });
-      invalidBeforeCache.set(userId, {
-        value: user?.tokenInvalidBefore ? new Date(user.tokenInvalidBefore).getTime() : null,
-        expireAt: Date.now() + INVALID_CACHE_TTL_MS,
-      });
-    } catch {
-      /* 查询失败不影响当前请求 */
-    }
-  })();
-  return cached ? cached.value : null;
+  const { AppDataSource } = require('../data-source');
+  const user = await AppDataSource.getRepository('User').findOneBy({ id: payload.userId });
+  const issuedAt = payload.issuedAtMs ?? (payload.iat ?? 0) * 1000;
+  if (!user || user.status !== 'active' || user.role !== payload.role ||
+      (user.tokenInvalidBefore && issuedAt <= new Date(user.tokenInvalidBefore).getTime())) {
+    throw new Error('令牌已失效，请重新登录');
+  }
 }
 
-/**
- * 使指定用户的所有已签发 token 立即失效（V4/V5）。
- *
- * 写入 DB + 同步刷新内存缓存。修改密码、管理员禁用/删除用户等操作后调用。
- */
+// ==================== Token 失效检查（V4/V5） ====================
+
+/** Persist revocation before acknowledging password/account changes. */
 export async function invalidateUserTokens(userId: number): Promise<void> {
-  const now = new Date();
-  try {
-    const { AppDataSource } = require('../data-source');
-    await AppDataSource.getRepository('User').update(
-      { id: userId },
-      { tokenInvalidBefore: now },
-    );
-    invalidBeforeCache.set(userId, {
-      value: now.getTime(),
-      expireAt: Date.now() + INVALID_CACHE_TTL_MS,
-    });
-  } catch (err) {
-    console.error('[auth] invalidateUserTokens error:', err);
-  }
+  const { AppDataSource } = require('../data-source');
+  await AppDataSource.getRepository('User').update(
+    { id: userId }, { tokenInvalidBefore: new Date() },
+  );
+  tokenRevocations.emit(String(userId));
 }
 
 /**
@@ -372,7 +351,7 @@ export function extractAccessToken(req: Request): string | undefined {
   return undefined;
 }
 
-export function authenticateToken(
+export async function authenticateToken(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
@@ -387,25 +366,12 @@ export function authenticateToken(
   try {
     const payload = verifyAccessToken(token);
 
-    // Token 失效检查（V4/V5）：改密/管理操作会使此前签发的 token 全部失效。
-    // guest（userId=0）无 User 行，跳过。使用 60s TTL 缓存避免每请求查库。
-    if (payload.userId !== 0) {
-      const invalidBefore = getTokenInvalidBefore(payload.userId);
-      if (invalidBefore !== null) {
-        const iat = payload.iat;
-        if (typeof iat === 'number' && iat * 1000 < invalidBefore) {
-          res
-            .status(401)
-            .json({ success: false, message: '令牌已失效，请重新登录' });
-          return;
-        }
-      }
-    }
+    await assertTokenActive(payload);
 
     req.user = payload;
     next();
   } catch (err) {
-    res.status(403).json({ success: false, message: '认证令牌无效或已过期' });
+    res.status(401).json({ success: false, message: '认证令牌无效、已撤销或已过期' });
   }
 }
 
@@ -416,27 +382,16 @@ export function authenticateToken(
  * 与 authenticateToken 的区别：无 token / token 失效不返回 401 而是继续处理。
  * token 失效检查（改密后吊销）逻辑与 authenticateToken 保持一致。
  */
-export function optionalAuthenticate(
+export async function optionalAuthenticate(
   req: AuthenticatedRequest,
   _res: Response,
   next: NextFunction,
-): void {
+) {
   const token = extractAccessToken(req);
   if (!token) return next();
   try {
     const payload = verifyAccessToken(token);
-    if (payload.userId !== 0) {
-      const invalidBefore = getTokenInvalidBefore(payload.userId);
-      const iat = payload.iat;
-      if (
-        invalidBefore !== null &&
-        typeof iat === 'number' &&
-        iat * 1000 < invalidBefore
-      ) {
-        // 已被吊销的 token 按匿名处理
-        return next();
-      }
-    }
+    await assertTokenActive(payload);
     req.user = payload;
   } catch {
     // token 无效按匿名处理

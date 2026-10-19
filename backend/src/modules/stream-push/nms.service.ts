@@ -67,7 +67,7 @@ class NmsService {
    *
    * - 端口通过 RTMP_PORT / HTTP_FLV_PORT 环境变量可配置（默认 3334 / 3335）
    * - 启动失败仅 console.error，不影响主进程
-   * - postPublish 校验流名合法性，失败调用 session.reject()，成功广播 stream-status: live
+   * - prePublish 同步校验流名合法性，失败拒绝发布，成功广播 stream-status: live
    * - donePublish / postClose 均广播 stream-status: offline（修复旧版 postClose 不广播的缺陷）
    *
    * @returns stop 函数，用于主进程退出时停止 NMS
@@ -96,9 +96,9 @@ class NmsService {
       },
       auth: {
         play: false,
-        // 关闭 NMS 自带的推流 token 校验，改由 postPublish 中通过 streamKey
+        // 启用 NMS 同步鉴权钩子，在 prePublish 中通过 streamKey
         // 查询 Room 表进行业务层校验（房间存在、活跃、screen-share + stream-push）。
-        publish: false,
+        publish: true,
         secret: 'zviewer-stream-push',
       },
     };
@@ -136,62 +136,60 @@ class NmsService {
       if (wsEmitter?.on) wsEmitter.on('error', handleServerError('WebSocket'));
       if (rtmpEmitter?.on) rtmpEmitter.on('error', handleServerError('RTMP'));
 
-      this.nmsInstance.on('postPublish', async (id, streamPath, _args) => {
-        console.log(`[NMS] postPublish id=${id} streamPath=${streamPath}`);
-        const result = await this.validatePublishStream(streamPath);
-        if (!result.valid) {
-          console.warn(
-            `[NMS] reject publish: invalid streamPath=${streamPath} id=${id}`,
-          );
+      // NMS 4 emits a session object and performs auth synchronously. Validate in
+      // prePublish through its broadcast auth hook, before a publisher is installed.
+      type PublishSession = {
+        id: string; streamPath: string; close(): void;
+        socket?: { destroy(): void };
+        rtmp?: { onPacketCallback: (...args: unknown[]) => void };
+        broadcast: { verifyAuth: (secret: string, session: PublishSession) => boolean };
+      };
+      const events = this.nmsInstance as unknown as {
+        on(event: string, handler: (session: PublishSession) => void): void;
+      };
+      const accepted = new Map<string, string>();
+      events.on('prePublish', session => {
+        session.broadcast.verifyAuth = (_secret, candidate) => {
+          const key = /^\/live\/([A-Za-z0-9_-]+)$/.exec(candidate.streamPath)?.[1];
+          const reject = () => {
+            // NMS 4 keeps parsing the current TCP buffer after auth failure.
+            // Discard subsequent packets as well as closing the connection.
+            if (candidate.rtmp) candidate.rtmp.onPacketCallback = () => {};
+            candidate.socket?.destroy();
+            return false;
+          };
+          if (!key) return reject();
+          // sql.js is the application's configured driver. Its synchronous statement
+          // avoids accepting packets during an asynchronous EventEmitter callback.
+          const db = (AppDataSource.driver as unknown as { databaseConnection: {
+            prepare(sql: string): { bind(values: string[]): void; step(): boolean;
+              getAsObject(): Record<string, unknown>; free(): void };
+          } }).databaseConnection;
+          const stmt = db.prepare('SELECT roomId FROM room WHERE streamKey = ? AND status = ? AND mode = ? AND shareMethod = ?');
           try {
-            const session = this.nmsInstance?.getSession(id) as unknown as {
-              reject?: () => void;
-            } | undefined;
-            session?.reject?.();
-          } catch (err) {
-            console.error('[NMS] reject error:', err);
-          }
-          return;
-        }
-        const roomId = result.roomId!;
-        // 记录活跃会话，确保后续 donePublish/postClose 即使数据库查询失败也能广播 offline
-        this.activePublishers.set(id, roomId);
-        console.log(`[NMS] publish accepted room=${roomId}`);
+            stmt.bind([key, 'active', 'screen-share', 'stream-push']);
+            if (!stmt.step()) return reject();
+            accepted.set(candidate.id, String(stmt.getAsObject().roomId));
+            return true;
+          } finally { stmt.free(); }
+        };
+      });
+      events.on('postPublish', session => {
+        const roomId = accepted.get(session.id);
+        accepted.delete(session.id);
+        if (!roomId) { session.close(); return; }
+        this.activePublishers.set(session.id, roomId);
         io.to(roomId).emit('stream-status', { roomId, status: 'live' });
       });
-
-      this.nmsInstance.on('donePublish', async (id, streamPath, _args) => {
-        console.log(`[NMS] donePublish id=${id} streamPath=${streamPath}`);
-        // 优先从活跃会话 Map 中查找 roomId，避免数据库查询失败导致 offline 广播遗漏
-        let roomId = this.activePublishers.get(id);
-        if (!roomId) {
-          const result = await this.validatePublishStream(streamPath);
-          if (result.valid && result.roomId) {
-            roomId = result.roomId;
-          }
-        }
-        if (roomId) {
-          this.activePublishers.delete(id);
-          io.to(roomId).emit('stream-status', { roomId, status: 'offline' });
-        }
-      });
-
-      // postClose 也广播 offline，修复旧版仅打日志的缺陷：
-      // NMS 异常关闭连接（未触发 donePublish）时确保客户端收到 offline 通知
-      this.nmsInstance.on('postClose', async (id, streamPath) => {
-        console.log(`[NMS] postClose id=${id} streamPath=${streamPath}`);
-        let roomId = this.activePublishers.get(id);
-        if (!roomId) {
-          const result = await this.validatePublishStream(streamPath);
-          if (result.valid && result.roomId) {
-            roomId = result.roomId;
-          }
-        }
-        if (roomId) {
-          this.activePublishers.delete(id);
-          io.to(roomId).emit('stream-status', { roomId, status: 'offline' });
-        }
-      });
+      const onStopped = (session: PublishSession) => {
+        accepted.delete(session.id);
+        const roomId = this.activePublishers.get(session.id);
+        if (!roomId) return;
+        this.activePublishers.delete(session.id);
+        io.to(roomId).emit('stream-status', { roomId, status: 'offline' });
+      };
+      events.on('donePublish', onStopped);
+      events.on('postClose', onStopped);
 
       this.nmsInstance.run();
       this.nmsAvailable = true;
