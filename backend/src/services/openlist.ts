@@ -367,6 +367,7 @@ export async function testOpenListConnection(
   serverUrl: string,
   username: string | undefined,
   password: string | undefined,
+  mountPath = '/',
 ): Promise<{ ok: true; username?: string } | { ok: false; message: string; code: string }> {
   try {
     const mode = detectLoginMode(password);
@@ -374,7 +375,7 @@ export async function testOpenListConnection(
     // 尝试列出根目录验证访问权限
     const normalizedUrl = normalizeOpenListServerUrl(serverUrl);
     const apiBaseUrl = toApiBaseUrl(normalizedUrl);
-    await alistFsList(apiBaseUrl, token, '/', undefined, 1, 1, false);
+    await alistFsList(apiBaseUrl, token, mountPath, undefined, 1, 1, false);
     return { ok: true, username: username || undefined };
   } catch (err) {
     const message =

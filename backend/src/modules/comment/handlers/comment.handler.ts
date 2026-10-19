@@ -1,3 +1,4 @@
+import { canReadRoom } from '../../../services/room-access';
 /**
  * 评论 / 弹幕 / 批注 Socket 事件处理器。
  *
@@ -14,14 +15,12 @@
  * - 评论持久化通过 commentService，避免直接操作 DB
  */
 import type { Server as SocketIOServer, Socket } from 'socket.io';
-import bcrypt from 'bcryptjs';
 import { AppDataSource } from '../../../data-source';
 import { User } from '../../../entities/User';
 import { Room } from '../../../entities/Room';
 import type { SocketEventHandler, AckCallback } from '../../socket';
 import { safeAck } from '../../socket';
 import { roomPermissionService } from '../../room/room-permission.service';
-import { roomSessionService } from '../../room/room-session.service';
 import { commentService } from '../comment.service';
 import { danmakuMetaService } from '../danmaku-meta.service';
 
@@ -160,24 +159,11 @@ export class CommentHandler implements SocketEventHandler {
           if (room.status !== 'active') {
             return safeAck(callback, { success: false, message: '房间已关闭' });
           }
-          if (room.password) {
-            const ok =
-              typeof payload.password === 'string' && payload.password
-                ? await bcrypt.compare(payload.password, room.password)
-                : false;
-            if (!ok) {
-              return safeAck(callback, {
-                success: false,
-                code: 'NEED_PASSWORD',
-                message: '需要房间密码',
-              });
-            }
+          if (!(await canReadRoom(payload.roomId, socket.data as any))) {
+            return safeAck(callback, { success: false, message: '请先获准进入房间' });
           }
-          await roomSessionService.admitViewer(
-            socket,
-            payload.roomId,
-            socket.data.userId ?? null,
-          );
+          socket.data.panelRoomIds = [...new Set([...(socket.data.panelRoomIds ?? []), payload.roomId])];
+          await socket.join(payload.roomId);
           safeAck(callback, { success: true });
         } catch (err) {
           console.error('[join-room-panel] error:', err);

@@ -56,10 +56,11 @@ export class SubtitleSyncHandler implements SocketEventHandler {
 
     // 观众挂载字幕监听器后主动拉取：加入时立即回发的 subtitle-update
     // 早于观众前端 useEffect 挂载而丢失，此处回发房主缓存的当前状态。
-    socket.on('subtitle-request', (payload: unknown) => {
+    socket.on('subtitle-request', async (payload: unknown) => {
       try {
         const data = payload as { roomId?: string } | undefined;
         if (!data?.roomId) return;
+        if (!(await roomPermissionService.isInRoom(socket, data.roomId))) return;
         const cached = roomStateService.getSubtitle(data.roomId);
         if (cached != null) {
           socket.emit('subtitle-update', cached);

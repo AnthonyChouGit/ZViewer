@@ -32,6 +32,10 @@ export class Session {
   @Column({ type: 'int', nullable: true })
   userId!: number | null;
 
+  /** Guests share userId=0; bind admission to an individual token identity. */
+  @Column({ type: 'varchar', nullable: true })
+  guestId!: string | null;
+
   @CreateDateColumn()
   startedAt!: Date;
 

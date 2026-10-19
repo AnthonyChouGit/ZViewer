@@ -80,6 +80,9 @@ export interface ProxyHttpOptions {
   logTag: string;
   /** 502 错误响应的 message 文案 */
   errorMessage: string;
+  /** Public source proxies must also reject private redirect destinations. */
+  publicOnly?: boolean;
+  rewriteHlsUri?: (uri: string, playlistUrl: string) => string;
 }
 
 /** 需要透传给客户端的上游响应头（白名单） */
@@ -239,12 +242,32 @@ export async function proxyHttpUpstream(
   let hasDowngraded = false;
 
   try {
-    const startUpstreamFetch = () =>
-      fetch(requestUrl, {
+    const startUpstreamFetch = async () => {
+      let target = requestUrl;
+      for (let redirects = 0; redirects <= 5; redirects++) {
+        if (opts.publicOnly) {
+          const parsed = new URL(target);
+          const { lookup } = await import('node:dns/promises');
+          if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password ||
+              isInternalNetworkHost(parsed.hostname)) throw new Error('不允许代理内网地址');
+          const addresses = await lookup(parsed.hostname.replace(/^\[|\]$/g, ''), { all: true });
+          if (!addresses.length || addresses.some(a => isInternalNetworkHost(a.address))) {
+            throw new Error('不允许代理内网地址');
+          }
+        }
+        const response = await fetch(target, {
         method: req.method,
         headers: buildUpstreamHeaders(req, h),
         signal: controller.signal,
+        redirect: opts.publicOnly ? 'manual' : 'follow',
       });
+        const location = response.headers.get('location');
+        if (!opts.publicOnly || ![301, 302, 303, 307, 308].includes(response.status) || !location) return response;
+        await response.body?.cancel();
+        target = new URL(location, target).href;
+      }
+      throw new Error('上游重定向过多');
+    };
 
     // 转发原始 HTTP 方法：HEAD 请求转发为 HEAD（避免上游下载整个视频体），
     // GET 请求转发为 GET（含 Range 头时上游返回 206 部分内容）。
@@ -307,6 +330,23 @@ export async function proxyHttpUpstream(
     // 影响后续 Content-Range / Content-Length 解析与缓存语义。
     res.status(upstream.status);
 
+    const contentType = upstream.headers.get('content-type') ?? '';
+    if (opts.rewriteHlsUri && req.method !== 'HEAD' &&
+        (/mpegurl/i.test(contentType) || /\.m3u8(?:\?|$)/i.test(upstream.url || requestUrl))) {
+      const playlist = await upstream.text();
+      const base = upstream.url || requestUrl;
+      const rewrite = (uri: string) => opts.rewriteHlsUri!(uri, base);
+      const rewritten = playlist.split(/\r?\n/).map(line => {
+        if (!line.trim()) return line;
+        if (line.startsWith('#')) return line.replace(/URI="([^"]+)"/g, (_all, uri: string) => `URI="${rewrite(uri)}"`);
+        return rewrite(line.trim());
+      }).join('\n');
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.send(rewritten);
+      return;
+    }
+
     // Content-Type 处理：B站 CDN 偶发返回 application/json（实际是视频数据），
     // 此时使用调用方提供的 defaultContentType（如 video/mp4）纠正，
     // 避免 MSE 引擎或浏览器因 Content-Type 不匹配而拒绝处理。
@@ -322,6 +362,8 @@ export async function proxyHttpUpstream(
       res.setHeader('Content-Type', upstreamContentType || defaultContentType);
     }
     for (const name of PASSTHROUGH_HEADERS) {
+      // fetch decodes gzip/br/deflate, so its wire length no longer describes the body.
+      if (name === 'content-length' && req.method !== 'HEAD' && upstream.headers.has('content-encoding')) continue;
       const value = upstream.headers.get(name);
       if (value) res.setHeader(name, value);
     }

@@ -19,6 +19,7 @@
  * 早期这里是 WebDAV/OpenList 共用路由工厂；OpenList 改用 AList HTTP API 独立实现后
  * 工厂只剩 WebDAV 一个实例，故收敛为单一源路由（行为不变）。
  */
+import { requireMovieReadAccess } from '../services/room-access';
 import { Router, type Response } from 'express';
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
 import { pipeRangeStream, resolveUserMount, StreamMovieError } from '../services/proxy';
@@ -274,7 +275,7 @@ router.get('/direct-url', async (req: AuthenticatedRequest, res: Response): Prom
 // 2.10 基于影片 ID 的流代理 - GET /stream?movieId=
 // 与 /proxy 的区别：/stream 不依赖 userId 查挂载，而是直接从 Movie 表读取凭证，
 // 这样房间内任何成员（含观众）都能通过 movieId 访问影片流。
-router.get('/stream', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/stream', requireMovieReadAccess, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const movieIdRaw = req.query.movieId;
     if (movieIdRaw === undefined) {

@@ -9,6 +9,7 @@ import { getSystemSettings } from '../services/system-settings';
 import {
   generateTokens,
   verifyRefreshToken,
+  assertTokenActive,
   authenticateToken,
   setAuthCookies,
   setAccessTokenCookie,
@@ -260,11 +261,12 @@ router.post(
 
       const payload = verifyRefreshToken(refreshToken);
       if (payload.userId === 0 && payload.role === 'guest') {
-        const { accessToken } = generateTokens(0, 'guest', 'guest');
+        const { accessToken } = generateTokens(0, 'guest', 'guest', payload.guestId);
         setAccessTokenCookie(req, res, accessToken);
         res.json({ success: true, accessToken });
         return;
       }
+      await assertTokenActive(payload);
       const user = await userRepository().findOneBy({ id: payload.userId });
       if (!user) {
         res.status(403).json({ success: false, message: '用户不存在' });

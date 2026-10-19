@@ -1,3 +1,4 @@
+import { clearMovieStreamCache } from './stream-movie';
 /**
  * 挂载点（WebDAV / FTP / OpenList）代理的公共参数解析与挂载查询。
  *
@@ -38,6 +39,7 @@ function mountCacheKey(userId: number, type: MountType, mountId: number): string
 
 /** 挂载增删改后调用：失效该挂载在所有用户/类型维度的缓存条目 */
 export function invalidateUserMountCache(mountId: number): void {
+  clearMovieStreamCache();
   const keys = mountCacheIndex.get(mountId);
   if (!keys) return;
   for (const key of keys) mountCache.delete(key);

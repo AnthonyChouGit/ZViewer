@@ -88,7 +88,7 @@ export class ViewerService {
     });
 
     // 结束其 session 记录
-    await roomSessionService.endViewerSession(viewerSocketId);
+    await roomSessionService.endViewerSession(viewerSocketId, io);
 
     targetSocket.leave(roomId);
     targetSocket.disconnect(true);

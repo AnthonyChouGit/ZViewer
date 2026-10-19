@@ -19,7 +19,8 @@
     "build:exe": "node scripts/build-exe.js",
     "build:backend-exe": "node scripts/build-exe.js",
     "build:all": "node build-all.js",
-    "postinstall": "node scripts/prune-pkg-bloat.js"
+    "postinstall": "node scripts/prune-pkg-bloat.js",
+    "test:server": "node scripts/server-regression/run.cjs"
   },
   "pkg": {
     "assets": [

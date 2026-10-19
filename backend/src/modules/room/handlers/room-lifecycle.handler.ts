@@ -77,6 +77,13 @@ export class RoomLifecycleHandler implements SocketEventHandler {
             });
           }
 
+          if (payload.maxViewers !== undefined && (!Number.isInteger(payload.maxViewers) || payload.maxViewers < 1 || payload.maxViewers > 100)) {
+            return safeAck(callback, { success: false, message: '观看人数必须为 1 到 100 的整数' });
+          }
+          if (payload.mode !== undefined && !['screen-share', 'watch-together', 'listen-together'].includes(payload.mode)) {
+            return safeAck(callback, { success: false, message: '房间模式无效' });
+          }
+
           // 创建新房间前，查找并离开用户当前活跃的旧房间（sharer session）。
           // 否则 socket 会同时存在于新旧两个房间，收到旧房间的 movie-list 等
           // 广播事件，导致新房间显示旧房间的影片列表。
@@ -216,12 +223,6 @@ export class RoomLifecycleHandler implements SocketEventHandler {
 
           // 查询房间内活跃 sharer，作为「不被踢出」的 socketId
           const sharer = await roomSessionService.getSharer(payload.roomId);
-          if (!sharer) {
-            return safeAck(callback, {
-              success: false,
-              message: '分享端不在线',
-            });
-          }
 
           // 取消可能的重连定时器
           roomStateService.cancelReconnectTimer(payload.roomId);
@@ -229,7 +230,7 @@ export class RoomLifecycleHandler implements SocketEventHandler {
           await roomStateService.closeRoomAndNotify(
             io,
             payload.roomId,
-            sharer.socketId,
+            sharer?.socketId ?? '',
           );
           return safeAck(callback, { success: true });
         } catch (err) {

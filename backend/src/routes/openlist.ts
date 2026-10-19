@@ -22,6 +22,7 @@
  * 2. /stream 通过 raw_url 代理（HTTP GET + Range 透传），不走 WebDAV
  * 3. raw_url 短期缓存（5 分钟），避免每次 /stream 都调用 /api/fs/get
  */
+import { requireMovieReadAccess } from '../services/room-access';
 import { Router, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { UserMount } from '../entities/UserMount';
@@ -89,7 +90,7 @@ router.get('/mounts', async (req: AuthenticatedRequest, res: Response): Promise<
 // POST /mounts/test - 测试连接（必须在 /:id 之前注册）
 router.post('/mounts/test', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { serverUrl, username, password } = req.body ?? {};
+    const { serverUrl, username, password, path } = req.body ?? {};
     if (typeof serverUrl !== 'string' || !serverUrl.trim()) {
       res.status(400).json({ success: false, message: '服务器地址不能为空', code: 'INVALID_URL' });
       return;
@@ -100,7 +101,7 @@ router.post('/mounts/test', async (req: AuthenticatedRequest, res: Response): Pr
       typeof password === 'string' ? password : undefined,
     );
 
-    const result = await testOpenListConnection(serverUrl.trim(), username, normalizedPassword || undefined);
+    const result = await testOpenListConnection(serverUrl.trim(), username, normalizedPassword || undefined, typeof path === 'string' && path.trim() ? path.trim() : '/');
     if (result.ok) {
       res.json({ success: true });
     } else {
@@ -135,7 +136,7 @@ router.post('/mounts', async (req: AuthenticatedRequest, res: Response): Promise
     const effectiveDirectLink = resolveDirectLinkWithInternalCheck(normalizedUrl, directLink === true);
 
     // 测试连通性（使用哈希密码，走 /api/auth/login/hash 端点）
-    const result = await testOpenListConnection(normalizedUrl, username, normalizedPassword || undefined);
+    const result = await testOpenListConnection(normalizedUrl, username, normalizedPassword || undefined, typeof path === 'string' && path.trim() ? path.trim() : '/');
     if (!result.ok) {
       res.status(400).json({ success: false, message: result.message, code: result.code });
       return;
@@ -222,11 +223,13 @@ router.put('/mounts/:id', async (req: AuthenticatedRequest, res: Response): Prom
     const credChanged =
       (username || null) !== (mount.username || null) ||
       (nextPassword || null) !== (mount.password || null);
-    if (serverChanged || credChanged) {
+    const nextPath = typeof path === 'string' && path.trim() ? path.trim() : '/';
+    if (serverChanged || credChanged || nextPath !== mount.path) {
       const result = await testOpenListConnection(
         normalizedUrl,
         username || mount.username || undefined,
         nextPassword || undefined,
+        nextPath,
       );
       if (!result.ok) {
         res.status(400).json({ success: false, message: result.message, code: result.code });
@@ -309,7 +312,7 @@ router.get('/mounts/:id/browse', async (req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const browsePath = typeof req.query.path === 'string' ? req.query.path : '/';
+    const browsePath = typeof req.query.path === 'string' ? req.query.path : mount.path || '/';
     const page = Number(req.query.page) || 1;
     const perPage = Number(req.query.perPage) || 100;
 
@@ -635,7 +638,7 @@ router.get('/proxy', async (req: AuthenticatedRequest, res: Response): Promise<v
 
 // GET /stream?movieId= - 基于 movieId 的流代理
 // 房间内任何成员（含观众）都通过此端点访问影片流，凭证从 Movie 表读取
-router.get('/stream', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/stream', requireMovieReadAccess, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const movieIdRaw = req.query.movieId;
     if (movieIdRaw === undefined) {

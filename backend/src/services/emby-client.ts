@@ -9,6 +9,12 @@
  */
 
 import { normalizeServerUrlWithScheme } from './network-utils';
+import { createHash } from 'node:crypto';
+
+const logins = new Map<string, { result: Promise<EmbyLoginResult>; createdAt: number }>();
+function loginKey(server: string, username: string, password: string): string {
+  return createHash('sha256').update(JSON.stringify([server, username, password])).digest('hex');
+}
 
 const DEFAULT_TIMEOUT_MS = 10000;
 
@@ -102,6 +108,8 @@ export interface EmbyClientOptions {
   /** X-Emby-Token（API Key 或登录后的会话 token） */
   token?: string;
   timeoutMs?: number;
+  username?: string;
+  password?: string;
 }
 
 interface EmbyRequestOptions {
@@ -143,7 +151,9 @@ export class EmbyClient {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  private async request<T>(reqOpts: EmbyRequestOptions): Promise<T> {
+  get accessToken(): string { return this.opts.token ?? ''; }
+
+  private async request<T>(reqOpts: EmbyRequestOptions, retried = false): Promise<T> {
     const { method = 'GET', path, query, body, authHeader = true } = reqOpts;
 
     const url = new URL(`${this.baseUrl}${path}`);
@@ -179,6 +189,17 @@ export class EmbyClient {
         signal: controller.signal,
       });
       if (!res.ok) {
+        if (res.status === 401 && !retried && this.opts.username && this.opts.password) {
+          await res.body?.cancel();
+          const key = loginKey(this.baseUrl, this.opts.username, this.opts.password);
+          const cached = logins.get(key);
+          // A late 401 for the old token must not discard another request's refresh.
+          if (cached && (await cached.result).token === this.opts.token && logins.get(key) === cached) {
+            logins.delete(key);
+          }
+          this.opts.token = (await this.login(this.opts.username, this.opts.password)).token;
+          return this.request<T>(reqOpts, true);
+        }
         let detail = '';
         try {
           const j = (await res.json()) as { Message?: string; Error?: { message?: string } };
@@ -223,6 +244,17 @@ export class EmbyClient {
    * POST /emby/Users/authenticatebyname
    */
   async login(username: string, password: string): Promise<EmbyLoginResult> {
+    const key = loginKey(this.baseUrl, username, password);
+    const cached = logins.get(key);
+    if (cached && Date.now() - cached.createdAt < 24 * 60 * 60 * 1000) return cached.result;
+    const result = this.performLogin(username, password);
+    logins.set(key, { result, createdAt: Date.now() });
+    if (logins.size > 500) logins.delete(logins.keys().next().value!);
+    try { return await result; }
+    catch (err) { if (logins.get(key)?.result === result) logins.delete(key); throw err; }
+  }
+
+  private async performLogin(username: string, password: string): Promise<EmbyLoginResult> {
     const res = await this.request<{
       AccessToken: string;
       ServerId: string;
@@ -445,7 +477,18 @@ export async function createEmbyClientFromMount(mount: {
   if (mount.username && mount.password) {
     const client = new EmbyClient({ serverUrl });
     const result = await client.login(mount.username, mount.password);
-    return new EmbyClient({ serverUrl, token: result.token });
+    return new EmbyClient({ serverUrl, token: result.token, username: mount.username, password: mount.password });
   }
   throw new EmbyError('Emby 挂载缺少 API Key 或账号密码', undefined, 'MISSING_CREDENTIALS');
+}
+
+/** One login per credential set, shared by browsing, playback and subtitles. */
+export async function resolveEmbySession(mount: {
+  serverUrl: string | null; apiKey?: string | null; username?: string | null;
+  password?: string | null; embyUserId?: string | null;
+}): Promise<{ client: EmbyClient; token: string; userId: string }> {
+  const client = await createEmbyClientFromMount(mount);
+  // Validate the cached login without authenticating again. A 401 refreshes it once.
+  const userId = mount.apiKey && mount.embyUserId ? mount.embyUserId : (await client.me()).Id;
+  return { client, userId, get token() { return client.accessToken; } };
 }

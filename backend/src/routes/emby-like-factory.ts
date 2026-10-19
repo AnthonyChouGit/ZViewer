@@ -9,6 +9,7 @@
  * 账号密码模式登录结果已含 userId 时跳过 /Users/Me 调用（对 Jellyfin 同样成立，
  * 两端共用同一客户端类）。
  */
+import { requireMovieReadAccess } from '../services/room-access';
 import { Router, Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { UserMount } from '../entities/UserMount';
@@ -18,7 +19,7 @@ import {
   extractErrorMessage,
   probeForMountSave,
 } from '../modules/shared/mount-utils';
-import { EmbyClient, EmbyError, type EmbyItem } from '../services/emby-client';
+import { EmbyClient, EmbyError, resolveEmbySession, type EmbyItem } from '../services/emby-client';
 import {
   resolveUserMount,
   resolveMovieStream,
@@ -59,41 +60,44 @@ export function createEmbyLikeRouter(options: EmbyLikeRouterOptions): Router {
    * - 优先使用 apiKey；userId 缺失时通过 /Users/Me 获取并回写缓存。
    * - 账号密码模式：创建/测试时已登录并缓存 token；若 token 失效（401）则重新登录。
    */
-  async function resolveSession(mount: UserMount): Promise<{
-    client: EmbyClient;
-    userId: string;
-    token: string;
-  }> {
-    const serverUrl = mount.serverUrl;
-    if (!serverUrl) {
-      throw new EmbyError('该挂载未配置服务器地址', undefined, 'INVALID_URL');
-    }
+  const resolveSession = resolveEmbySession;
 
-    let token = mount.apiKey ?? '';
-    if (!token) {
-      // 账号密码模式：先尝试已缓存的登录 token（存于 apiKey 字段的临时值不可靠，走重新登录）
-      if (!mount.username || !mount.password) {
-        throw new EmbyError(`${label} 挂载缺少 API Key 或账号密码`, undefined, 'MISSING_CREDENTIALS');
-      }
-      const loginClient = new EmbyClient({ serverUrl });
-      const loginResult = await loginClient.login(mount.username, mount.password);
-      token = loginResult.token;
-    }
+  function resolveHlsResource(req: AuthenticatedRequest, upstreamUrl: string, itemId: string): string {
+    if (typeof req.query.resource !== 'string') return upstreamUrl;
+    const resource = new URL(req.query.resource, upstreamUrl);
+    validateHlsResource(resource, new URL(upstreamUrl), itemId);
+    resource.searchParams.set('api_key', new URL(upstreamUrl).searchParams.get('api_key') ?? '');
+    return resource.href;
+  }
 
-    const client = new EmbyClient({ serverUrl, token });
-    let userId = mount.embyUserId ?? '';
-    if (!userId) {
-      try {
-        const me = await client.me();
-        userId = me.Id;
-        // 回写缓存的 userId
-        mount.embyUserId = userId;
-        await userMountRepository().save(mount);
-      } catch {
-        // userId 获取失败时按挂载路径解析（部分服务器不需要 userId）
-      }
+  function validateHlsResource(resource: URL, upstream: URL, itemId: string): void {
+    const basePath = new URL(upstream.origin + new URL(upstream.href).pathname).pathname;
+    const videosAt = basePath.toLowerCase().lastIndexOf('/videos/');
+    const prefix = basePath.slice(0, videosAt);
+    // Jellyfin can omit the optional /emby prefix in absolute playlist children.
+    const prefixes = new Set([prefix, prefix.replace(/\/emby$/i, '')]);
+    const allowed = [...prefixes].some(p => resource.pathname.toLowerCase().startsWith(
+      `${p}/videos/${encodeURIComponent(itemId)}/`.toLowerCase(),
+    ));
+    if (resource.origin !== upstream.origin || !allowed || resource.username || resource.password) {
+      throw new StreamMovieError('无效的 HLS 资源路径', 'INVALID_RESOURCE', 400);
     }
-    return { client, userId, token };
+  }
+
+  function rewriteHls(req: AuthenticatedRequest, itemId: string, upstreamUrl: string) {
+    return (uri: string, playlistUrl: string): string => {
+      const resource = new URL(uri, playlistUrl);
+      validateHlsResource(resource, new URL(upstreamUrl), itemId);
+      for (const key of [...resource.searchParams.keys()]) {
+        if (['api_key', 'x-emby-token', 'token'].includes(key.toLowerCase())) resource.searchParams.delete(key);
+      }
+      const query = new URLSearchParams();
+      const isMovie = req.query.movieId !== undefined;
+      if (isMovie) query.set('movieId', String(req.query.movieId));
+      else { query.set('mountId', String(req.query.mountId)); query.set('path', itemId); }
+      query.set('resource', resource.pathname + resource.search);
+      return `/api/${apiPrefix}/${isMovie ? 'stream' : 'proxy'}?${query}`;
+    };
   }
 
   /** 转换 item 为前端可识别的条目（isFile 标记可播放性） */
@@ -561,7 +565,7 @@ export function createEmbyLikeRouter(options: EmbyLikeRouterOptions): Router {
   // 按影片 ID 解析 - GET /movie-source?movieId=[&ms=]
   // 房主在影片列表切换多版本影片的清晰度时使用：无需 mountId，
   // 复用 /stream 同款 movieId → 挂载凭证链路，返回版本列表与所选版本的播放地址。
-  router.get('/movie-source', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.get('/movie-source', requireMovieReadAccess, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const movieIdRaw = req.query.movieId;
       if (movieIdRaw === undefined) {
@@ -631,7 +635,8 @@ export function createEmbyLikeRouter(options: EmbyLikeRouterOptions): Router {
         : `${session.client.baseUrl}/emby/Videos/${encodeURIComponent(targetPath)}/stream?static=true&api_key=${session.token}${msSuffix}`;
 
       await proxyHttpUpstream(req, res, {
-        url: upstreamUrl,
+        url: resolveHlsResource(req, upstreamUrl, targetPath),
+        rewriteHlsUri: rewriteHls(req, targetPath, upstreamUrl),
         headers: {
           extra: {
             'X-Emby-Token': session.token,
@@ -661,7 +666,7 @@ export function createEmbyLikeRouter(options: EmbyLikeRouterOptions): Router {
   // 再通过 serverUrl + type 在 UserMount 表中查找挂载凭证，
   // 这样房间内任何成员（含观众）都能通过 movieId 访问影片流。
   // at=1：音频转码模式（片源音轨编码浏览器不支持时由 resolve 标记并写入 movie.url）
-  router.get('/stream', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.get('/stream', requireMovieReadAccess, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const movieIdRaw = req.query.movieId;
       if (movieIdRaw === undefined) {
@@ -699,7 +704,8 @@ export function createEmbyLikeRouter(options: EmbyLikeRouterOptions): Router {
         : `${session.client.baseUrl}/emby/Videos/${encodeURIComponent(itemId)}/stream?static=true&api_key=${session.token}${msSuffix}`;
 
       await proxyHttpUpstream(req, res, {
-        url: upstreamUrl,
+        url: resolveHlsResource(req, upstreamUrl, itemId),
+        rewriteHlsUri: rewriteHls(req, itemId, upstreamUrl),
         headers: {
           extra: {
             'X-Emby-Token': session.token,

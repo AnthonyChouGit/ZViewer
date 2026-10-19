@@ -14,6 +14,7 @@
  * - LIVEKIT_API_HOST  服务端 API 地址（默认 http://127.0.0.1:3336）
  * - LIVEKIT_API_KEY / LIVEKIT_API_SECRET
  */
+import { canReadRoom } from '../services/room-access';
 import { Router, Response } from 'express';
 import { AccessToken, RoomServiceClient, TrackType } from 'livekit-server-sdk';
 import { AppDataSource } from '../data-source';
@@ -104,6 +105,14 @@ router.post(
       const roomId = String(req.body?.roomId ?? '');
       if (!roomId) {
         res.status(400).json({ success: false, message: 'roomId 为必填项' });
+        return;
+      }
+      if (!(await AppDataSource.getRepository(Room).existsBy({ roomId, status: 'active' }))) {
+        res.status(404).json({ success: false, message: '房间不存在或已关闭' });
+        return;
+      }
+      if (!(await canReadRoom(roomId, req.user!))) {
+        res.status(403).json({ success: false, message: '尚未获准进入房间' });
         return;
       }
       if (!livekitConfigured()) {

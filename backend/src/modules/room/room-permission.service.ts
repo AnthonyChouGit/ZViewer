@@ -1,3 +1,4 @@
+import { canReadRoom } from '../../services/room-access';
 /**
  * 房间权限校验服务。
  *
@@ -260,6 +261,9 @@ export class RoomPermissionService {
    * 检查 socket 是否在指定房间内（任意角色）。
    */
   async isInRoom(socket: Socket, roomId: string): Promise<boolean> {
+    if ((socket.data.panelRoomIds as string[] | undefined)?.includes(roomId)) {
+      return canReadRoom(roomId, socket.data as any);
+    }
     const key = this.cacheKey(socket.id, roomId, 'isInRoom');
     const cached = this.getCached(key);
     if (cached !== null) return cached;
@@ -315,7 +319,7 @@ export class RoomPermissionService {
     if (!room) return false;
     try {
       const muted: string[] = JSON.parse(room.mutedViewers || '[]');
-      return muted.includes(String(userId));
+      return muted.some((id: number | string) => Number(id) === userId);
     } catch {
       return false;
     }
