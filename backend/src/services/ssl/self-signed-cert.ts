@@ -82,7 +82,7 @@ function parseHostKind(host: string | null | undefined): {
 }
 
 /** 读取证书 SAN 列表（解析失败返回空数组） */
-function readCertSanHosts(certFile: string): string[] {
+export function readCertSanHosts(certFile: string): string[] {
   try {
     const pem = fs.readFileSync(certFile, 'utf-8');
     const cert = forge.pki.certificateFromPem(pem);
@@ -97,11 +97,22 @@ function readCertSanHosts(certFile: string): string[] {
 }
 
 /** 证书是否未过期 */
-function isCertNotExpired(certFile: string): boolean {
+export function isCertNotExpired(certFile: string): boolean {
   try {
     const pem = fs.readFileSync(certFile, 'utf-8');
     const cert = forge.pki.certificateFromPem(pem);
     return cert.validity.notAfter > new Date();
+  } catch {
+    return false;
+  }
+}
+
+/** 判断已有证书是否为自签（签发者主体哈希 == 证书主体哈希） */
+export function isSelfSignedCert(certFile: string): boolean {
+  try {
+    const pem = fs.readFileSync(certFile, 'utf-8');
+    const cert = forge.pki.certificateFromPem(pem);
+    return cert.issuer.hash === cert.subject.hash;
   } catch {
     return false;
   }

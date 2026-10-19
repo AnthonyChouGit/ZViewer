@@ -45,6 +45,10 @@ import {
   ensureSelfSignedCert,
   getSslCertPaths,
 } from './services/ssl/self-signed-cert';
+import {
+  runGenCertCli,
+  printGenCertUsage,
+} from './services/ssl/cert-cli';
 
 /**
  * 后端启动入口（纯装配）。
@@ -280,32 +284,27 @@ async function bootstrap() {
 }
 
 // ==================== --gen-cert CLI 模式 ====================
-// 签发本地自签证书后退出（替代原独立 zviewer-cert 工具）。
-// 用法：zviewer-backend --gen-cert [host] [--force]
-//   host     域名 / IP / localhost（缺省 localhost），写入证书 SAN
-//   --force  强制重新生成，不检查已有证书
+// 签发 SSL 证书后退出（替代原独立 zviewer-cert 工具）。
+// 用法：zviewer-backend --gen-cert [host] [选项]
+//   host     域名 / 公网 IP / localhost（缺省 localhost）
+//   域名与公网 IP 自动走 Let's Encrypt（ACME HTTP-01），localhost / 内网 IP 自签；
+//   详见 services/ssl/cert-cli.ts（--selfsigned / --staging / --email / --directory / --force）
 const cliArgs = process.argv.slice(2);
 if (cliArgs.includes('--gen-cert')) {
-  try {
-    const force = cliArgs.includes('--force') || cliArgs.includes('-f');
-    // host：--gen-cert 之后的第一个非选项参数
-    const genIdx = cliArgs.indexOf('--gen-cert');
-    const hostArg = cliArgs
-      .slice(genIdx + 1)
-      .find((a) => a !== '--force' && a !== '-f' && !a.startsWith('-'));
-    console.log(`  生成 SSL 证书（类型: ${hostArg || 'localhost'}，自签）...`);
-    const result = ensureSelfSignedCert({ host: hostArg ?? null, force });
-    if (!result.generated) {
-      console.log(`  ${result.reason}`);
-    }
+  if (cliArgs.includes('--help') || cliArgs.includes('-h')) {
+    printGenCertUsage();
     process.exit(0);
-  } catch (err) {
-    console.error('  [错误] 证书生成失败:', err instanceof Error ? err.message : err);
-    process.exit(1);
   }
+  runGenCertCli(cliArgs)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('  [错误] 证书生成失败:', err instanceof Error ? err.message : err);
+      console.error("  如需继续使用自签证书，请加 --selfsigned 参数");
+      process.exit(1);
+    });
+} else {
+  bootstrap().catch((err) => {
+    console.error('Error during bootstrap:', err);
+    process.exit(1);
+  });
 }
-
-bootstrap().catch((err) => {
-  console.error('Error during bootstrap:', err);
-  process.exit(1);
-});

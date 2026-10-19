@@ -240,40 +240,50 @@ In production mode, **only ports 3333 (tcp+udp) and 3334 are exposed externally*
 
 ### Certificate Types
 
-Self-signed certificates are generated locally (built into the backend exe; dev source uses `scripts/generate-cert.js`). The SAN always includes `localhost`, `127.0.0.1`, `::1`, plus the host you specify; validity is 10 years.
+Certificate issuance is built into the backend binary (`zviewer-backend --gen-cert`, source at `scripts/generate-cert.js` + `backend/src/services/ssl/`); the issuance method is selected automatically based on the address type:
 
 | Address Type | Certificate | Description |
 |---|---|---|
 | `localhost` | Self-signed | SAN includes `localhost`, `127.0.0.1`, `::1`; 10-year validity |
-| Domain (e.g. `example.com`) | Self-signed | SAN includes the domain |
-| IP (e.g. `192.168.1.1`) | Self-signed | SAN includes the IP |
-
-> For internet-facing deployments, terminate TLS with a trusted certificate from **Cloudflare / Nginx / Caddy / aaPanel / 1Panel** and reverse-proxy to ZViewer's port instead of using self-signed certificates.
+| Domain (e.g. `example.com`) | **Let's Encrypt CA-trusted** | Auto-request via built-in ACME client; no browser warning |
+| Public IP (e.g. `1.2.3.4`) | **Let's Encrypt CA-trusted** | Let's Encrypt supports IP certificates since 2025 (shortlived profile, ~6-day validity) |
+| Private IP (e.g. `192.168.1.1`) | Self-signed | SAN includes the IP |
 
 ### CLI Usage
 
 ```bash
-# Self-signed certificate for localhost (default)
+# localhost → self-signed certificate
 start.bat cert
 ./start.sh cert
 
-# Self-signed certificate including a custom host in the SAN
-start.bat cert 192.168.1.10
+# Domain → auto-request Let's Encrypt trusted certificate
+start.bat cert example.com
 ./start.sh cert example.com
+
+# Public IP → auto-request Let's Encrypt trusted certificate
+start.bat cert 1.2.3.4
+
+# Private IP → self-signed certificate
+start.bat cert 192.168.1.1
 
 # Force re-issue
 start.bat cert example.com --force
-./start.sh cert example.com --force
 ```
 
-HTTPS mode auto-generates a self-signed certificate on first start if none exists, so `start.bat https` / `./start.sh https` works out of the box. You can also issue directly via the backend binary:
+Direct invocation (bypassing the start scripts):
 
 ```bash
-zviewer-backend.exe --gen-cert [host] [--force]
-./zviewer-backend --gen-cert [host] [--force]
+zviewer-backend.exe --gen-cert example.com [--force] [--staging] [--email me@example.com]
+./zviewer-backend --gen-cert example.com [--force] [--staging] [--email me@example.com]
 ```
 
-Certificate files are stored in `config/ssl/` (`cert.pem`, `key.pem`).
+### Prerequisites for Let's Encrypt
+
+1. Domain resolves to your public IP, or the public IP is directly accessible.
+2. **Port 80** is open and firewall/security group allows it (ACME HTTP-01 challenge).
+3. Rate limit: 5 certificates per domain per week. Use `--staging` for testing.
+
+Certificate files are stored in `config/ssl/` (`cert.pem` chain, `key.pem` private key, `acme-account.key` ACME account key).
 
 ---
 
@@ -556,7 +566,7 @@ Parse BV/AV video links, with quality switching and premium content support. Con
 `localhost` and private IPs use self-signed certificates. Solutions:
 
 - Import `config/ssl/cert.pem` into the client's "Trusted Root Certification Authorities"; or
-- Use a trusted certificate issued by Cloudflare / Nginx / Caddy / aaPanel / 1Panel via reverse proxy.
+- Use a domain or public IP with Let's Encrypt for a trusted certificate.
 
 ### WebSocket connection fails
 
