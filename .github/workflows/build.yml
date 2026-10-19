@@ -150,10 +150,14 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/zviewer
+          # 正式版本号：仅 tag 推送（vX.Y.Z）产出 X.Y.Z 与 X.Y
+          # latest 只跟随正式版本 tag，避免被 main 分支的开发构建覆盖
+          # main 分支开发构建推到 edge，便于尝鲜但不动 latest
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push Docker image
         if: matrix.os == 'ubuntu-latest'
@@ -195,7 +199,7 @@ jobs:
             下载说明：
             - Windows: 下载 `zviewer-windows-x64.zip`，解压后运行 `start.bat`
             - Linux: 下载 `zviewer-linux-x64.tar.gz`，解压后运行 `./start.sh`
-            - Docker: `docker pull zerowyc0721/zviewer:latest`
+            - Docker: `docker pull zerowyc0721/zviewer:edge`（main 分支最新构建；正式版请用 `:latest` 或具体版本号）
 
             构建提交: ${{ github.sha }}
             构建时间: ${{ github.event.head_commit.timestamp }}

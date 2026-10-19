@@ -178,6 +178,7 @@ services:
 ```
 
 - 请将 `zviewer-data` 替换为实际数据目录
+- 镜像标签：`latest` 与 `X.Y` 只在发布正式版本（推送 `vX.Y.Z` tag）时更新，`X.Y.Z` 为固定版本；`edge` 跟随 main 分支最新构建，可能不稳定，仅供尝鲜
 - 镜像以 HTTP 模式启动，HTTPS 需自行配置：推荐 Cloudflare、ESA、EdgeOne 等边缘服务，或宝塔、1Panel 等面板自动签发并续期，再反代到 3333（不建议用命令行自助签发正式证书）
 - `/app/config` 含数据库（`dev.sqlite`）、证书（`ssl/`）、上传文件（`uploads/`）、推流切片（`media/`）
 - Docker 模式下仍可使用网页更新
