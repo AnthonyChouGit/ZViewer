@@ -167,3 +167,11 @@ Electron 壳的控制器已完整移植到 Go，作为体积更小的替代壳�
 调试开关：`ZVIEWER_SHELL_OPAQUE=1` 关闭 Mica 透明（无重定向位图的窗口无法用 GDI 截屏），`ZVIEWER_SHELL_AUTOSTART=1` 启动即拉起本地服务，`ZVIEWER_STATE_DIR` 指定独立配置目录。
 
 尚未完成：Electron 分发链（`scripts/package-release.py`）仍只产出 Electron 包；安装器条目、图标资源、代码签名与发布校验需要在切壳时一并调整。
+
+### 托盘实现的注意点
+
+`Shell_NotifyIcon` 的回调按**线程消息队列**投递，所以托盘窗口的 `CreateWindowEx` 与 `GetMessage` 循环必须在同一个被 `LockOSThread` 固定的线程里（`shell_tray.go` 的 `start`/`createWindow`/`messageLoop`）。如果分开写，窗口建在 A 线程、消息循环跑在 B 线程，图标能显示但左键点击永远不会触发——这正是初版「点了托盘没反应」的原因。
+
+另外两处 Win32 细节：
+- `DestroyWindow` 只能由创建窗口的线程调用，退出时用 `PostMessage(WM_CLOSE)` 让托盘线程自己收尾；函数导出名是 `DestroyWindow`，没有 `W` 后缀。
+- 唤醒主窗口时先走 Wails 的 `WindowShow`，再用原生 `ShowWindow` + 置顶翻转 + 前台线程挂靠兜底，否则后台进程调用 `SetForegroundWindow` 会被前台锁静默拒绝。

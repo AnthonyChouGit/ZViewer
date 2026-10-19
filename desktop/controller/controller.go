@@ -73,11 +73,11 @@ type Options struct {
 }
 
 type Controller struct {
-	root   string
-	dir    string
-	frpc   string
+	root    string
+	dir     string
+	frpc    string
 	hostExe string
-	helper string
+	helper  string
 
 	store *Store
 	certs *Certificates
@@ -98,22 +98,22 @@ type Controller struct {
 	voiceKey      string
 	voiceSecret   string
 
-	operation int32
-	livekitMu     sync.Mutex
-	livekitStop   bool
+	operation   int32
+	livekitMu   sync.Mutex
+	livekitStop bool
 
 	onUpdate func()
 }
 
 func New(opts Options) (*Controller, error) {
 	c := &Controller{
-		root:    opts.Root,
-		dir:     opts.StateDir,
-		frpc:    opts.Frpc,
-		hostExe: opts.HostExe,
-		helper:  opts.Helper,
-		onUpdate: opts.OnUpdate,
-		events:  []Event{},
+		root:         opts.Root,
+		dir:          opts.StateDir,
+		frpc:         opts.Frpc,
+		hostExe:      opts.HostExe,
+		helper:       opts.Helper,
+		onUpdate:     opts.OnUpdate,
+		events:       []Event{},
 		backendState: "stopped", voiceState: "stopped", frpState: "stopped",
 		frpRegistered: map[string]bool{},
 	}
@@ -138,10 +138,10 @@ func New(opts Options) (*Controller, error) {
 	return c, nil
 }
 
-func (c *Controller) Store() *Store { return c.store }
+func (c *Controller) Store() *Store               { return c.store }
 func (c *Controller) Certificates() *Certificates { return c.certs }
-func (c *Controller) Root() string { return c.root }
-func (c *Controller) Busy() bool { return atomic.LoadInt32(&c.operation) == 1 }
+func (c *Controller) Root() string                { return c.root }
+func (c *Controller) Busy() bool                  { return atomic.LoadInt32(&c.operation) == 1 }
 
 // Log 供宿主层记录捕获到的异常。
 func (c *Controller) Log(message, source, level string) { c.log(message, source, level) }
@@ -180,8 +180,8 @@ func (c *Controller) log(message, source, level string) {
 	}
 	now := time.Now()
 	event := Event{
-		Time: now.Format("15:04:05"),
-		At:   now.UTC().Format("2006-01-02T15:04:05.000Z"),
+		Time:   now.Format("15:04:05"),
+		At:     now.UTC().Format("2006-01-02T15:04:05.000Z"),
 		Source: source, Level: level, Message: text,
 	}
 	c.mu.Lock()
@@ -236,10 +236,10 @@ func (c *Controller) Snapshot() Snapshot {
 		WebURL: c.WebURL(), Backend: backend, Voice: voice, Frp: frp,
 		Cli: c.cli.Snapshot(),
 		Pid: backendPid, VoicePid: livekid, FrpPid: frpPid,
-		TokenSaved: c.store.HasToken(),
-		Certificate: CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
-		Events:      events,
-		Root:        c.root,
+		TokenSaved:    c.store.HasToken(),
+		Certificate:   CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
+		Events:        events,
+		Root:          c.root,
 		FrpcAvailable: fileExists(c.frpc),
 		Runtime: RuntimeFiles{
 			Backend: fileExists(filepath.Join(c.root, "zviewer-backend.exe")),
@@ -427,20 +427,20 @@ func (c *Controller) startLivekit(env []string) error {
 		nodeIP = envMap["LIVEKIT_NODE_IP"]
 	}
 	rtc := map[string]any{
-		"udp_port":                config.Port,
-		"tcp_port":                config.LivekitTcpPort,
+		"udp_port":                  config.Port,
+		"tcp_port":                  config.LivekitTcpPort,
 		"enable_loopback_candidate": true,
-		"use_external_ip":         nodeIP == "" && envMap["LIVEKIT_RTC_USE_EXTERNAL_IP"] == "true",
+		"use_external_ip":           nodeIP == "" && envMap["LIVEKIT_RTC_USE_EXTERNAL_IP"] == "true",
 	}
 	if config.BindHost == "127.0.0.1" && config.Frp.AdvertiseIP == "" {
 		rtc["ips"] = map[string]any{"includes": []string{"127.0.0.0/8", "::1/128"}}
 	}
 	livekitConfig := map[string]any{
-		"port":             config.LivekitPort,
-		"bind_addresses":   []string{config.BindHost},
-		"rtc":              rtc,
-		"keys":             map[string]string{c.voiceKey: c.voiceSecret},
-		"logging":          map[string]any{"level": "info"},
+		"port":           config.LivekitPort,
+		"bind_addresses": []string{config.BindHost},
+		"rtc":            rtc,
+		"keys":           map[string]string{c.voiceKey: c.voiceSecret},
+		"logging":        map[string]any{"level": "info"},
 	}
 	payload, err := json.Marshal(livekitConfig)
 	if err != nil {

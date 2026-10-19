@@ -16,13 +16,15 @@ import (
 )
 
 const (
-	wmApp           = 0x8000
-	wmTrayCallback  = wmApp + 1
-	wmRButtonUp     = 0x0205
-	wmLButtonUp     = 0x0202
-	wmNull          = 0x0000
-	imageIcon       = 1
-	notificationMsg = 0x00000001 // NIF_MESSAGE
+	wmApp            = 0x8000
+	wmTrayCallback   = wmApp + 1
+	wmRButtonUp      = 0x0205
+	wmLButtonUp      = 0x0202
+	wmClose          = 0x0010
+	wmDestroy        = 0x0002
+	wmNull           = 0x0000
+	imageIcon        = 1
+	notificationMsg  = 0x00000001 // NIF_MESSAGE
 	notificationIcon = 0x00000002
 	notificationTip  = 0x00000004
 	tpmReturnCmd     = 0x0100
@@ -40,24 +42,25 @@ const (
 )
 
 var (
-	shell32               = windows.NewLazySystemDLL("shell32.dll")
-	procShellNotifyIcon   = shell32.NewProc("Shell_NotifyIconW")
-	procRegisterClassEx   = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx    = user32.NewProc("CreateWindowExW")
-	procDefWindowProc     = user32.NewProc("DefWindowProcW")
-	procDestroyWindow     = user32.NewProc("DestroyWindowW")
-	procLoadImage         = user32.NewProc("LoadImageW")
-	procCreatePopupMenu   = user32.NewProc("CreatePopupMenu")
-	procAppendMenu        = user32.NewProc("AppendMenuW")
-	procTrackPopupMenu    = user32.NewProc("TrackPopupMenu")
-	procSetForeground     = user32.NewProc("SetForegroundWindow")
-	procPostMessage       = user32.NewProc("PostMessageW")
-	procGetCursorPos      = user32.NewProc("GetCursorPos")
-	procGetMessage        = user32.NewProc("GetMessageW")
-	procTranslateMessage  = user32.NewProc("TranslateMessage")
-	procDispatchMessage   = user32.NewProc("DispatchMessageW")
-	procGetModuleHandle   = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetModuleHandleW")
-	procUnregisterClass   = user32.NewProc("UnregisterClassW")
+	shell32              = windows.NewLazySystemDLL("shell32.dll")
+	procShellNotifyIcon  = shell32.NewProc("Shell_NotifyIconW")
+	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
+	procDefWindowProc    = user32.NewProc("DefWindowProcW")
+	procDestroyWindow    = user32.NewProc("DestroyWindow")
+	procLoadImage        = user32.NewProc("LoadImageW")
+	procCreatePopupMenu  = user32.NewProc("CreatePopupMenu")
+	procAppendMenu       = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu   = user32.NewProc("TrackPopupMenu")
+	procSetForeground    = user32.NewProc("SetForegroundWindow")
+	procPostMessage      = user32.NewProc("PostMessageW")
+	procGetCursorPos     = user32.NewProc("GetCursorPos")
+	procGetMessage       = user32.NewProc("GetMessageW")
+	procTranslateMessage = user32.NewProc("TranslateMessage")
+	procDispatchMessage  = user32.NewProc("DispatchMessageW")
+	procGetModuleHandle  = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetModuleHandleW")
+	procUnregisterClass  = user32.NewProc("UnregisterClassW")
+	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
 )
 
 type point struct {
@@ -81,13 +84,13 @@ type wndClassEx struct {
 }
 
 type windowMessage struct {
-	Hwnd     uintptr
-	Message  uint32
-	Wparam   uintptr
-	Lparam   uintptr
-	Time     uint32
-	Pt       point
-	Private  uint32
+	Hwnd    uintptr
+	Message uint32
+	Wparam  uintptr
+	Lparam  uintptr
+	Time    uint32
+	Pt      point
+	Private uint32
 }
 
 type notifyIconData struct {
@@ -144,6 +147,22 @@ func newTray(app *App) *trayIcon {
 }
 
 func (t *trayIcon) start() error {
+	// 窗口必须与消息循环在同一个线程：Windows 的消息投递按线程队列，
+	// 在别的线程里 GetMessage 永远收不到这个窗口的消息。
+	ready := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		if err := t.createWindow(); err != nil {
+			ready <- err
+			return
+		}
+		ready <- nil
+		t.messageLoop()
+	}()
+	return <-ready
+}
+
+func (t *trayIcon) createWindow() error {
 	instance, _, _ := procGetModuleHandle.Call(0)
 	if instance == 0 {
 		return errors.New("无法获取模块句柄")
@@ -171,7 +190,6 @@ func (t *trayIcon) start() error {
 	if err := t.notify(false, t.tooltip()); err != nil {
 		return err
 	}
-	go t.messageLoop()
 	return nil
 }
 
@@ -244,7 +262,8 @@ func (t *trayIcon) remove() {
 	data.Size = uint32(unsafe.Sizeof(data))
 	procShellNotifyIcon.Call(2, uintptr(unsafe.Pointer(&data))) // NIM_DELETE
 	if t.hwnd != 0 {
-		procDestroyWindow.Call(t.hwnd)
+		// DestroyWindow 只能由创建它的线程调用，这里交给托盘消息循环收尾。
+		procPostMessage.Call(t.hwnd, wmClose, 0, 0)
 	}
 }
 
@@ -263,6 +282,14 @@ func (t *trayIcon) messageLoop() {
 
 func trayWindowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 	tray := activeTray
+	switch message {
+	case wmClose:
+		procDestroyWindow.Call(hwnd)
+		return 0
+	case wmDestroy:
+		procPostQuitMessage.Call(0)
+		return 0
+	}
 	if message == wmTrayCallback && tray != nil {
 		switch uint32(lparam) & 0xFFFF {
 		case wmLButtonUp:

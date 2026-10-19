@@ -269,8 +269,8 @@ func (a *App) exportFile(kind string) (bool, error) {
 		return false, err
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "导出",
-		DefaultFilename: name,
+		Title:            "导出",
+		DefaultFilename:  name,
 		DefaultDirectory: downloadsDir(),
 	})
 	if err != nil || path == "" {
@@ -379,8 +379,7 @@ func (a *App) showWindow() {
 	}
 	runtime.WindowUnminimise(a.ctx)
 	runtime.WindowShow(a.ctx)
-	runtime.WindowSetAlwaysOnTop(a.ctx, true)
-	runtime.WindowSetAlwaysOnTop(a.ctx, false)
+	bringToFront(mainWindowHandle())
 }
 
 // navigate 让界面切换到指定页面（托盘菜单用）。
