@@ -136,21 +136,30 @@ class Controller extends EventEmitter {
       this.log(`LiveKit 进程已退出（${code ?? signal}）`, 'voice', this.voiceState === 'error' ? 'ERROR' : 'INFO');
     });
     const deadline = Date.now() + 20000;
+    let verification = '';
     while (Date.now() < deadline && this.livekit === child && child.exitCode === null && child.pid) {
       if (await livekitReady(c.livekitPort)) {
         if (process.platform === 'win32') {
-          const {stdout} = await run('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.windowsHelper,'-Action','inspect','-ProcessId',String(child.pid),'-Port',String(c.livekitPort),'-ExpectedPath',this.hostExe,'-UdpPort',String(c.port),'-MediaTcpPort',String(c.livekitTcpPort)], {windowsHide:true});
-          const inspected = JSON.parse(stdout);
-          if (!inspected.owner.some(pid => inspected.members.includes(pid))) throw new Error('LiveKit 信令端口不属于 GUI 启动的进程树');
-          if (!inspected.udpOwner.some(pid => inspected.members.includes(pid)) || !inspected.rtcOwner.some(pid => inspected.members.includes(pid))) throw new Error('LiveKit 语音 UDP / TCP 端口未由受管进程监听');
-          if (!inspected.udpAddresses.includes('127.0.0.1') && !inspected.udpAddresses.includes('0.0.0.0')) throw new Error('LiveKit 未监听 UDP 回环地址，本机访问与 FRP 转发不可用');
+          // WMI can lag behind process creation, so keep verifying until both the
+          // managed process tree and its sockets are visible instead of failing once.
+          try {
+            const {stdout} = await run('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',this.windowsHelper,'-Action','inspect','-ProcessId',String(child.pid),'-Port',String(c.livekitPort),'-ExpectedPath',this.hostExe,'-UdpPort',String(c.port),'-MediaTcpPort',String(c.livekitTcpPort)], {windowsHide:true});
+            const inspected = JSON.parse(stdout);
+            if (!inspected.owner.some(pid => inspected.members.includes(pid))) throw new Error('LiveKit 信令端口不属于 GUI 启动的进程树');
+            if (!inspected.udpOwner.some(pid => inspected.members.includes(pid)) || !inspected.rtcOwner.some(pid => inspected.members.includes(pid))) throw new Error('LiveKit 语音 UDP / TCP 端口未由受管进程监听');
+            if (!inspected.udpAddresses.includes('127.0.0.1') && !inspected.udpAddresses.includes('0.0.0.0')) throw new Error('LiveKit 未监听 UDP 回环地址，本机访问与 FRP 转发不可用');
+          } catch (error) {
+            verification = error.message;
+            await delay(400);
+            continue;
+          }
         }
         this.voiceState = 'running';
         this.log(`LiveKit 已就绪：信令 TCP ${c.livekitPort}，媒体 UDP ${c.port}，RTC TCP ${c.livekitTcpPort}`, 'voice'); return;
       }
       await delay(250);
     }
-    throw new Error('LiveKit 未通过就绪检查，请检查端口或查看运行日志');
+    throw new Error(`LiveKit 未通过就绪检查${verification ? `（${verification}）` : ''}，请检查端口或查看运行日志`);
   }
   async stopLivekit() {
     if (this.livekitStopPromise) return this.livekitStopPromise;
@@ -189,13 +198,22 @@ class Controller extends EventEmitter {
       if (!intentional) this.cli.stop().catch(error => this.log(error.message, 'cli', 'ERROR'));
     });
     const deadline = Date.now() + 45000;
+    let verification = '';
     while (Date.now() < deadline && child.exitCode === null && this.backend === child && child.pid) {
       const ca = c.https ? fs.readFileSync(this.certificates.paths().ca) : undefined;
       if (await probe(c.port, c.https, ca)) {
         if (process.platform === 'win32') {
-          const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', this.windowsHelper, '-Action', 'inspect', '-ProcessId', String(child.pid), '-Port', String(c.port), '-ExpectedPath', this.hostExe], { windowsHide: true });
-          const inspected = JSON.parse(stdout);
-          if (!inspected.owner.some(pid => inspected.members.includes(pid))) throw new Error('监听端口不属于 GUI 启动的进程树');
+          // The backend can answer /health before WMI lists it under the host process,
+          // so retry the ownership check inside the readiness window.
+          try {
+            const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', this.windowsHelper, '-Action', 'inspect', '-ProcessId', String(child.pid), '-Port', String(c.port), '-ExpectedPath', this.hostExe], { windowsHide: true });
+            const inspected = JSON.parse(stdout);
+            if (!inspected.owner.some(pid => inspected.members.includes(pid))) throw new Error('监听端口不属于 GUI 启动的进程树');
+          } catch (error) {
+            verification = error.message;
+            await delay(300);
+            continue;
+          }
         }
         this.backendState = 'running'; this.log(`服务已就绪：${c.https ? 'https' : 'http'}://localhost:${c.port}，PID ${child.pid}`, 'backend');
         if (c.cli.autoStart) {
@@ -207,7 +225,7 @@ class Controller extends EventEmitter {
       await delay(350);
     }
     if (this.backend === child) await this.stopBackend();
-    this.backendState = 'error'; throw new Error('后端未在 45 秒内通过健康检查，请查看运行日志');
+    this.backendState = 'error'; throw new Error(`后端未在 45 秒内通过健康检查${verification ? `（${verification}）` : ''}，请查看运行日志`);
   }
   async kill(child, exe) {
     if (!child || child.exitCode !== null || child.killed || !child.pid) return;

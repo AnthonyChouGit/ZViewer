@@ -1,12 +1,13 @@
 """Archive the clean portable output and verify every ZIP entry before delivery."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import zipfile
 
 desktop = Path(__file__).resolve().parents[1]
 version = json.loads((desktop / 'package.json').read_text(encoding='utf-8'))['version']
-release = desktop / 'release'
+release = Path(os.environ['ZVIEWER_OUT_DIR']).resolve() if os.environ.get('ZVIEWER_OUT_DIR') else desktop / 'release'
 portable = release / f'ZViewer-Windows-GUI-v{version}-x64'
 archive = release / f'ZViewer-Windows-GUI-v{version}-x64.zip'
 if archive.exists():
