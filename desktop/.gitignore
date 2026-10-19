@@ -8,3 +8,4 @@ exports/
 assets/ZViewer.ProcessHost.exe
 *.log
 __pycache__/
+.spike/
