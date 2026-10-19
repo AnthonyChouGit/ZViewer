@@ -123,6 +123,7 @@ const manifest = {
   selfExtracting: false,
   singleInstance: true,
   signed: false,
+  iconEmbedded: true,
   frp: '0.71.1',
   cli: hasCli ? JSON.parse(readFileSync(join(cliDir, 'provenance.json'), 'utf8')) : null,
   fileCount: walk(distribution).length,

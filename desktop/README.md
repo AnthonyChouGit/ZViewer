@@ -71,7 +71,7 @@ ZViewer-Windows-v0.4.1-x64/
 
 输出已存在时拒绝覆盖，避免破坏已有产物。构建只复制指定程序、网页、许可证和来源记录，不复制真实 `.env`、数据库、证书或登录配置。在分发包里直接运行过之后再打包，`package-release.py` 会因为出现 `runtime/.env` 或 `runtime/config` 而拒绝——这是有意设计，清理运行数据或重新 `shell:dist` 即可。
 
-运行包位置按 `--runtime-root=` / `ZVIEWER_RUNTIME_ROOT` / 可执行文件周边（`runtime/`、`dist/win`、上溯三层）顺序探测；配置目录按 `--state-dir` / `ZVIEWER_STATE_DIR` / `%APPDATA%\ZViewerDesktop` 探测。更新头像 ICO 可用 Python 与 Pillow 执行 `desktop/scripts/make-icon.py`。
+运行包位置按 `--runtime-root=` / `ZVIEWER_RUNTIME_ROOT` / 可执行文件周边（`runtime/`、`dist/win`、上溯三层）顺序探测；配置目录按 `--state-dir` / `ZVIEWER_STATE_DIR` / `%APPDATA%\ZViewerDesktop` 探测。更新头像 ICO 可用 Python 与 Pillow 执行 `desktop/scripts/make-icon.py`；ICO 变了以后 `build-shell.mjs` 会按 mtime 用 `rsrc` 重新生成 `rsrc_windows_amd64.syso`（需 `go install github.com/akavel/rsrc@latest`），否则 EXE 沿用旧图标。
 
 调试开关：`ZVIEWER_SHELL_OPAQUE=1` 关闭 Mica 透明（无重定向位图的窗口无法用 GDI 截屏），`ZVIEWER_SHELL_AUTOSTART=1` 启动即拉起本地服务，`ZVIEWER_STATE_DIR` 指定独立配置目录。构建时加 `--console` 可保留控制台窗口以便观察 panic（默认 `-H windowsgui`）。
 
@@ -131,7 +131,7 @@ CA、私钥与服务器证书保存在当前用户配置目录的 `tls`，目录
 
 首次启动新运行包时生成独立随机 JWT 密钥，分发版后端数据留在 `runtime/config`，环境配置位于 `runtime/.env`。更换版本前保留这些文件和用户配置目录。分发包不包含真实 `.env`、数据库、日志、私钥或信任状态。
 
-壳、进程监管组件和 CLI 由源码构建；已有后端、LiveKit 和网页复用指定运行包。若网页包含 Windows CLI 下载文件，打包时同步替换为本次构建的同一 CLI，不修改原运行包。当前未配置代码签名，EXE 也没有嵌入图标资源。`BUILD-MANIFEST.json` 记录版本和主要文件 SHA-256。
+壳、进程监管组件和 CLI 由源码构建；已有后端、LiveKit 和网页复用指定运行包。若网页包含 Windows CLI 下载文件，打包时同步替换为本次构建的同一 CLI，不修改原运行包。当前未配置代码签名；EXE 的图标由 `rsrc_windows_amd64.syso` 注入（`assets/app.ico` 的产物，链接时自动合并），更换图标后重新生成该文件即可。`BUILD-MANIFEST.json` 记录版本和主要文件 SHA-256。
 
 ## 托盘实现的注意点
 

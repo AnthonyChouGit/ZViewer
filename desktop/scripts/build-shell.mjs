@@ -8,7 +8,7 @@
 //   node scripts/build-shell.mjs --rebuild-host 强制重新编译 ProcessHost.exe
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, basename, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -18,6 +18,9 @@ const outDir = process.env.ZVIEWER_OUT_DIR || join(root, 'build', 'bin');
 const out = join(outDir, 'ZViewerShell.exe');
 const hostSource = join(root, 'native', 'ProcessHost.cs');
 const hostExe = join(root, 'assets', 'ZViewer.ProcessHost.exe');
+const iconSource = join(root, 'assets', 'app.ico');
+// Go 链接器会自动合并主包目录下的 *.syso，EXE 的图标与版本资源都来自它。
+const iconResource = join(root, 'rsrc_windows_amd64.syso');
 
 function hostUpToDate() {
   if (!existsSync(hostExe)) return false;
@@ -48,6 +51,49 @@ function buildHost() {
 }
 
 buildHost();
+
+// 图标资源：目标是仓库内固化的 .syso，正常情况直接命中；换图标后靠 mtime 触发重建。
+// rsrc 只是生成期工具，不属于运行时依赖，找得到就用，找不到就明确报错而不是静默出个无图标 EXE。
+function findRsrc() {
+  if (process.env.RSRC && existsSync(process.env.RSRC)) return process.env.RSRC;
+  try {
+    const gopath = execFileSync('go', ['env', 'GOPATH'], { encoding: 'utf8' }).trim();
+    for (const base of gopath.split(delimiter)) {
+      for (const name of ['rsrc.exe', 'rsrc']) {
+        const candidate = join(base, 'bin', name);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+  } catch {
+    // go 不在 PATH 时留给后面的 go build 报错
+  }
+  try {
+    execFileSync('rsrc', ['-h'], { stdio: 'ignore' });
+    return 'rsrc';
+  } catch {
+    return null;
+  }
+}
+
+function ensureIconResource() {
+  if (!existsSync(iconSource)) throw new Error(`图标源缺失：${iconSource}`);
+  if (existsSync(iconResource) && statSync(iconResource).mtimeMs >= statSync(iconSource).mtimeMs) {
+    console.log(`图标资源: ${basename(iconResource)} 已是最新`);
+    return;
+  }
+  const rsrc = findRsrc();
+  if (!rsrc) {
+    throw new Error(
+      `${basename(iconResource)} 缺失或过期，且找不到 rsrc 工具，EXE 会没有图标。\n` +
+      '  安装：go install github.com/akavel/rsrc@latest\n' +
+      `  生成：rsrc -ico ${iconSource} -o ${iconResource} -arch amd64`
+    );
+  }
+  execFileSync(rsrc, ['-ico', iconSource, '-o', iconResource, '-arch', 'amd64'], { cwd: root, stdio: 'inherit' });
+  console.log('图标资源: 已重新生成');
+}
+
+ensureIconResource();
 
 mkdirSync(outDir, { recursive: true });
 const linker = [`-X main.appVersion=${pkg.version}`];
