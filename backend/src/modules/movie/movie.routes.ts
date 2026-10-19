@@ -114,7 +114,7 @@ export function createMovieRouter(io: SocketIOServer): Router {
           }
         }
 
-        // 内网地址强制使用服务器中转（浏览器尤其公网访问者无法直连内网服务器）。
+        // 内网地址强制使用服务器转发（浏览器尤其公网访问者无法直连内网服务器）。
         // 覆盖全部挂载型源：emby/jellyfin 的直链 URL 同样指向挂载的 NAS 服务器，
         // 与 openlist/webdav 的 raw_url 内网语义一致。
         if (
@@ -213,7 +213,7 @@ export function createMovieRouter(io: SocketIOServer): Router {
 
         const data = req.body as Partial<MovieDto>;
 
-        // 内网地址强制使用服务器中转：检查更新后的 serverUrl / 直链 URL
+        // 内网地址强制使用服务器转发：检查更新后的 serverUrl / 直链 URL
         //（若均未传则查询现有影片的 serverUrl / url）
         if (data.directLink === true) {
           const MOUNT_SOURCES = ['openlist', 'webdav', 'emby', 'jellyfin'];
