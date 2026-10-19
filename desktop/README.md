@@ -145,3 +145,25 @@ GUI、进程监管组件、目录启动器和 CLI 由源码构建；已有后端
 ## 上游贡献
 
 贡献内容应仅包含源码、应用图标、构建脚本、源码测试用例和文档。排除本机配置、登录资料、数据库、证书私钥、运行时与下载缓存、测试输出和分发二进制。
+
+## 原生壳（Wails / Go）迁移进度
+
+Electron 壳的控制器已完整移植到 Go，作为体积更小的替代壳运行：`desktop/` 下的 `go.mod` + `shell_*.go` 是入口，`desktop/controller/` 是控制层。两个壳共用同一份 `ui/`，界面不需要分叉。
+
+| 模块 | 状态 |
+| --- | --- |
+| 配置校验与 `settings.json`（含 schema 1→2 迁移） | 已移植，错误文案逐条对齐 |
+| FRP Token DPAPI 加密（可直接解开 Electron 旧密文） | 已移植 |
+| 后端 / LiveKit 启动、端口预检、45s 健康检查与进程树归属校验 | 已移植 |
+| 停止、重启、退出时回收受管进程（Job Object） | 已移植 |
+| 本地 CA 与服务端证书签发、`certutil` 信任开关 | 已移植（标准库 x509，不再依赖 `@peculiar/x509`） |
+| 高画质代理 CLI 托管与设置页地址 | 已移植 |
+| FRP 配置生成、版本校验、代理注册判定 | 已移植 |
+| 系统托盘（菜单、提示、关闭到托盘） | 已移植（Shell_NotifyIcon 直连，无第三方依赖） |
+| 单实例、开机启动、导出、外部浏览器打开 | 已移植 |
+
+构建：`npm run shell:build`，产物 `desktop/build/bin/ZViewerShell.exe`（约 18 MB，Electron 版约 200 MB）。运行包位置按 `--runtime-root=` / `ZVIEWER_RUNTIME_ROOT` / 可执行文件周边顺序探测。
+
+调试开关：`ZVIEWER_SHELL_OPAQUE=1` 关闭 Mica 透明（无重定向位图的窗口无法用 GDI 截屏），`ZVIEWER_SHELL_AUTOSTART=1` 启动即拉起本地服务，`ZVIEWER_STATE_DIR` 指定独立配置目录。
+
+尚未完成：Electron 分发链（`scripts/package-release.py`）仍只产出 Electron 包；安装器条目、图标资源、代码签名与发布校验需要在切壳时一并调整。

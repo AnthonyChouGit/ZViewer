@@ -1,0 +1,1091 @@
+package controller
+
+// 控制台核心：desktop/lib/controller.cjs 的 Go 移植。
+// 保留原有状态机、错误文案与就绪判定顺序，前端 UI 无需改动即可对接。
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+const FrpVersion = "0.71.1"
+
+type Event struct {
+	Time    string `json:"time"`
+	At      string `json:"at"`
+	Source  string `json:"source"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+}
+
+type CertificateView struct {
+	CertInfo
+	Trusted bool `json:"trusted"`
+}
+
+type RuntimeFiles struct {
+	Backend bool `json:"backend"`
+	Cert    bool `json:"cert"`
+	Livekit bool `json:"livekit"`
+	Web     bool `json:"web"`
+}
+
+type Snapshot struct {
+	Config        Config          `json:"config"`
+	Active        *Config         `json:"active"`
+	WebURL        string          `json:"webUrl"`
+	Backend       string          `json:"backend"`
+	Voice         string          `json:"voice"`
+	Frp           string          `json:"frp"`
+	Cli           CliSnapshot     `json:"cli"`
+	Pid           *int            `json:"pid"`
+	VoicePid      *int            `json:"voicePid"`
+	FrpPid        *int            `json:"frpPid"`
+	TokenSaved    bool            `json:"tokenSaved"`
+	Certificate   CertificateView `json:"certificate"`
+	Events        []Event         `json:"events"`
+	Root          string          `json:"root"`
+	FrpcAvailable bool            `json:"frpcAvailable"`
+	Runtime       RuntimeFiles    `json:"runtime"`
+}
+
+type Options struct {
+	Root          string
+	StateDir      string
+	Frpc          string
+	CliExecutable string
+	HostExe       string
+	Helper        string
+	Cipher        Cipher
+	OnUpdate      func()
+}
+
+type Controller struct {
+	root   string
+	dir    string
+	frpc   string
+	hostExe string
+	helper string
+
+	store *Store
+	certs *Certificates
+	cli   *CliProxy
+
+	mu            sync.RWMutex
+	events        []Event
+	redactions    []string
+	backend       *Proc
+	frp           *Proc
+	livekit       *Proc
+	backendState  string
+	voiceState    string
+	frpState      string
+	active        *Config
+	trusted       bool
+	frpRegistered map[string]bool
+	voiceKey      string
+	voiceSecret   string
+
+	operation int32
+	livekitMu     sync.Mutex
+	livekitStop   bool
+
+	onUpdate func()
+}
+
+func New(opts Options) (*Controller, error) {
+	c := &Controller{
+		root:    opts.Root,
+		dir:     opts.StateDir,
+		frpc:    opts.Frpc,
+		hostExe: opts.HostExe,
+		helper:  opts.Helper,
+		onUpdate: opts.OnUpdate,
+		events:  []Event{},
+		backendState: "stopped", voiceState: "stopped", frpState: "stopped",
+		frpRegistered: map[string]bool{},
+	}
+	cipher := opts.Cipher
+	if cipher == nil {
+		cipher = Dpapi{}
+	}
+	store, err := NewStore(c.dir, c.root, cipher)
+	if err != nil {
+		return nil, err
+	}
+	c.store = store
+	key := make([]byte, 12)
+	secret := make([]byte, 48)
+	_, _ = rand.Read(key)
+	_, _ = rand.Read(secret)
+	c.voiceKey = hex.EncodeToString(key)
+	c.voiceSecret = hex.EncodeToString(secret)
+	c.certs = NewCertificates(c.dir, c.log)
+	c.cli = NewCliProxy(c.root, opts.CliExecutable, c.hostExe, c.kill, c.verifyCli, c.log, c.emit)
+	c.log("桌面控制台已就绪；配置将在下次启动自动读取", "console", "INFO")
+	return c, nil
+}
+
+func (c *Controller) Store() *Store { return c.store }
+func (c *Controller) Certificates() *Certificates { return c.certs }
+func (c *Controller) Root() string { return c.root }
+func (c *Controller) Busy() bool { return atomic.LoadInt32(&c.operation) == 1 }
+
+// Log 供宿主层记录捕获到的异常。
+func (c *Controller) Log(message, source, level string) { c.log(message, source, level) }
+
+func (c *Controller) emit() {
+	if c.onUpdate != nil {
+		c.onUpdate()
+	}
+}
+
+var ansiPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
+var secretPattern = regexp.MustCompile(`(?i)((?:token|secret|password|密码|authorization|cookie|SESSDATA|bili_jct)\s*[:=：]\s*)([^\r\n]+)`)
+
+func (c *Controller) sanitize(text string) string {
+	message := ansiPattern.ReplaceAllString(text, "")
+	c.mu.RLock()
+	redactions := append([]string(nil), c.redactions...)
+	c.mu.RUnlock()
+	for _, secret := range redactions {
+		if len([]rune(secret)) >= 4 {
+			message = strings.ReplaceAll(message, secret, "[已隐藏]")
+		}
+	}
+	message = secretPattern.ReplaceAllString(message, "$1[已隐藏]")
+	runes := []rune(message)
+	if len(runes) > 4000 {
+		message = string(runes[:4000])
+	}
+	return message
+}
+
+func (c *Controller) log(message, source, level string) {
+	text := c.sanitize(message)
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	now := time.Now()
+	event := Event{
+		Time: now.Format("15:04:05"),
+		At:   now.UTC().Format("2006-01-02T15:04:05.000Z"),
+		Source: source, Level: level, Message: text,
+	}
+	c.mu.Lock()
+	c.events = append([]Event{event}, c.events...)
+	if len(c.events) > 500 {
+		c.events = c.events[:500]
+	}
+	c.mu.Unlock()
+	c.appendLogFile(event)
+	c.emit()
+}
+
+func (c *Controller) appendLogFile(event Event) {
+	logFile := filepath.Join(c.dir, "logs", "desktop.log")
+	if err := os.MkdirAll(filepath.Dir(logFile), 0o700); err != nil {
+		return
+	}
+	if info, err := os.Stat(logFile); err == nil && info.Size() > 2*1024*1024 {
+		_ = os.Rename(logFile, logFile+".previous")
+	}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = file.Write(append(raw, '\n'))
+}
+
+func (c *Controller) Snapshot() Snapshot {
+	c.mu.RLock()
+	events := make([]Event, len(c.events))
+	copy(events, c.events)
+	backend, voice, frp := c.backendState, c.voiceState, c.frpState
+	var active *Config
+	if c.active != nil {
+		clone := c.active.Clone()
+		active = &clone
+	}
+	trusted := c.trusted
+	livekid := processPid(c.livekit)
+	backendPid := processPid(c.backend)
+	frpPid := processPid(c.frp)
+	c.mu.RUnlock()
+
+	config := c.store.Value
+	out := Snapshot{
+		Config: config, Active: active,
+		WebURL: c.WebURL(), Backend: backend, Voice: voice, Frp: frp,
+		Cli: c.cli.Snapshot(),
+		Pid: backendPid, VoicePid: livekid, FrpPid: frpPid,
+		TokenSaved: c.store.HasToken(),
+		Certificate: CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
+		Events:      events,
+		Root:        c.root,
+		FrpcAvailable: fileExists(c.frpc),
+		Runtime: RuntimeFiles{
+			Backend: fileExists(filepath.Join(c.root, "zviewer-backend.exe")),
+			Cert:    true,
+			Livekit: fileExists(filepath.Join(c.root, "livekit-server.exe")),
+			Web:     fileExists(filepath.Join(c.root, "frontend", "dist", "index.html")),
+		},
+	}
+	return out
+}
+
+func processPid(proc *Proc) *int {
+	if proc == nil || proc.Exited() {
+		return nil
+	}
+	pid := proc.Pid()
+	return &pid
+}
+
+func (c *Controller) WebURL() string {
+	c.mu.RLock()
+	active := c.active
+	c.mu.RUnlock()
+	config := c.store.Value
+	if active != nil {
+		config = *active
+	}
+	scheme := "http"
+	if config.Https {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://localhost:%d/", scheme, config.Port)
+}
+
+func (c *Controller) ManagementURL() string { return c.WebURL() + "admin" }
+
+func (c *Controller) SetTrusted(value bool) {
+	c.mu.Lock()
+	c.trusted = value
+	c.mu.Unlock()
+}
+
+func (c *Controller) Trusted() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.trusted
+}
+
+// Save 保存前端提交的配置补丁。
+func (c *Controller) Save(patch map[string]any, token *string) (Config, error) {
+	config, err := c.store.Save(patch, token)
+	if err != nil {
+		return config, err
+	}
+	c.log("用户配置已保存，服务参数在下次启动或重启后生效", "console", "INFO")
+	return config, nil
+}
+
+func (c *Controller) exclusive(task func() (any, error)) (any, error) {
+	if !atomic.CompareAndSwapInt32(&c.operation, 0, 1) {
+		return nil, errors.New("正在执行另一项服务操作，请稍后")
+	}
+	defer func() {
+		atomic.StoreInt32(&c.operation, 0)
+		c.emit()
+	}()
+	result, err := task()
+	if err != nil {
+		c.mu.RLock()
+		starting := c.backendState == "starting"
+		c.mu.RUnlock()
+		if starting {
+			if cleanup := c.stopBackend(); cleanup != nil {
+				c.log(cleanup.Error(), "backend", "ERROR")
+			}
+			c.setBackendState("error")
+		}
+		return nil, err
+	}
+	return result, nil
+}
+
+func (c *Controller) setBackendState(state string) {
+	c.mu.Lock()
+	c.backendState = state
+	c.mu.Unlock()
+}
+
+func (c *Controller) setVoiceState(state string) {
+	c.mu.Lock()
+	c.voiceState = state
+	c.mu.Unlock()
+}
+
+func (c *Controller) setFrpState(state string) {
+	c.mu.Lock()
+	c.frpState = state
+	c.mu.Unlock()
+}
+
+func (c *Controller) environment() ([]string, error) {
+	values := EnvValues(c.root)
+	envFile := filepath.Join(c.root, ".env")
+	if !fileExists(envFile) {
+		jwt1 := make([]byte, 48)
+		jwt2 := make([]byte, 48)
+		_, _ = rand.Read(jwt1)
+		_, _ = rand.Read(jwt2)
+		content := fmt.Sprintf("# Generated locally by ZViewer Desktop\nPORT=3333\nHOST=127.0.0.1\nNODE_ENV=production\nJWT_ACCESS_SECRET=%s\nJWT_REFRESH_SECRET=%s\n",
+			hex.EncodeToString(jwt1), hex.EncodeToString(jwt2))
+		if err := Atomic(envFile, content); err != nil {
+			return nil, err
+		}
+		values = EnvValues(c.root)
+	}
+	config := c.store.Value
+	paths := c.certs.Paths()
+
+	redactions := []string{c.voiceKey, c.voiceSecret}
+	for key, value := range values {
+		if regexp.MustCompile(`SECRET|TOKEN|PASSWORD|API_KEY`).MatchString(key) && value != "" {
+			redactions = append(redactions, value)
+		}
+	}
+	c.mu.Lock()
+	c.redactions = redactions
+	c.mu.Unlock()
+
+	env := map[string]string{}
+	for _, entry := range os.Environ() {
+		if index := strings.Index(entry, "="); index > 0 {
+			env[entry[:index]] = entry[index+1:]
+		}
+	}
+	for key, value := range values {
+		env[key] = value
+	}
+	env["NODE_ENV"] = "production"
+	env["PORT"] = strconv.Itoa(config.Port)
+	env["HOST"] = config.BindHost
+	env["HTTPS"] = strconv.FormatBool(config.Https)
+	env["RTMP_PORT"] = strconv.Itoa(config.RtmpPort)
+	env["HTTP_FLV_PORT"] = strconv.Itoa(config.FlvPort)
+	env["LIVEKIT_EXTERNAL"] = "1"
+	env["LIVEKIT_API_HOST"] = fmt.Sprintf("http://127.0.0.1:%d", config.LivekitPort)
+	env["LIVEKIT_API_KEY"] = c.voiceKey
+	env["LIVEKIT_API_SECRET"] = c.voiceSecret
+	env["LIVEKIT_URL"] = ""
+	if config.Https {
+		env["SSL_CERT_PATH"] = paths.Cert
+		env["SSL_KEY_PATH"] = paths.Key
+	}
+	if config.BindHost == "127.0.0.1" && values["LIVEKIT_BIND"] == "" {
+		env["LIVEKIT_BIND"] = "127.0.0.1"
+		if _, exists := env["LIVEKIT_NODE_IP"]; !exists || values["LIVEKIT_NODE_IP"] == "" {
+			env["LIVEKIT_NODE_IP"] = "127.0.0.1"
+		}
+		env["LIVEKIT_RTC_USE_EXTERNAL_IP"] = "false"
+	}
+	if config.Frp.AdvertiseIP != "" {
+		env["LIVEKIT_NODE_IP"] = config.Frp.AdvertiseIP
+		env["LIVEKIT_RTC_USE_EXTERNAL_IP"] = "false"
+	}
+	out := make([]string, 0, len(env))
+	for key, value := range env {
+		out = append(out, key+"="+value)
+	}
+	return out, nil
+}
+
+func (c *Controller) startLivekit(env []string) error {
+	config := c.store.Value
+	exe := filepath.Join(c.root, "livekit-server.exe")
+	if !fileExists(exe) {
+		return errors.New("缺少 livekit-server.exe")
+	}
+	envMap := map[string]string{}
+	for _, entry := range env {
+		if index := strings.Index(entry, "="); index > 0 {
+			envMap[entry[:index]] = entry[index+1:]
+		}
+	}
+	nodeIP := config.Frp.AdvertiseIP
+	if nodeIP == "" {
+		nodeIP = envMap["LIVEKIT_NODE_IP"]
+	}
+	rtc := map[string]any{
+		"udp_port":                config.Port,
+		"tcp_port":                config.LivekitTcpPort,
+		"enable_loopback_candidate": true,
+		"use_external_ip":         nodeIP == "" && envMap["LIVEKIT_RTC_USE_EXTERNAL_IP"] == "true",
+	}
+	if config.BindHost == "127.0.0.1" && config.Frp.AdvertiseIP == "" {
+		rtc["ips"] = map[string]any{"includes": []string{"127.0.0.0/8", "::1/128"}}
+	}
+	livekitConfig := map[string]any{
+		"port":             config.LivekitPort,
+		"bind_addresses":   []string{config.BindHost},
+		"rtc":              rtc,
+		"keys":             map[string]string{c.voiceKey: c.voiceSecret},
+		"logging":          map[string]any{"level": "info"},
+	}
+	payload, err := json.Marshal(livekitConfig)
+	if err != nil {
+		return err
+	}
+	childEnv := append([]string(nil), env...)
+	childEnv = append(childEnv, "LIVEKIT_CONFIG="+string(payload), "NODE_IP="+nodeIP)
+	proc, err := startProcess(c.hostExe, exe, nil, childEnv, c.root, func(line string) {
+		c.log(line, "voice", classifyLevel(line))
+	})
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.livekit = proc
+	c.livekitStop = false
+	c.mu.Unlock()
+	go func() {
+		code := proc.Wait()
+		c.mu.Lock()
+		if c.livekit != proc {
+			c.mu.Unlock()
+			return
+		}
+		intentional := c.livekitStop
+		c.livekit = nil
+		failed := !intentional
+		if failed {
+			c.voiceState = "error"
+		} else {
+			c.voiceState = "stopped"
+		}
+		c.mu.Unlock()
+		level := "INFO"
+		if failed {
+			level = "ERROR"
+		}
+		c.log(fmt.Sprintf("LiveKit 进程已退出（%d）", code), "voice", level)
+	}()
+
+	deadline := time.Now().Add(20 * time.Second)
+	verification := ""
+	for time.Now().Before(deadline) {
+		c.mu.RLock()
+		current := c.livekit
+		c.mu.RUnlock()
+		if current != proc || proc.Exited() {
+			break
+		}
+		if livekitReady(config.LivekitPort) {
+			if isWindows() {
+				// WMI 索引有延迟：进程树与套接字都要可见，失败就重试到截止时间。
+				inspected, err := c.inspect(proc.Pid(), config.LivekitPort, c.hostExe, config.Port, config.LivekitTcpPort)
+				if err == nil {
+					switch {
+					case !inspected.owns(inspected.Owner):
+						err = errors.New("LiveKit 信令端口不属于 GUI 启动的进程树")
+					case !inspected.owns(inspected.UDPOwner) || !inspected.owns(inspected.RTCOwner):
+						err = errors.New("LiveKit 语音 UDP / TCP 端口未由受管进程监听")
+					case !containsString(inspected.UDPAddresses, "127.0.0.1") && !containsString(inspected.UDPAddresses, "0.0.0.0"):
+						err = errors.New("LiveKit 未监听 UDP 回环地址，本机访问与 FRP 转发不可用")
+					}
+				}
+				if err != nil {
+					verification = err.Error()
+					time.Sleep(400 * time.Millisecond)
+					continue
+				}
+			}
+			c.setVoiceState("running")
+			c.log(fmt.Sprintf("LiveKit 已就绪：信令 TCP %d，媒体 UDP %d，RTC TCP %d",
+				config.LivekitPort, config.Port, config.LivekitTcpPort), "voice", "INFO")
+			return nil
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if verification != "" {
+		return fmt.Errorf("LiveKit 未通过就绪检查（%s），请检查端口或查看运行日志", verification)
+	}
+	return errors.New("LiveKit 未通过就绪检查，请检查端口或查看运行日志")
+}
+
+func containsString(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Controller) stopLivekit() error {
+	c.livekitMu.Lock()
+	defer c.livekitMu.Unlock()
+	c.mu.Lock()
+	proc := c.livekit
+	if proc == nil {
+		c.voiceState = "stopped"
+		c.mu.Unlock()
+		return nil
+	}
+	c.voiceState = "stopping"
+	c.livekitStop = true
+	c.mu.Unlock()
+	target := c.hostExe
+	if !isWindows() {
+		target = filepath.Join(c.root, "livekit-server.exe")
+	}
+	err := c.kill(proc, target)
+	c.setVoiceState("stopped")
+	return err
+}
+
+func (c *Controller) startBackend() (any, error) {
+	c.mu.RLock()
+	running := c.backend != nil
+	hasLivekit := c.livekit != nil
+	c.mu.RUnlock()
+	if running {
+		return c.Snapshot(), nil
+	}
+	if hasLivekit {
+		if err := c.stopLivekit(); err != nil {
+			return nil, err
+		}
+	}
+	config := c.store.Value
+	exe := filepath.Join(c.root, "zviewer-backend.exe")
+	if !fileExists(exe) || !fileExists(filepath.Join(c.root, "frontend", "dist", "index.html")) {
+		return nil, errors.New("缺少后端或网页运行文件")
+	}
+	for _, port := range []int{config.Port, config.RtmpPort, config.FlvPort, config.LivekitPort, config.LivekitTcpPort} {
+		if err := portAvailable(port, config.BindHost); err != nil {
+			return nil, err
+		}
+	}
+	if err := udpAvailable(config.Port, config.BindHost); err != nil {
+		return nil, err
+	}
+	if config.Https {
+		if _, err := c.certs.Ensure(config.Domain, config.LanIP); err != nil {
+			return nil, err
+		}
+	}
+	c.setBackendState("starting")
+	c.setVoiceState("starting")
+	c.emit()
+	if isWindows() && !fileExists(c.hostExe) {
+		return nil, errors.New("缺少进程监管组件 ZViewer.ProcessHost.exe")
+	}
+	env, err := c.environment()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.startLivekit(env); err != nil {
+		return nil, err
+	}
+	proc, err := startProcess(c.hostExe, exe, nil, env, c.root, func(line string) {
+		c.log(line, "backend", classifyLevel(line))
+	})
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.backend = proc
+	active := config.Clone()
+	c.active = &active
+	c.mu.Unlock()
+
+	go func() {
+		code := proc.Wait()
+		c.mu.Lock()
+		if c.backend != proc {
+			c.mu.Unlock()
+			return
+		}
+		intentional := c.backendState == "stopping"
+		c.backend = nil
+		c.active = nil
+		if intentional {
+			c.backendState = "stopped"
+		} else {
+			c.backendState = "error"
+		}
+		c.mu.Unlock()
+		level := "INFO"
+		if !intentional {
+			level = "ERROR"
+		}
+		c.log(fmt.Sprintf("后端进程已退出（%d）", code), "backend", level)
+		c.stopFrpSafely()
+		if !intentional {
+			c.mu.RLock()
+			livekitRunning := c.livekit != nil
+			c.mu.RUnlock()
+			if livekitRunning {
+				if err := c.stopLivekit(); err != nil {
+					c.log(err.Error(), "voice", "ERROR")
+				}
+			}
+			if _, err := c.cli.Stop(); err != nil {
+				c.log(err.Error(), "cli", "ERROR")
+			}
+		}
+		c.emit()
+	}()
+
+	deadline := time.Now().Add(45 * time.Second)
+	verification := ""
+	for time.Now().Before(deadline) {
+		c.mu.RLock()
+		current := c.backend
+		c.mu.RUnlock()
+		if current != proc || proc.Exited() {
+			break
+		}
+		probeCA := ""
+		if config.Https {
+			probeCA = c.certs.Paths().CA
+		}
+		if probeBackend(config.Port, config.Https, probeCA) {
+			if isWindows() {
+				// 后端可能先回 /health 再由 WMI 补上进程树，归属校验在窗口内重试。
+				inspected, err := c.inspect(proc.Pid(), config.Port, c.hostExe, 0, 0)
+				if err == nil && !inspected.owns(inspected.Owner) {
+					err = errors.New("监听端口不属于 GUI 启动的进程树")
+				}
+				if err != nil {
+					verification = err.Error()
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+			}
+			c.setBackendState("running")
+			scheme := "http"
+			if config.Https {
+				scheme = "https"
+			}
+			c.log(fmt.Sprintf("服务已就绪：%s://localhost:%d，PID %d", scheme, config.Port, proc.Pid()), "backend", "INFO")
+			if config.Cli.AutoStart {
+				if _, err := c.cli.Start(config.Cli.Port); err != nil {
+					c.log("高画质代理启动失败："+err.Error(), "cli", "ERROR")
+				}
+			}
+			return c.Snapshot(), nil
+		}
+		time.Sleep(350 * time.Millisecond)
+	}
+	c.mu.RLock()
+	stillRunning := c.backend == proc
+	c.mu.RUnlock()
+	if stillRunning {
+		_ = c.stopBackend()
+	}
+	c.setBackendState("error")
+	if verification != "" {
+		return nil, fmt.Errorf("后端未在 45 秒内通过健康检查（%s），请查看运行日志", verification)
+	}
+	return nil, errors.New("后端未在 45 秒内通过健康检查，请查看运行日志")
+}
+
+func (c *Controller) stopBackend() error {
+	if err := c.stopFrp(); err != nil {
+		c.log(err.Error(), "frp", "ERROR")
+	}
+	if _, err := c.cli.Stop(); err != nil {
+		c.log(err.Error(), "cli", "ERROR")
+	}
+	c.mu.RLock()
+	proc := c.backend
+	c.mu.RUnlock()
+	if proc == nil {
+		if err := c.stopLivekit(); err != nil {
+			c.log(err.Error(), "voice", "ERROR")
+		}
+		c.setBackendState("stopped")
+		return nil
+	}
+	c.setBackendState("stopping")
+	c.emit()
+	target := c.hostExe
+	if !isWindows() {
+		target = filepath.Join(c.root, "zviewer-backend.exe")
+	}
+	if err := c.kill(proc, target); err != nil {
+		return err
+	}
+	if err := c.stopLivekit(); err != nil {
+		c.log(err.Error(), "voice", "ERROR")
+	}
+	c.setBackendState("stopped")
+	c.setVoiceState("stopped")
+	c.log("已停止本控制台启动的后端及其伴生进程", "backend", "INFO")
+	return nil
+}
+
+func (c *Controller) Start() (any, error) {
+	return c.exclusive(func() (any, error) { return c.startBackend() })
+}
+
+func (c *Controller) Stop() (any, error) {
+	return c.exclusive(func() (any, error) {
+		if err := c.stopBackend(); err != nil {
+			return nil, err
+		}
+		return c.Snapshot(), nil
+	})
+}
+
+func (c *Controller) Restart() (any, error) {
+	return c.exclusive(func() (any, error) {
+		if err := c.stopBackend(); err != nil {
+			return nil, err
+		}
+		return c.startBackend()
+	})
+}
+
+func (c *Controller) EnableHTTPS(domain, ip string) (any, error) {
+	if domain == "" {
+		domain = "localhost"
+	}
+	return c.exclusive(func() (any, error) {
+		c.mu.RLock()
+		hasBackend := c.backend != nil
+		state := c.backendState
+		c.mu.RUnlock()
+		if hasBackend && state != "running" {
+			return nil, errors.New("请等待当前服务操作完成")
+		}
+		cert, err := c.certs.Ensure(domain, ip)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := c.store.Save(map[string]any{"https": true, "domain": domain, "lanIp": ip}, nil); err != nil {
+			return nil, err
+		}
+		if hasBackend {
+			if err := c.stopBackend(); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := c.startBackend(); err != nil {
+			return nil, err
+		}
+		return cert, nil
+	})
+}
+
+// FrpConfig 生成 frpc.toml（server=true 时生成 VPS 上的 frps.toml）。
+func (c *Controller) FrpConfig(server bool) string {
+	config := c.store.Value
+	f := config.Frp
+	token := "auth.method = \"token\"\nauth.token = \"{{ .Envs.FRP_TOKEN }}\""
+	if server {
+		return fmt.Sprintf("# 设置环境变量 FRP_TOKEN 后运行 frps\nbindPort = %d\n%s\ntransport.tls.force = true\n", f.Port, token)
+	}
+	proxy := func(name, kind string, local, remote int) string {
+		return fmt.Sprintf("\n[[proxies]]\nname = \"zviewer-%s\"\ntype = \"%s\"\nlocalIP = \"127.0.0.1\"\nlocalPort = %d\nremotePort = %d\n",
+			name, kind, local, remote)
+	}
+	host := f.Host
+	if host == "" {
+		host = "YOUR_VPS_IP"
+	}
+	quoted, _ := json.Marshal(host)
+	text := fmt.Sprintf("serverAddr = %s\nserverPort = %d\n%s\ntransport.tls.enable = true\n", quoted, f.Port, token)
+	text += proxy("backend", "tcp", config.Port, f.WebPort)
+	if f.Voice {
+		text += proxy("voice", "udp", config.Port, f.VoicePort)
+	}
+	if f.Rtmp {
+		text += proxy("rtmp", "tcp", config.RtmpPort, f.RtmpPort)
+	}
+	if f.Tcp {
+		text += proxy("voice-tcp", "tcp", config.LivekitTcpPort, f.TcpPort)
+	}
+	return text
+}
+
+func (c *Controller) StartFrp() (any, error) {
+	return c.exclusive(func() (any, error) {
+		c.mu.RLock()
+		frpProc := c.frp
+		frpState := c.frpState
+		backendState := c.backendState
+		c.mu.RUnlock()
+		if frpProc != nil && frpState != "error" {
+			return c.Snapshot(), nil
+		}
+		if frpProc != nil {
+			if err := c.stopFrp(); err != nil {
+				return nil, err
+			}
+		}
+		if backendState != "running" {
+			return nil, errors.New("请先启动本地服务")
+		}
+		config, err := Validate(c.store.Value.Map())
+		if err != nil {
+			return nil, err
+		}
+		c.mu.RLock()
+		active := c.active
+		c.mu.RUnlock()
+		if active == nil {
+			return nil, errors.New("请先启动本地服务")
+		}
+		if active.Port != config.Port || active.RtmpPort != config.RtmpPort ||
+			active.LivekitPort != config.LivekitPort || active.LivekitTcpPort != config.LivekitTcpPort ||
+			active.Frp.AdvertiseIP != config.Frp.AdvertiseIP {
+			return nil, errors.New("服务端口或语音公布地址已修改，请先重启本地服务再连接 FRP")
+		}
+		if config.Frp.Host == "" {
+			return nil, errors.New("请先保存 VPS 地址")
+		}
+		if !fileExists(c.frpc) {
+			return nil, errors.New("未找到 frpc.exe")
+		}
+		token, err := c.store.Token()
+		if err != nil {
+			return nil, err
+		}
+		if token == "" {
+			return nil, errors.New("请填写并保存 FRP Token")
+		}
+		c.mu.Lock()
+		c.redactions = append(c.redactions, token)
+		c.mu.Unlock()
+		if err := c.checkFrpVersion(); err != nil {
+			return nil, err
+		}
+		file := filepath.Join(c.dir, "frp", "frpc.toml")
+		if err := Atomic(file, c.FrpConfig(false)); err != nil {
+			return nil, err
+		}
+		env := append([]string(nil), os.Environ()...)
+		env = append(env, "FRP_TOKEN="+token)
+		verify := exec.Command(c.frpc, "verify", "-c", file)
+		verify.Env = env
+		hideWindow(verify)
+		if out, err := verify.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("FRP 配置校验失败：%s", strings.TrimSpace(string(out)))
+		}
+		c.setFrpState("connecting")
+		c.mu.Lock()
+		c.frpRegistered = map[string]bool{}
+		c.mu.Unlock()
+		expected := 1
+		if config.Frp.Voice {
+			expected++
+		}
+		if config.Frp.Rtmp {
+			expected++
+		}
+		if config.Frp.Tcp {
+			expected++
+		}
+		proc, err := startProcess("", c.frpc, []string{"-c", file}, env, filepath.Dir(file), func(line string) {
+			c.log(line, "frp", classifyLevel(line))
+			c.handleFrpLine(line, expected)
+		})
+		if err != nil {
+			c.setFrpState("error")
+			return nil, err
+		}
+		c.mu.Lock()
+		c.frp = proc
+		c.mu.Unlock()
+		go func() {
+			code := proc.Wait()
+			c.mu.Lock()
+			if c.frp != proc {
+				c.mu.Unlock()
+				return
+			}
+			c.frp = nil
+			if c.frpState == "stopping" {
+				c.frpState = "stopped"
+			} else {
+				c.frpState = "error"
+			}
+			failed := c.frpState == "error"
+			c.mu.Unlock()
+			level := "INFO"
+			if failed {
+				level = "ERROR"
+			}
+			c.log(fmt.Sprintf("FRP 已退出（%d）", code), "frp", level)
+			c.emit()
+		}()
+		c.log("FRP 配置校验通过，正在连接自建 VPS", "frp", "INFO")
+		return c.Snapshot(), nil
+	})
+}
+
+var frpSuccess = regexp.MustCompile(`\[(zviewer-[\w-]+)\].*start proxy success`)
+
+func (c *Controller) handleFrpLine(line string, expected int) {
+	if match := frpSuccess.FindStringSubmatch(line); match != nil {
+		c.mu.Lock()
+		c.frpRegistered[match[1]] = true
+		size := len(c.frpRegistered)
+		if size >= expected {
+			c.frpState = "registered"
+		}
+		c.mu.Unlock()
+		if size >= expected {
+			c.log("FRP 代理已注册；公网网页和语音仍需外网设备验收", "frp", "INFO")
+		}
+	}
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "login to server failed") || strings.Contains(lower, "connect to server error") || strings.Contains(lower, "start error") {
+		c.setFrpState("error")
+	}
+	c.emit()
+}
+
+func (c *Controller) checkFrpVersion() error {
+	cmd := exec.Command(c.frpc, "--version")
+	hideWindow(cmd)
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("无法读取 frpc 版本：%w", err)
+	}
+	version := strings.TrimSpace(string(out))
+	version = strings.TrimPrefix(version, "v")
+	if version != FrpVersion {
+		return fmt.Errorf("需要 FRP %s", FrpVersion)
+	}
+	return nil
+}
+
+func (c *Controller) stopFrp() error {
+	c.mu.RLock()
+	proc := c.frp
+	c.mu.RUnlock()
+	if proc == nil {
+		c.setFrpState("stopped")
+		return nil
+	}
+	c.setFrpState("stopping")
+	if err := c.kill(proc, c.frpc); err != nil {
+		c.setFrpState("error")
+		return err
+	}
+	c.setFrpState("stopped")
+	return nil
+}
+
+func (c *Controller) stopFrpSafely() {
+	if err := c.stopFrp(); err != nil {
+		c.log(err.Error(), "frp", "ERROR")
+	}
+}
+
+func (c *Controller) StopFrp() error {
+	err := c.stopFrp()
+	c.emit()
+	return err
+}
+
+func (c *Controller) StartCli() (any, error) {
+	return c.exclusive(func() (any, error) {
+		port := c.store.Value.Cli.Port
+		if _, err := c.cli.Start(port); err != nil {
+			return nil, err
+		}
+		return c.Snapshot(), nil
+	})
+}
+
+func (c *Controller) StopCli() (any, error) {
+	return c.exclusive(func() (any, error) {
+		if _, err := c.cli.Stop(); err != nil {
+			return nil, err
+		}
+		return c.Snapshot(), nil
+	})
+}
+
+func (c *Controller) SaveCli(patch map[string]any) (Config, error) {
+	user := c.store.Value.Cli.User
+	if raw, exists := patch["user"]; exists {
+		if text, ok := raw.(string); ok {
+			user = text
+		}
+	}
+	cli := map[string]any{"port": patch["port"], "autoStart": patch["autoStart"], "user": user}
+	return c.Save(map[string]any{"cli": cli}, nil)
+}
+
+// CliSettingsURL 启动代理并返回内嵌设置页地址。
+func (c *Controller) CliSettingsURL() (string, error) {
+	if _, err := c.StartCli(); err != nil {
+		return "", err
+	}
+	return c.cli.URL(c.WebURL(), c.store.Value.Cli.User, true)
+}
+
+func (c *Controller) verifyCli(pid, port int) error {
+	inspected, err := c.inspect(pid, port, c.hostExe, 0, 0)
+	if err != nil {
+		return err
+	}
+	if !inspected.owns(inspected.Owner) {
+		return errors.New("CLI 监听端口不属于 GUI 启动的进程树")
+	}
+	return nil
+}
+
+func (c *Controller) Shutdown() error {
+	_, err := c.Stop()
+	return err
+}
+
+// Export 生成导出文件内容；返回文件名与字节内容。
+func (c *Controller) Export(kind string) (string, []byte, error) {
+	config := c.store.Value
+	switch kind {
+	case "frpc":
+		return "frpc.toml", []byte(c.FrpConfig(false)), nil
+	case "frps":
+		return "frps.toml", []byte(c.FrpConfig(true)), nil
+	case "logs":
+		c.mu.RLock()
+		events := make([]Event, len(c.events))
+		copy(events, c.events)
+		c.mu.RUnlock()
+		var builder strings.Builder
+		for index := len(events) - 1; index >= 0; index-- {
+			event := events[index]
+			fmt.Fprintf(&builder, "%s %s [%s] %s\n", event.At, event.Level, event.Source, event.Message)
+		}
+		return "zviewer-desktop.log", []byte(builder.String()), nil
+	case "ca":
+		raw, err := os.ReadFile(c.certs.Paths().CA)
+		if err != nil {
+			return "", nil, errors.New("尚未签发本地 CA")
+		}
+		return "ZViewer-Local-CA.crt", raw, nil
+	case "hosts":
+		text := fmt.Sprintf("%s %s\n\n在访问设备 hosts 或内网 DNS 配置以上记录。修改 hosts 需要管理员权限。\nhttps://%s:%d/admin\n其他设备仅安装公开 CA 证书，禁止分享 CA 私钥。\n",
+			config.LanIP, config.Domain, config.Domain, config.Port)
+		return "zviewer-lan-domain.txt", []byte(text), nil
+	}
+	return "", nil, errors.New("不支持的导出类型")
+}

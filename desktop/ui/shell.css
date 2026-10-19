@@ -1,0 +1,15 @@
+/* 壳层专用：Wails 提供 Mica 材质时页面根节点必须透明，否则材质被盖住。 */
+html.mica,
+html.mica body {
+  background: transparent !important;
+}
+
+/* 无边框窗口的拖拽区（Wails 识别 --wails-draggable） */
+.windowbar {
+  --wails-draggable: drag;
+}
+
+.windowactions,
+.windowactions button {
+  --wails-draggable: no-drag;
+}

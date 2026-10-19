@@ -16,6 +16,8 @@
     const dark = value === 'dark' || (value === 'system' && media.matches);
     root.classList.toggle('dark', dark);
     root.dataset.theme = value;
+    // 原生壳（Wails）需要同步 DWM 材质深浅，Electron 下 go 不存在会被跳过。
+    try { window.go?.main?.App?.SetTheme?.(dark); } catch { /* 忽略桥接未就绪 */ }
     const button = document.getElementById('theme-button');
     if (button) {
       button.title = LABEL[value];
