@@ -212,4 +212,4 @@ services:
 
 ## Windows 桌面控制台（可选）
 
-Windows 用户可使用带系统托盘的桌面控制台管理本机服务、localhost HTTPS、自建 FRP 与监听端口，并通过默认浏览器打开网页端。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有命令行启动与网页界面继续保留。
+Windows 用户可构建带头像图标的目录 GUI，双击分发目录唯一的 `ZViewer.exe` 打开控制台，组件放在 `app/`，无需安装或自解包。控制台提供系统托盘、本机 HTTPS、自建 FRP、可保存的监听端口，以及直接在 GUI 内配置和扫码登录的 ZViewerCLI 高画质代理。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有服务端网页与命令行源码保持兼容。

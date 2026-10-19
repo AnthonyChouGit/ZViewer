@@ -35,14 +35,14 @@
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.info}</svg>`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = selector => document.querySelector(selector);
-  const titles = { overview: '服务总览', frp: 'FRP 自建穿透', cert: '本机 HTTPS 与域名', logs: '运行日志', settings: '应用设置' };
+  const titles = { overview: '服务总览', frp: 'FRP 自建穿透', cert: '本机 HTTPS 与域名', cli: '高画质代理 · ZViewerCLI', logs: '运行日志', settings: '应用设置' };
   let prefs = { closeToTray: true, remember: true };
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem('zviewer-ui-prefs') || '{}') }; } catch { /* Use safe defaults if storage is unavailable. */ }
   const state = {
     page: 'overview', running: false, certReady: false, native: false, info: null,
     frpTab: 'client', certMode: 'local', certStep: 1, certDomain: 'zviewer.home.arpa', certIp: '192.168.1.100',
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
-    logLevel: 'all', logSource: 'all', logSearch: '', paused: false,
+    logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
     events: [], prefs
   };
   function clock() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
@@ -122,10 +122,36 @@
     }
     return heading('LOCAL HTTPS, ONE CLICK', '本机管理，一键直达。', '默认使用 localhost 自签证书，轻松打开这台电脑的管理页面。') + `<div class="tabs"><button data-cert-mode="local" class="${local ? 'active' : ''}">本机 localhost</button><button data-cert-mode="lan" class="${!local ? 'active' : ''}">高级：内网域名</button></div><div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
+  function cli() {
+    const live = Boolean(state.live), saved = state.config?.cli || { port: 9333, autoStart: false, user: '' };
+    const c = { ...saved, ...state.cliDraft }, s = state.server?.cli || { state: 'stopped', available: false };
+    const labels = { stopped: '未启动', starting: '启动中', running: '运行中', stopping: '停止中', error: '异常' };
+    const activePort = s.activePort || saved.port, running = ['starting', 'running', 'stopping'].includes(s.state);
+    const backend = state.server?.active || state.config || { https: false, port: 3333 };
+    const backendUrl = state.server?.webUrl || `${backend.https ? 'https' : 'http'}://localhost:${backend.port || 3333}/`;
+    const status = live ? labels[s.state] || '未启动' : '界面预览';
+    return heading('BILIBILI LOCAL PROXY', '喜欢的画质，一起分享。', '内置 ZViewerCLI，在本机为哔哩哔哩高画质播放提供代理。') +
+      `<div class="cli-layout"><section class="panel cli-settings"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('watch')}</span><div><h2>ZViewerCLI</h2><p class="cli-caption">哔哩哔哩高画质代理</p></div></div><span class="pill ${s.state === 'running' && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
+        <p class="cli-copy">直接在右侧配置代理、扫码登录和连接服务器，后端地址自动带入。网页账号可选，填写并保存与网页端一致的账号，有助于识别你的代理。</p>
+        <div class="cli-address"><span>${icon('monitor')}仅本机访问</span><code>http://127.0.0.1:${esc(activePort)}</code></div>
+        ${live ? `<p class="cli-binding-status">${icon(s.connected ? 'check' : 'info')}${s.connected ? '已关联服务器' : s.state === 'running' ? '未关联；请在代理设置页完成' : '启动后在代理设置页关联服务器'}</p>` : ''}
+        <div class="cli-actions">${button(running ? '停止代理' : '启动代理', running ? 'cli-stop' : 'cli-start', running ? 'stop' : 'play', 'primary')}</div>
+        <div class="panel-line"></div><div class="settings-subheading"><h3>代理配置</h3><span>端口与自动启动在下次启动时生效</span></div>
+        <label class="field"><span>后端地址 · 自动跟随本地服务</span><input id="cli-backend-url" type="text" value="${esc(backendUrl)}" readonly autocomplete="off" spellcheck="false"><small>运行中使用当前服务地址；尚未启动时使用已保存的协议和端口。</small></label>
+        <label class="field"><span>ZViewer 网页账号（可选）</span><input id="cli-user" type="text" maxlength="120" value="${esc(c.user || '')}" placeholder="可选，与网页端登录账号一致" autocomplete="off"><small>保存后会自动传给右侧设置，用于识别你的代理归属；留空也可配置。</small></label>
+        <label class="field cli-port-field"><span>代理监听端口</span><input id="cli-port" type="number" min="1" max="65535" value="${esc(c.port)}"><small>默认 9333，需与其他 TCP 服务使用不同端口。</small></label>
+        <div class="switch-row cli-auto-row"><div><strong id="cli-auto-title">随 ZViewer 服务启动</strong><p id="cli-auto-help">启动主服务时一同启动代理；退出控制台时自动停止。</p></div><button type="button" id="cli-auto-start" class="switch" role="switch" aria-labelledby="cli-auto-title" aria-describedby="cli-auto-help" aria-checked="${Boolean(c.autoStart)}"></button></div>
+        <div class="form-actions">${button('保存代理配置', 'cli-save', 'check', 'primary')}</div>
+        <p class="cli-config-note">登录由内置的 ZViewerCLI 设置处理；桌面控制台不读取 Cookie。</p>
+      </section><section class="panel cli-embed-panel"><div class="cli-embed-heading"><div><h2>内置代理设置</h2><p>扫码登录后，点击连接服务器</p></div><span class="pill">${icon('lock')}本机</span></div>
+        ${live && state.cliEmbedUrl ? `<iframe id="cli-settings-frame" src="${esc(state.cliEmbedUrl)}" title="ZViewerCLI 设置" sandbox="allow-scripts allow-forms allow-same-origin" referrerpolicy="no-referrer"></iframe>` : `<div class="cli-embed-placeholder"><span class="cli-placeholder-icon">${icon('settings')}</span><h3>${live ? '在控制台内完成配置' : '内置设置预览'}</h3><p>${!live ? 'Windows 桌面版可在这里配置代理与扫码登录。预览不会连接本机代理。' : !s.available ? '未检测到内置 CLI，请使用包含 ZViewerCLI 的完整运行包。' : s.state === 'running' ? '正在载入内置设置，后端地址会自动填写。' : '点击左侧“启动代理”，设置会自动显示在这里，并填写本机后端地址。'}</p></div>`}
+        <div class="cli-embed-hint">启动代理 → 扫码登录 → 连接服务器。完成后回到 ZViewer 网页端使用高画质代理。</div>
+      </section></div>`;
+  }
   function filteredEvents() { return state.events.filter(e => (state.logLevel === 'all' || e.level === state.logLevel) && (state.logSource === 'all' || e.source === state.logSource) && `${e.message} ${e.source}`.toLowerCase().includes(state.logSearch.toLowerCase())); }
   function logLines() { return filteredEvents().map(e => `<div class="log-line"><span class="log-time">${esc(e.time)}</span><span class="log-level ${e.level}">${esc(e.level)}</span><span class="log-source">${esc(e.source)}</span><span class="log-message">${esc(e.message)}</span></div>`).join('') || '<div class="empty">没有匹配的演示日志</div>'; }
   function logs() {
-    return heading('WORKSPACE ACTIVITY', '每条连接，都有迹可循。', '查看界面原型的操作记录。实际后端日志将在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '原型操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取现有服务日志</span></div></section><div class="help-card"><strong>生产版日志将做什么？</strong><p>按后端、语音与 FRP 分流，限制体积并滚动保存，导出前屏蔽 Token、JWT 和私钥等敏感内容。</p></div>`;
+    return heading('WORKSPACE ACTIVITY', '每条连接，都有迹可循。', '查看界面原型的操作记录。实际后端日志将在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'cli'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '原型操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取现有服务日志</span></div></section><div class="help-card"><strong>生产版日志将做什么？</strong><p>按后端、语音与 FRP 分流，限制体积并滚动保存，导出前屏蔽 Token、JWT 和私钥等敏感内容。</p></div>`;
   }
   function settings() {
     const info = state.info?.runtime;
@@ -134,13 +160,29 @@
   }
   function navigate(page) { if (!titles[page]) page = 'overview'; state.page = page; if (location.hash !== `#${page}`) location.hash = page; else render(); }
   function render() {
-    $('#main').dataset.view = state.page;
+    const main = $('#main'), pageView = $('#page-view'), cliView = $('#cli-view');
+    const frame = cliView.querySelector('#cli-settings-frame');
+    main.dataset.view = state.page;
+    pageView.hidden = state.page === 'cli'; cliView.hidden = state.page !== 'cli';
     $('#crumb').textContent = titles[state.page];
     document.querySelectorAll('[data-page]').forEach(a => { const active = a.dataset.page === state.page; a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-    $('#main').innerHTML = (state.live && state.views ? state.views : { overview, frp, cert, logs, settings })[state.page]();
+    const markup = (state.live && state.views ? state.views : { overview, frp, cert, cli, logs, settings })[state.page]();
+    // Both containers stay attached. Hiding the CLI view preserves its browsing context across navigation.
+    if (frame && !state.cliEmbedUrl) frame.remove();
+    else if (frame && frame.getAttribute('src') !== state.cliEmbedUrl) frame.setAttribute('src', state.cliEmbedUrl);
+    if (state.live && state.page === 'cli' && frame && state.cliEmbedUrl) {
+      // Keep the browsing context alive: replacing or reattaching an iframe resets QR/login input.
+      const template = document.createElement('template'); template.innerHTML = markup;
+      const focused = document.activeElement;
+      const focusId = focused?.closest('.cli-settings') ? focused.id : '';
+      const selection = focusId && typeof focused.selectionStart === 'number' ? [focused.selectionStart, focused.selectionEnd] : null;
+      cliView.querySelector('.cli-settings').replaceWith(template.content.querySelector('.cli-settings'));
+      if (focusId) { const replacement = document.getElementById(focusId); replacement?.focus({ preventScroll: true }); if (replacement && selection) replacement.setSelectionRange(...selection); }
+    } else (state.page === 'cli' ? cliView : pageView).innerHTML = markup;
     $('#tray-label').textContent = state.native ? '收起到托盘' : '托盘预览';
     $('#footer-status').textContent = state.live ? (state.server?.backend === 'running' ? '本地服务运行中' : '原生托盘已启用') : state.native ? '原生托盘已启用' : '本地界面预览';
     icons();
+    if (state.live && state.page === 'cli') window.dispatchEvent(new Event('zviewer-cli-visible'));
   }
   function readCert() {
     const domain = $('#cert-domain'), ip = $('#cert-ip');
@@ -155,6 +197,7 @@
   }
   async function action(name) {
     if (name === 'toggle-run') setRunning(!state.running);
+    else if (name.startsWith('cli-')) toast('请在 Windows 桌面版中启动和配置 ZViewerCLI');
     else if (name === 'open-manager') modal(`<h2>打开本机管理页面</h2><div class="dns-example">https://localhost:3333</div><p>这是界面原型，实际服务尚未接入。生产版会先确认本机服务与证书就绪，再打开默认浏览器。</p><div class="modal-actions">${button('查看本机 HTTPS', 'go-cert', 'shield')}${button('知道了', 'close-modal', '', 'primary')}</div>`);
     else if (name === 'go-cert') { $('#modal').close(); navigate('cert'); }
     else if (name === 'local-cert') localCertDemo();
@@ -238,7 +281,7 @@
   window.addEventListener('hashchange', () => { state.page = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'overview'; render(); });
   $('#modal').addEventListener('click', event => { if (event.target === $('#modal')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) $('#modal').close(); } });
   state.page = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'overview';
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, render, navigate, toast, modal, heroArt, readCert, preview: { overview, frp, cert, logs, settings }, refreshLogs };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, render, navigate, toast, modal, heroArt, readCert, preview: { overview, frp, cert, cli, logs, settings }, refreshLogs };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {
@@ -247,5 +290,12 @@
       render();
     }).catch(() => toast('桌面桥接未就绪，请重新打开控制台。'));
     window.zviewerDesktop.onNavigate(navigate);
+    window.zviewerDesktop.onUpdate?.(snapshot => {
+      // Clear a stopped proxy even while its view is hidden; ordinary updates leave the iframe alone.
+      if (snapshot.cli && !['starting', 'running'].includes(snapshot.cli.state)) {
+        state.cliEmbedUrl = '';
+        $('#cli-settings-frame')?.remove();
+      }
+    });
   }
 })();

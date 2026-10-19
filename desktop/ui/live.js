@@ -5,11 +5,11 @@
   const { state, icon, esc, heading, button, notice, heroArt } = ui;
   const $ = selector => document.querySelector(selector);
   const labels = { stopped: '未启动', starting: '启动中', running: '运行中', stopping: '停止中', error: '异常', degraded: '待检查', connecting: '连接中', registered: '代理已注册' };
-  let initialized = false, busy = false, serviceDraft = null;
+  let initialized = false, busy = false, serviceDraft = null, cliEmbedPending = false;
   function current() { return state.server.active || state.config; }
   function pill(status) { return `<span class="pill ${['running','registered'].includes(status) ? 'green' : ''}"><i></i>${labels[status] || status}</span>`; }
   function activity() {
-    return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc({ console: '控制台', backend: '主服务', voice: 'LiveKit 语音', cert: 'HTTPS 证书', frp: 'FRP 穿透' }[e.source] || e.source)}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join('');
+    return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc({ console: '控制台', backend: '主服务', voice: 'LiveKit 语音', cert: 'HTTPS 证书', frp: 'FRP 穿透', cli: '高画质代理' }[e.source] || e.source)}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join('');
   }
   function overview() {
     const s = state.server, c = current();
@@ -74,22 +74,47 @@
           <div class="form-actions">${button('保存配置','save-service','check','primary')}${state.server.pid ? button('重启使配置生效','restart','refresh') : ''}</div>
         </div>
       </div><div class="panel section-title"><div><h2>窗口与系统托盘</h2>${toggle('closeToTray','关闭窗口时隐藏到托盘','右下角头像图标可恢复窗口。')}${toggle('launchAtLogin','登录 Windows 后启动','只为当前用户设置，可随时关闭。')}${toggle('autoStart','打开 GUI 时自动启动服务','使用上次保存的端口、HTTPS 与监听范围。')}</div></div></section>
-      <aside class="panel"><div class="about-mark"><img src="app-icon.png" alt="ZViewer"><div><h2>ZViewer</h2><p>WINDOWS DESKTOP</p></div></div><div class="version">${esc(state.info.version)} <small>LOCAL BUILD</small></div><p class="settings-description">配置自动保存在当前 Windows 用户目录。FRP Token 由 Windows DPAPI 加密保存。</p><div class="panel-line"></div><div class="subheading">当前运行包</div><p class="runtime-path">${esc(state.server.root)}</p><div class="file-check"><span>后端</span><span>${state.info.runtime.backend ? '已检测到' : '缺失'}</span></div><div class="file-check"><span>FRP 0.71.1</span><span>${state.server.frpcAvailable ? '已检测到' : '缺失'}</span></div><div class="live-toolbar">${button('配置文件夹','open-data','folder')}${button('托盘菜单','tray-preview','tray')}</div></aside></div>`;
+      <aside class="panel"><div class="about-mark"><img src="app-icon.png" alt="ZViewer"><div><h2>ZViewer</h2><p>WINDOWS DESKTOP</p></div></div><div class="version">${esc(state.info.version)} <small>LOCAL BUILD</small></div><p class="settings-description">配置自动保存在当前 Windows 用户目录。FRP Token 由 Windows DPAPI 加密保存。</p><div class="panel-line"></div><div class="subheading">当前运行包</div><p class="runtime-path">${esc(state.server.root)}</p><div class="file-check"><span>后端</span><span>${state.info.runtime.backend ? '已检测到' : '缺失'}</span></div><div class="file-check"><span>FRP 0.71.1</span><span>${state.server.frpcAvailable ? '已检测到' : '缺失'}</span></div><div class="file-check"><span>ZViewerCLI</span><span>${state.server.cli?.available ? '已检测到' : '缺失'}</span></div><div class="live-toolbar">${button('配置文件夹','open-data','folder')}${button('托盘菜单','tray-preview','tray')}</div></aside></div>`;
   }
   function logs() {
-    return ui.preview.logs().replace('查看界面原型的操作记录。实际后端日志将在服务接入后显示。','查看控制台、后端、证书和 FRP 的真实运行记录。')
+    return ui.preview.logs().replace('查看界面原型的操作记录。实际后端日志将在服务接入后显示。','查看控制台、后端、证书、FRP 与高画质代理的真实运行记录。')
       .replaceAll('原型操作记录','运行日志').replace('仅演示事件，未读取现有服务日志','已屏蔽已知凭据，日志最大保留 500 条')
-      .replace('生产版日志将做什么？','日志保存方式').replace('按后端、语音与 FRP 分流，限制体积并滚动保存，导出前屏蔽 Token、JWT 和私钥等敏感内容。','日志按来源过滤，单文件达到 2 MB 后滚动保存。LiveKit 日志单独显示为 voice 来源。')
+      .replace('生产版日志将做什么？','日志保存方式').replace('按后端、语音与 FRP 分流，限制体积并滚动保存，导出前屏蔽 Token、JWT 和私钥等敏感内容。','日志按来源过滤，单文件达到 2 MB 后滚动保存。LiveKit 日志显示为 voice 来源，高画质代理显示为 cli 来源。')
       .replace('>导出日志</button>','>导出全部日志</button>').replace('>INFO</option>','>INFO</option><option value="ERROR">ERROR</option>');
   }
+  function cliViewKey(snapshot) { const c = snapshot?.active || snapshot?.config; return JSON.stringify([snapshot?.cli, snapshot?.webUrl, c?.port, c?.https, snapshot?.config?.cli?.user]); }
+  function validatedCliUrl(value) {
+    if (typeof value !== 'string' || value.length > 4096) throw new Error('无效的本机 CLI 设置地址');
+    const url = new URL(value), port = Number(url.port || 80);
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password || url.pathname !== '/' || url.hash || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('CLI 设置仅允许本机 HTTP 地址');
+    url.searchParams.set('desktop', '1');
+    return url.href;
+  }
+  function syncCliEmbed(snapshot) {
+    if (!state.cliEmbedUrl) return false;
+    const previous = state.cliEmbedUrl;
+    if (!['starting', 'running'].includes(snapshot.cli?.state)) state.cliEmbedUrl = '';
+    else {
+      // The iframe origin comes from cli-open; these query values come only from native state.
+      const url = new URL(previous), c = snapshot.active || snapshot.config;
+      const backend = snapshot.webUrl || `${c.https ? 'https' : 'http'}://localhost:${c.port}/`;
+      url.searchParams.set('server', backend);
+      const user = snapshot.config?.cli?.user || '';
+      if (user) url.searchParams.set('user', user); else url.searchParams.delete('user');
+      state.cliEmbedUrl = validatedCliUrl(url.href);
+    }
+    return previous !== state.cliEmbedUrl;
+  }
   function sync(snapshot, initial = false) {
+    const cliBefore = cliViewKey(state.server);
+    const embedChanged = syncCliEmbed(snapshot);
     state.server = snapshot; state.events = snapshot.events; state.info.runtime = snapshot.runtime;
     if (initial) {
       state.config = structuredClone(snapshot.config); state.frp = structuredClone(snapshot.config.frp);
       state.certDomain = snapshot.config.domain === 'localhost' ? 'zviewer.home.arpa' : snapshot.config.domain;
       state.certIp = snapshot.config.lanIp;
     }
-    if (initial || state.page === 'overview') ui.render();
+    if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot))) ui.render();
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
     $('#footer-status').textContent = snapshot.backend === 'running' ? `本地服务运行中 · ${current().port}` : `本地服务 · ${labels[snapshot.backend]}`;
   }
@@ -100,13 +125,25 @@
       const result = await window.zviewerDesktop.command(action, payload);
       const snapshot = await window.zviewerDesktop.info(); sync(snapshot, true);
       return result;
-    } finally { busy = false; document.body.classList.remove('live-busy'); }
+    } finally { busy = false; document.body.classList.remove('live-busy'); if (action !== 'cli-open') setTimeout(ensureCliEmbed, 0); }
   }
+  function ensureCliEmbed() {
+    if (cliEmbedPending || busy || state.page !== 'cli' || state.server?.cli?.state !== 'running' || state.cliEmbedUrl) return;
+    cliEmbedPending = true;
+    act('cli-open').catch(error => ui.toast(error.message.replace(/^.*Error: /, ''))).finally(() => { cliEmbedPending = false; });
+  }
+  window.addEventListener('zviewer-cli-visible', () => setTimeout(ensureCliEmbed, 0));
   async function act(action) {
     if (action === 'toggle-run') { await command(state.server.pid ? 'stop' : 'start'); ui.toast(state.server.backend === 'running' ? '服务已启动' : '服务已停止'); }
     else if (action === 'restart') { await command('restart'); ui.toast('服务已使用保存的配置重启'); }
     else if (action === 'open-manager') await command('open-manager');
     else if (action === 'open-web') await command('open-web');
+    else if (action === 'cli-start' || action === 'cli-open') {
+      const result = await command('cli-open');
+      if (result?.url) { state.cliEmbedUrl = validatedCliUrl(result.url); ui.render(); if (action === 'cli-start') ui.toast('高画质代理已启动，可在右侧完成配置'); }
+    }
+    else if (action === 'cli-stop') { await command('cli-stop'); ui.toast('高画质代理已停止'); }
+    else if (action === 'cli-save') { await command('cli-save', cliValues()); state.cliDraft = null; ui.render(); ui.toast('代理配置已保存，内置设置会自动带入后端地址'); }
     else if (action === 'local-cert' || action === 'lan-cert') {
       const domain = action === 'local-cert' ? 'localhost' : $('#cert-domain').value.trim().toLowerCase();
       const ip = action === 'local-cert' ? '' : $('#cert-ip').value.trim();
@@ -125,9 +162,16 @@
     else if (action === 'export-hosts') await command('export',{kind:'hosts'});
     else if (action === 'open-data') await command('open-data');
   }
-  const actions = new Set(['toggle-run','restart','open-manager','open-web','local-cert','lan-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','export-hosts','open-data']);
+  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','lan-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','export-hosts','open-data']);
+  function cliValues() { return { port: $('#cli-port').value, autoStart: $('#cli-auto-start').getAttribute('aria-checked') === 'true', user: $('#cli-user').value.trim() }; }
   document.addEventListener('click',event => {
     if (!state.live) return;
+    const cliSwitch = event.target.closest('#cli-auto-start');
+    if (cliSwitch) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      cliSwitch.setAttribute('aria-checked', String(cliSwitch.getAttribute('aria-checked') !== 'true'));
+      state.cliDraft = cliValues(); return;
+    }
     const httpsSwitch = event.target.closest('#service-https');
     if (httpsSwitch) {
       event.preventDefault(); event.stopImmediatePropagation();
@@ -147,6 +191,7 @@
     }
   },true);
   document.addEventListener('input', event => {
+    if (state.live && event.target.matches('#cli-port,#cli-user')) { state.cliDraft = cliValues(); return; }
     if (!state.live || !event.target.matches('#service-port,#rtmp-port,#flv-port,#bind-host,#livekit-port,#livekit-tcp-port')) return;
     serviceDraft = serviceValues();
     $('#livekit-udp-port').textContent = $('#service-port').value || '—';
@@ -154,7 +199,8 @@
   function init(info) {
     if (initialized) return; initialized = true;
     state.live = true; state.info = info; state.native = true;
-    state.views = {overview,frp,cert,logs,settings}; state.frpConfigOverride = frpCode;
+    state.views = {overview,frp,cert,cli:ui.preview.cli,logs,settings}; state.frpConfigOverride = frpCode;
+    $('.build-label').textContent = `WINDOWS DESKTOP · ${info.version}`;
     $('.preview-badge').innerHTML = '<i></i>本地运行';
     $('.statusbar > span:last-child').innerHTML = `Windows 桌面控制台<span class="footer-separator">/</span>版本 ${esc(info.version)}`;
     sync(info,true);

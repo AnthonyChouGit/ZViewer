@@ -7,6 +7,7 @@ const defaults = {
   port: 3333, rtmpPort: 3334, flvPort: 3335, livekitPort: 3336, livekitTcpPort: 3337, bindHost: '127.0.0.1', https: false,
   closeToTray: true, launchAtLogin: false, autoStart: false,
   domain: 'localhost', lanIp: '',
+  cli: { port: 9333, autoStart: false, user: '' },
   frp: { host: '', port: 7000, advertiseIp: '', voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 }
 };
 function port(value) { return /^\d+$/.test(String(value)) && Number(value) > 0 && Number(value) <= 65535; }
@@ -15,12 +16,22 @@ function hostname(value) {
     (net.isIP(value) || (!/^[\d.]+$/.test(value) && value.split('.').every(p => /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(p))));
 }
 function validate(input) {
-  const c = { ...defaults, ...input, frp: { ...defaults.frp, ...input.frp } };
+  const c = { ...defaults, ...input, cli: { ...defaults.cli, ...input.cli }, frp: { ...defaults.frp, ...input.frp } };
   for (const k of ['port', 'rtmpPort', 'flvPort', 'livekitPort', 'livekitTcpPort']) {
     if (!port(c[k])) throw new Error(`${k} 需要填写 1–65535 的整数`);
     c[k] = Number(c[k]);
   }
   if (new Set([c.port, c.rtmpPort, c.flvPort, c.livekitPort, c.livekitTcpPort]).size !== 5) throw new Error('网页、RTMP、FLV、LiveKit 信令和语音 TCP 端口不能重复');
+  // Pre-CLI settings could legitimately use 9333 for another service.
+  // Choose a free default when migrating, preserving all explicit user ports.
+  if (input.cli?.port === undefined) {
+    c.cli.port = 9333;
+    while ([c.port, c.rtmpPort, c.flvPort, c.livekitPort, c.livekitTcpPort].includes(c.cli.port)) c.cli.port++;
+  }
+  if (!port(c.cli.port)) throw new Error('高画质代理端口需要填写 1–65535 的整数');
+  if (typeof c.cli.user !== 'string' || c.cli.user.length > 120 || /[\x00-\x1f\x7f]/.test(c.cli.user)) throw new Error('ZViewer 网页账号格式无效');
+  c.cli = { port: Number(c.cli.port), autoStart: c.cli.autoStart === true, user: c.cli.user.trim() };
+  if ([c.port, c.rtmpPort, c.flvPort, c.livekitPort, c.livekitTcpPort].includes(c.cli.port)) throw new Error('高画质代理端口不能与其他服务 TCP 端口重复');
   // UDP and TCP may share the same number; media UDP always follows the web port.
   if (input.frp?.voicePort === undefined) c.frp.voicePort = c.port;
   if (input.frp?.webPort === undefined) c.frp.webPort = c.port;
@@ -80,7 +91,7 @@ class ConfigStore {
     for (const [local, remote] of [['port','voicePort'], ['port','webPort'], ['livekitTcpPort','tcpPort']]) {
       if (patch[local] !== undefined && patch.frp?.[remote] === undefined && frp[remote] === this.value[local]) frp[remote] = Number(patch[local]);
     }
-    const value = validate({ ...this.value, ...patch, frp });
+    const value = validate({ ...this.value, ...patch, cli: { ...this.value.cli, ...patch.cli }, frp });
     let secret = this.secret;
     if (token !== undefined && token !== '') {
       if (typeof token !== 'string' || token.length > 4096 || /[\r\n\0]/.test(token)) throw new Error('Token 格式无效');

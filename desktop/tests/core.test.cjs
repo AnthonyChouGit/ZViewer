@@ -16,10 +16,14 @@ test('custom ports and encrypted Token persist without rewriting the existing en
   const root=temp(),dir=temp(); fs.writeFileSync(path.join(root,'.env'),'# keep me\nPORT=34123\nJWT_ACCESS_SECRET=private-existing-value\n');
   const before=fs.readFileSync(path.join(root,'.env'));
   const store=new ConfigStore(dir,root,cipher); assert.equal(store.value.port,34123);
-  store.save({port:34221,https:true,livekitPort:34226,livekitTcpPort:34227,frp:{host:'frp.example.com'}},'test-sensitive-token');
+  store.save({port:34221,https:true,livekitPort:34226,livekitTcpPort:34227,cli:{port:34333,autoStart:true,user:'viewer & friend'},frp:{host:'frp.example.com'}},'test-sensitive-token');
   const reopened=new ConfigStore(dir,root,cipher);
   assert.equal(reopened.value.port,34221);assert.equal(reopened.value.https,true);assert.equal(reopened.value.frp.host,'frp.example.com');assert.equal(reopened.token(),'test-sensitive-token');
   assert.equal(reopened.value.livekitPort,34226);assert.equal(reopened.value.livekitTcpPort,34227);
+  assert.equal(reopened.value.cli.port,34333);assert.equal(reopened.value.cli.autoStart,true);
+  assert.equal(reopened.value.cli.user,'viewer & friend');
+  reopened.save({cli:{port:34334}});assert.equal(reopened.value.cli.autoStart,true);
+  assert.throws(()=>reopened.save({cli:{port:34221}}),/代理端口/);
   assert.equal(reopened.value.frp.voicePort,34221);assert.equal(reopened.value.frp.tcpPort,34227);
   assert(!fs.readFileSync(path.join(dir,'settings.json'),'utf8').includes('test-sensitive-token'));
   assert.deepEqual(fs.readFileSync(path.join(root,'.env')),before);
@@ -42,6 +46,11 @@ test('old settings migrate UDP and new settings preserve manual remote mappings'
   assert.equal(store.value.frp.voicePort,4443);assert.equal(store.value.frp.tcpPort,4447);
   store.save({frp:{voicePort:54321,tcpPort:54322}});store.save({port:4543,livekitTcpPort:4547});
   assert.equal(store.value.frp.voicePort,54321);assert.equal(store.value.frp.tcpPort,54322);
+  const oldDir=temp();
+  fs.writeFileSync(path.join(oldDir,'settings.json'),JSON.stringify({schema:2,config:{port:9333,rtmpPort:9334},frpToken:''}));
+  const migrated=new ConfigStore(oldDir,root,cipher);
+  assert.equal(migrated.value.port,9333);assert.equal(migrated.value.rtmpPort,9334);assert.equal(migrated.value.cli.port,9335);
+  assert.throws(()=>migrated.save({cli:{port:9333}}),/代理端口/);
 });
 test('UDP conflict detection preserves the unrelated socket', async () => {
   const socket=dgram.createSocket('udp4');

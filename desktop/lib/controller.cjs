@@ -12,6 +12,7 @@ const { StringDecoder } = require('node:string_decoder');
 const run = promisify(execFile);
 const { ConfigStore, envValues, atomic, validate } = require('./config.cjs');
 const { Certificates } = require('./certificates.cjs');
+const { CliProxy } = require('./cli.cjs');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const FRP_VERSION = '0.71.1';
 
@@ -45,7 +46,7 @@ function probe(port, secure, ca) {
   });
 }
 class Controller extends EventEmitter {
-  constructor({ root, stateDir, frpc, cipher }) {
+  constructor({ root, stateDir, frpc, cliExecutable, cipher }) {
     super(); this.root = path.resolve(root); this.dir = path.resolve(stateDir); this.frpc = frpc;
     this.store = new ConfigStore(this.dir, this.root, cipher);
     this.events = []; this.redactions = []; this.backend = null; this.frp = null; this.livekit = null;
@@ -56,12 +57,15 @@ class Controller extends EventEmitter {
     this.hostExe = path.join(path.dirname(__dirname).replace('app.asar', 'app.asar.unpacked'), 'assets', 'ZViewer.ProcessHost.exe');
     this.windowsHelper = path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'windows-process.ps1');
     this.certificates = new Certificates(this.dir, (...args) => this.log(...args));
+    this.cli = new CliProxy({ root: this.root, executable: cliExecutable, hostExe: this.hostExe,
+      kill: (child, exe) => this.kill(child, exe), log: (...args) => this.log(...args),
+      onUpdate: () => this.emit('update', this.snapshot()) });
     this.log('桌面控制台已就绪；配置将在下次启动自动读取');
   }
   sanitize(text) {
     let message = String(text).replace(/\x1b\[[0-9;]*m/g, '');
     for (const secret of this.redactions) if (secret.length >= 4) message = message.split(secret).join('[已隐藏]');
-    return message.replace(/((?:token|secret|password|密码|authorization)\s*[:=：]\s*)([^\s,;]+)/gi, '$1[已隐藏]').slice(0, 4000);
+    return message.replace(/((?:token|secret|password|密码|authorization|cookie|SESSDATA|bili_jct)\s*[:=：]\s*)([^\r\n]+)/gi, '$1[已隐藏]').slice(0, 4000);
   }
   log(message, source = 'console', level = 'INFO') {
     const text = this.sanitize(message); if (!text.trim()) return;
@@ -73,8 +77,8 @@ class Controller extends EventEmitter {
     this.emit('log', event); this.emit('update', this.snapshot());
   }
   snapshot() {
-    return { config: this.store.value, active: this.active, backend: this.backendState, voice: this.voiceState,
-      frp: this.frpState, pid: this.backend?.pid || null, voicePid: this.livekit?.pid || null, frpPid: this.frp?.pid || null,
+    return { config: this.store.value, active: this.active, webUrl: this.webUrl(), backend: this.backendState, voice: this.voiceState,
+      frp: this.frpState, cli: this.cli.snapshot(), pid: this.backend?.pid || null, voicePid: this.livekit?.pid || null, frpPid: this.frp?.pid || null,
       tokenSaved: !!this.store.secret, certificate: { ...this.certificates.inspect(), trusted: this.trusted },
       events: this.events, root: this.root, frpcAvailable: fs.existsSync(this.frpc || ''),
       runtime: { backend: fs.existsSync(path.join(this.root, 'zviewer-backend.exe')), cert: true, livekit: fs.existsSync(path.join(this.root, 'livekit-server.exe')), web: fs.existsSync(path.join(this.root, 'frontend', 'dist', 'index.html')) } };
@@ -182,6 +186,7 @@ class Controller extends EventEmitter {
       this.log(`后端进程已退出（${code ?? signal}）`, 'backend', this.backendState === 'error' ? 'ERROR' : 'INFO');
       if (this.frp) this.stopFrp().catch(error => this.log(error.message, 'frp', 'ERROR'));
       if (this.livekit && !intentional) this.stopLivekit().catch(error => this.log(error.message, 'voice', 'ERROR'));
+      if (!intentional) this.cli.stop().catch(error => this.log(error.message, 'cli', 'ERROR'));
     });
     const deadline = Date.now() + 45000;
     while (Date.now() < deadline && child.exitCode === null && this.backend === child && child.pid) {
@@ -193,6 +198,10 @@ class Controller extends EventEmitter {
           if (!inspected.owner.some(pid => inspected.members.includes(pid))) throw new Error('监听端口不属于 GUI 启动的进程树');
         }
         this.backendState = 'running'; this.log(`服务已就绪：${c.https ? 'https' : 'http'}://localhost:${c.port}，PID ${child.pid}`, 'backend');
+        if (c.cli.autoStart) {
+          try { await this.cli.start(c.cli.port); }
+          catch (error) { this.log(`高画质代理启动失败：${error.message}`, 'cli', 'ERROR'); }
+        }
         return this.snapshot();
       }
       await delay(350);
@@ -214,6 +223,7 @@ class Controller extends EventEmitter {
   }
   async stopBackend() {
     await this.stopFrp();
+    await this.cli.stop();
     if (!this.backend) { await this.stopLivekit(); this.backendState = 'stopped'; return; }
     this.backendState = 'stopping'; this.emit('update', this.snapshot());
     await this.kill(this.backend, process.platform === 'win32' ? this.hostExe : path.join(this.root, 'zviewer-backend.exe'));
@@ -276,6 +286,13 @@ class Controller extends EventEmitter {
   }
   webUrl() { const c = this.active || this.store.value; return `${c.https ? 'https' : 'http'}://localhost:${c.port}/`; }
   managementUrl() { return `${this.webUrl()}admin`; }
+  async startCli() { return this.exclusive(async () => { await this.cli.start(this.store.value.cli.port); return this.snapshot(); }); }
+  async cliSettingsUrl() {
+    await this.startCli();
+    return this.cli.url({ serverUrl: this.webUrl(), user: this.store.value.cli.user, embedded: true });
+  }
+  async stopCli() { return this.exclusive(async () => { await this.cli.stop(); return this.snapshot(); }); }
+  saveCli(patch) { return this.save({ cli: { port: patch.port, autoStart: patch.autoStart, user: patch.user ?? this.store.value.cli.user } }); }
   async shutdown() { return this.stop(); }
 }
 module.exports = { Controller, available, udpAvailable, probe, FRP_VERSION };

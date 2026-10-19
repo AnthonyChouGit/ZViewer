@@ -9,7 +9,13 @@ app.setName('ZViewer Desktop');
 app.setPath('userData', arg('state-dir') || (app.isPackaged ? path.join(app.getPath('appData'), 'ZViewerDesktop') : path.join(__dirname, '.runtime', 'profile-live')));
 app.setAppUserModelId('xyz.zviewer.desktop');
 const root = resolveRuntime(__dirname, { packaged: app.isPackaged, override: arg('runtime-root') });
-const frpc = app.isPackaged ? path.join(root, 'frpc.exe') : path.join(__dirname, '.runtime', 'tools', 'frp_0.71.1_windows_amd64', 'frpc.exe');
+function companion(name, development) {
+  if (!app.isPackaged) return path.join(__dirname, '.runtime', 'tools', ...development);
+  const candidates = [path.join(path.dirname(process.execPath), 'runtime', name), path.join(root, name)];
+  return candidates.find(file => fs.existsSync(file)) || candidates[0];
+}
+const frpc = companion('frpc.exe', ['frp_0.71.1_windows_amd64','frpc.exe']);
+const cliExecutable = companion('zviewer-cli-windows-amd64.exe', ['zviewer-cli','zviewer-cli-windows-amd64.exe']);
 const uiFile = path.join(__dirname, 'ui', 'index.html');
 const locked = app.requestSingleInstanceLock();
 let win, tray, controller, quitting = false, exited = false;
@@ -30,7 +36,7 @@ function updateTray() {
     { label: controller.backend ? '停止服务' : '启动服务', enabled: !controller.operation, click: () => command(() => controller.backend ? controller.stop() : controller.start()) },
     { label: '重启服务', enabled: !controller.operation && !!controller.backend, click: () => command(() => controller.restart()) },
     { label: '打开网页端', click: () => command(() => openLocalPage()) },
-    { label: '打开管理页面', click: () => command(openManager) },
+    { label: '高画质代理', click: () => show('cli') },
     { label: '查看运行日志', click: () => show('logs') }, { type: 'separator' },
     { label: '退出并停止受管服务', click: () => app.quit() }
   ]));
@@ -62,7 +68,7 @@ else {
       encrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows 凭据保护不可用，Token 未保存'); return safeStorage.encryptString(value).toString('base64'); },
       decrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('无法解密 FRP Token'); return safeStorage.decryptString(Buffer.from(value, 'base64')); }
     };
-    try { controller = new Controller({ root, stateDir: app.getPath('userData'), frpc, cipher }); }
+    try { controller = new Controller({ root, stateDir: app.getPath('userData'), frpc, cliExecutable, cipher }); }
     catch (error) { dialog.showErrorBox('ZViewer 配置读取失败', `${error.message}\n配置目录：${app.getPath('userData')}`); exited = true; app.quit(); return; }
     Menu.setApplicationMenu(null);
     tray = new Tray(icon().resize({ width: 32, height: 32 }));
@@ -70,6 +76,13 @@ else {
     win = new BrowserWindow({ width: 1320, height: 910, minWidth: 1040, minHeight: 740, frame: false, show: false, backgroundColor: '#eaf0fb', icon: icon(), title: 'ZViewer · Windows 控制台', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', (event, url) => { if (url.split('#')[0] !== pathToFileURL(uiFile).href) event.preventDefault(); });
+    const guardNavigation = event => {
+      if (event.isMainFrame) {
+        if (event.url.split('#')[0] !== pathToFileURL(uiFile).href) event.preventDefault();
+      } else if (event.url !== 'about:blank' && !controller.cli.allowsFrame(event.url)) event.preventDefault();
+    };
+    win.webContents.on('will-frame-navigate', guardNavigation);
+    win.webContents.on('will-redirect', guardNavigation);
     win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     win.webContents.on('before-input-event', (event, input) => { if (input.type === 'keyDown' && ((input.control && input.key.toLowerCase() === 'r') || input.key === 'F5')) { event.preventDefault(); win.webContents.reloadIgnoringCache(); } });
     win.on('close', event => { event.preventDefault(); if (controller.store.value.closeToTray && !quitting) win.hide(); else app.quit(); });
@@ -95,7 +108,7 @@ else {
           case 'save': {
             if (!app.isPackaged && payload.config?.launchAtLogin) throw new Error('开机启动请在已构建的桌面程序中设置');
             const result = controller.save(payload.config || {}, payload.token);
-            if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: result.launchAtLogin, path: process.execPath, args: [] });
+            if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: result.launchAtLogin, path: process.env.ZVIEWER_GUI_LAUNCHER || process.execPath, args: [] });
             return result;
           }
           case 'https': return await controller.enableHttps(payload.domain || 'localhost', payload.ip || '');
@@ -108,6 +121,12 @@ else {
           case 'untrust': await controller.certificates.trust(false); controller.trusted = false; controller.emit('update', controller.snapshot()); return { trusted: false };
           case 'open-manager': await openManager(); return true;
           case 'open-web': await openLocalPage(); return true;
+          case 'cli-start': return await controller.startCli();
+          case 'cli-stop': return await controller.stopCli();
+          case 'cli-save': return controller.saveCli(payload);
+          case 'cli-open': {
+            return { url: await controller.cliSettingsUrl() };
+          }
           case 'frp-start': return await controller.startFrp();
           case 'frp-stop': await controller.stopFrp(); controller.emit('update', controller.snapshot()); return true;
           case 'export': return await exportFile(payload.kind);

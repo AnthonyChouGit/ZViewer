@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src http://127.0.0.1:*; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>ZViewer · Windows 控制台</title>
   <link rel="icon" href="app-icon.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
@@ -21,13 +21,14 @@
       <a href="#overview" data-page="overview"><span data-icon="grid"></span>服务总览<span class="nav-key">01</span></a>
       <a href="#frp" data-page="frp"><span data-icon="network"></span>FRP 自建穿透<span class="nav-key">02</span></a>
       <a href="#cert" data-page="cert"><span data-icon="shield"></span>证书与域名<span class="nav-key">03</span></a>
-      <a href="#logs" data-page="logs"><span data-icon="terminal"></span>运行日志<span class="nav-key">04</span></a>
+      <a href="#cli" data-page="cli"><span data-icon="watch"></span>高画质代理<span class="nav-key">04</span></a>
+      <a href="#logs" data-page="logs"><span data-icon="terminal"></span>运行日志<span class="nav-key">05</span></a>
     </nav>
     <div class="sidebar-bottom"><a class="settings-link" href="#settings" data-page="settings"><span data-icon="settings"></span>应用设置</a><button class="docs-link" id="docs-link"><span data-icon="book"></span>使用文档<span>↗</span></button></div>
   </aside>
   <div class="main-shell">
     <header class="toolbar"><div><span class="breadcrumb">工作空间</span><span class="slash">/</span><span id="crumb">服务总览</span></div><div class="toolbar-right"><span class="preview-badge"><i></i>交互原型</span><span class="toolbar-divider"></span><button id="tray-button" class="toolbar-button"><span data-icon="tray"></span><span id="tray-label">托盘预览</span></button></div></header>
-    <main id="main" tabindex="-1"></main>
+    <main id="main" tabindex="-1"><div id="page-view"></div><div id="cli-view" hidden></div></main>
     <footer class="statusbar"><span><i class="status-dot"></i><span id="footer-status">本地界面预览</span></span><span>所有服务状态均为演示<span class="footer-separator">/</span>界面版本 0.1.0</span></footer>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
