@@ -329,7 +329,7 @@ volumes:
   zviewer-data:
 ```
 
-- Image tags: `latest` and `X.Y` only move on official releases (pushing a `vX.Y.Z` tag), while `X.Y.Z` pins an exact version. `edge` tracks the latest `main` build and may be unstable — for testing only.
+- Image tags: `latest` and `X.Y` only move on official releases (pushing a `vX.Y.Z` tag), while `X.Y.Z` pins an exact version. `dev` tracks the latest `main` build and may be unstable — for testing only.
 - Voice chat works out of the box with zero configuration: the public IP is discovered automatically via LiveKit's native STUN, and signaling URLs are derived from the page origin (HTTPS pages get `wss://`). Media travels over 3333/udp; make sure your firewall allows it. When UDP is blocked by ISP/corporate firewalls, switch "Voice Transport Mode" to TCP in the admin panel (LiveKit native ICE/TCP 3337 direct-connect fallback; requires port 3337/tcp and the compose mapping).
 - **Advanced** (voice transport mode UDP/TCP switch, TURN/TLS fallback relay for blocked UDP, manual ICE address for complex NAT): see *Voice Advanced Configuration* in the extended tutorials.
 
