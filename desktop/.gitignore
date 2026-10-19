@@ -1,0 +1,8 @@
+node_modules/
+.runtime/
+artifacts/
+release/
+exports/
+assets/ZViewer.ProcessHost.exe
+*.log
+__pycache__/

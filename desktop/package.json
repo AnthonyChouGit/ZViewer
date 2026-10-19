@@ -1,0 +1,23 @@
+{
+  "name": "zviewer-desktop-console",
+  "version": "0.4.1",
+  "private": true,
+  "description": "ZViewer Windows desktop console",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "preview": "node preview-server.cjs",
+    "check": "node scripts/check.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "build": "node scripts/build.mjs",
+    "package": "python scripts/package-release.py"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.9.0"
+  },
+  "dependencies": {
+    "@peculiar/x509": "2.2.0",
+    "reflect-metadata": "0.2.2"
+  }
+}
