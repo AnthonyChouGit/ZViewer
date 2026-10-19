@@ -1,3 +1,4 @@
+import { requireRoomReadAccess } from '../services/room-access';
 import { Router, Response } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { AppDataSource } from '../data-source';
@@ -21,7 +22,7 @@ const danmakuTrackRepository = () => AppDataSource.getRepository(DanmakuTrack);
 function canControlRoom(req: AuthenticatedRequest, room: Room): boolean {
   const role = req.user?.role;
   if (role === 'root') return true;
-  if (role === 'admin' && room.ownerUserId === req.user?.userId) return true;
+  if ((req.user?.userId ?? 0) > 0 && room.ownerUserId === req.user?.userId) return true;
   return false;
 }
 
@@ -166,6 +167,7 @@ export function createRoomsRouter(io: SocketIOServer): Router {
   // GET /api/rooms/:roomId/danmaku-tracks - 获取弹幕轨道列表
   router.get(
     '/:roomId/danmaku-tracks',
+    requireRoomReadAccess,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const roomId = req.params.roomId as string;
@@ -389,6 +391,7 @@ export function createRoomsRouter(io: SocketIOServer): Router {
   // GET /api/rooms/:roomId/danmaku-meta - 获取房间弹幕辅助数据（屏蔽词/已删除/实时弹幕记录）
   router.get(
     '/:roomId/danmaku-meta',
+    requireRoomReadAccess,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const roomId = req.params.roomId as string;

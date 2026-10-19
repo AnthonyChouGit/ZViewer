@@ -71,10 +71,10 @@ test('HTTP direct and upstream proxy preserve ranges, headers and bytes', async 
   const proxyUrl = await listen(t, proxy);
   for (const url of [originUrl, proxyUrl]) {
     for (const header of ['bytes=0-', `bytes=0-${size - 1}`, 'bytes=100-', 'bytes=-32', 'bytes=0-31']) {
-      const range = parseRangeHeader(header, size, url === originUrl ? null : undefined);
+      const range = parseRangeHeader(header, size, url === originUrl || header === `bytes=0-${size - 1}` ? null : undefined);
       const response = await fetch(url, { headers: { Range: header } });
       const upstreamHeader = url === proxyUrl && range.end < size - 1 &&
-        (header === 'bytes=0-' || header === `bytes=0-${size - 1}` || header === 'bytes=100-')
+        (header === 'bytes=0-' || header === 'bytes=100-')
         ? `bytes=${range.start}-${range.end}` : header;
       assert.equal(receivedRanges.at(-1), upstreamHeader);
       assert.equal(response.status, 206);

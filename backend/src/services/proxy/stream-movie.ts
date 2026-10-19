@@ -10,6 +10,7 @@
 import { AppDataSource } from '../../data-source';
 import { Movie } from '../../entities/Movie';
 import { UserMount } from '../../entities/UserMount';
+import { Room } from '../../entities/Room';
 import { TtlCache } from '../../utils/ttl-cache';
 import type { MountType } from '../../services/proxy/mount-proxy';
 
@@ -131,7 +132,10 @@ export async function resolveMovieStream(
     const targetUrl = options?.normalizeServerUrl
       ? options.normalizeServerUrl(movie.serverUrl)
       : movie.serverUrl;
-    mount = await mountRepo.findOneBy({ serverUrl: targetUrl, type: source });
+    const room = await AppDataSource.getRepository(Room).findOneBy({ roomId: movie.roomId });
+    if (room?.ownerUserId) {
+      mount = await mountRepo.findOneBy({ serverUrl: targetUrl, type: source, userId: room.ownerUserId });
+    }
   }
 
   let username = movie.username || undefined;

@@ -8,6 +8,8 @@
 import type { Server as SocketIOServer } from 'socket.io';
 import { IsNull } from 'typeorm';
 import { AppDataSource } from '../../data-source';
+import { DanmakuTrack } from '../../entities/DanmakuTrack';
+import { RoomDanmakuMeta } from '../../entities/RoomDanmakuMeta';
 import { Room } from '../../entities/Room';
 import { Session } from '../../entities/Session';
 import { Comment } from '../../entities/Comment';
@@ -50,6 +52,8 @@ export async function deleteRoomAndRelations(
   await playbackStateRepo.delete({ roomId });
   await musicPlaybackStateRepo.delete({ roomId });
   await musicQueueRepo.delete({ roomId });
+  await AppDataSource.getRepository(DanmakuTrack).delete({ roomId });
+  await AppDataSource.getRepository(RoomDanmakuMeta).delete({ roomId });
 
   // 删除房间
   await roomRepo.delete({ roomId });

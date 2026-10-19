@@ -18,8 +18,14 @@
  * @param hostname 已解析的主机名（不含端口、不含协议）
  */
 export function isInternalNetworkHost(hostname: string): boolean {
-  const host = hostname.trim().toLowerCase();
+  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (!host) return false;
+  if (host === '::' || /^0\./.test(host)) return true;
+  const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16), lo = parseInt(mappedHex[2], 16);
+    return isInternalNetworkHost(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
 
   // 主机名 localhost / mDNS .local
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) {

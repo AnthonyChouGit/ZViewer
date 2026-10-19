@@ -89,6 +89,10 @@ export class ViewerManagementHandler implements SocketEventHandler {
           const roomRepo = AppDataSource.getRepository(Room);
           const room = await roomRepo.findOneBy({ roomId: sharer.roomId });
 
+          if (!room || viewerSocket.data.pendingRoomId !== sharer.roomId) {
+            return safeAck(callback, { success: false, message: '没有该房间的待审批申请' });
+          }
+
           // 调用 admitViewer 创建 viewer session + join 房间
           await roomSessionService.admitViewer(
             viewerSocket,
@@ -140,7 +144,7 @@ export class ViewerManagementHandler implements SocketEventHandler {
 
           // 将观众 userId 加入持久化批准白名单，后续刷新/切换模式无需再次审批
           const approvedUserId: number | null = viewerSocket.data?.userId ?? null;
-          if (approvedUserId != null && room) {
+          if (approvedUserId != null && approvedUserId > 0 && room) {
             let approvedList: number[] = [];
             try {
               approvedList = JSON.parse(room.approvedViewers || '[]');
@@ -179,6 +183,11 @@ export class ViewerManagementHandler implements SocketEventHandler {
             return safeAck(callback, { success: false, message: '无权限拒绝' });
           }
 
+          const viewerSocket = io.sockets.sockets.get(payload.viewerSocketId);
+          if (viewerSocket?.data.pendingRoomId !== sharer.roomId) {
+            return safeAck(callback, { success: false, message: '没有待审批申请' });
+          }
+          delete viewerSocket.data.pendingRoomId;
           io.to(payload.viewerSocketId).emit('join-rejected', {
             roomId: sharer.roomId,
           });

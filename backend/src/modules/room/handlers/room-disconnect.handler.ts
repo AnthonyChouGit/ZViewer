@@ -29,7 +29,7 @@ export class RoomDisconnectHandler implements SocketEventHandler {
       void (async () => {
         try {
         // 结束当前 socket 的活跃 session（可能是 sharer 或 viewer）
-        const session = await roomSessionService.endSession(socket.id);
+        const session = await roomSessionService.endSession(socket.id, io);
         if (!session) return;
 
         if (session.role === 'sharer') {

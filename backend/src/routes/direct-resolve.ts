@@ -11,6 +11,7 @@
  * （不接受任意 serverUrl，防止遍历探测他人挂载），能拿到 movieId 的
  * 都是已认证用户，影片列表本身已对其可见。
  */
+import { requireMovieReadAccess } from '../services/room-access';
 import { Router, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Movie } from '../entities/Movie';
@@ -24,7 +25,7 @@ const router = Router();
 
 const movieRepository = () => AppDataSource.getRepository(Movie);
 
-router.use(authenticateToken);
+router.use(authenticateToken, requireMovieReadAccess);
 
 // GET /movie?movieId= - 实时解析影片直链（后端 5 分钟 TTL 缓存 + 单飞去重）
 router.get('/movie', async (req: AuthenticatedRequest, res: Response): Promise<void> => {

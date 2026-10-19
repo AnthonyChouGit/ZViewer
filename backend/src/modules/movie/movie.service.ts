@@ -10,7 +10,7 @@
  *
  * 注意：
  * - acceptQuality 在 DB 中是 JSON 字符串，DTO 中保持 string 类型
- * - password 在 DB 中通过 ValueTransformer 自动加密/解密，DTO 中返回解密后的值
+ * - 挂载凭证仅供服务端使用，不通过 DTO 返回客户端
  */
 import { AppDataSource } from '../../data-source';
 import { Movie } from '../../entities/Movie';
@@ -29,7 +29,7 @@ const MOUNT_SOURCE_TYPES = ['webdav', 'openlist', 'ftp', 'emby', 'jellyfin'];
  * 按 source + serverUrl 反查挂载并返回锚定 ID。
  *
  * 同一服务器可能被多个用户挂载（凭证不同），优先取 userId 命中的
- * 挂载（推送者自己的），否则取任意一条。openlist 的 movie.serverUrl
+ * 挂载（推送者自己的）；不借用其他用户的挂载。openlist 的 movie.serverUrl
  * 存原始输入，匹配前需 normalize（挂载表存规范化地址）。
  */
 async function resolveSourceMountId(
@@ -50,10 +50,8 @@ async function resolveSourceMountId(
   );
   if (matched.length === 0) return null;
   const picked =
-    (userId !== undefined
-      ? matched.find((m) => m.userId === userId)
-      : undefined) ?? matched[0];
-  return picked.id;
+    userId !== undefined ? matched.find((m) => m.userId === userId) : undefined;
+  return picked?.id ?? null;
 }
 
 /** 影片实体别名，便于类型引用 */
@@ -344,10 +342,8 @@ export class MovieService {
     if (typeof data.multiVersion === 'boolean') update.multiVersion = data.multiVersion;
     if (data.sourceMeta !== undefined) update.sourceMeta = normalizeSourceMeta(data.sourceMeta);
 
-    // serverUrl/source 变更时重新锚定挂载（显式传 sourceMountId 时以调用方为准）
-    if (data.sourceMountId !== undefined) {
-      update.sourceMountId = data.sourceMountId;
-    } else if (update.serverUrl !== undefined || update.source !== undefined) {
+    // serverUrl/source 变更时重新锚定挂载（不信任客户端直接指定的挂载 ID）
+    if (data.sourceMountId !== undefined || update.serverUrl !== undefined || update.source !== undefined) {
       update.sourceMountId = await resolveSourceMountId(
         update.source ?? movie.source,
         update.serverUrl ?? movie.serverUrl,
@@ -439,8 +435,9 @@ export class MovieService {
       serverUrl: movie.serverUrl,
       sourceMountId: movie.sourceMountId,
       path: movie.path,
-      username: movie.username,
-      password: movie.password,
+      // Upstream credentials stay on the server, including socket broadcasts.
+      username: null,
+      password: null,
       directLink: movie.directLink,
       directLinkProxy: movie.directLinkProxy === true,
       serverProxy: movie.serverProxy === true,
