@@ -1,7 +1,7 @@
 package main
 
-// App 是暴露给前端的绑定对象，方法签名与 Electron preload 的
-// window.zviewerDesktop（info / command / window / openDocs）保持一致。
+// App 是暴露给前端的绑定对象：方法经 Wails 生成 window.go.main.App，
+// 再由 ui/bridge.js 包装成界面唯一认的 window.zviewerDesktop。
 
 import (
 	"context"

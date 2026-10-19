@@ -1,7 +1,7 @@
 package main
 
-// Wails 壳入口：替代 Electron main.cjs，负责解析运行包位置、
-// 准备进程监管助手，并把绑定对象交给 WebView2 窗口。
+// 桌面壳入口：解析运行包与配置目录位置、准备进程监管助手，
+// 并把绑定对象交给 WebView2 窗口。
 
 import (
 	"context"
@@ -146,15 +146,15 @@ func main() {
 
 	root := resolveRuntimeRoot(exeDir)
 	app := &App{
-		exeDir:    exeDir,
-		stateDir:  stateDir,
-		version:   appVersion,
-		helper:    helper,
-		root:      root,
-		frpc:      companion(root, exeDir, "frpc.exe", []string{"frp_0.71.1_windows_amd64", "frpc.exe"}),
-		cli:       companion(root, exeDir, "zviewer-cli-windows-amd64.exe", []string{"zviewer-cli", "zviewer-cli-windows-amd64.exe"}),
-		hostExe:   resolveHostExe(exeDir, root),
-		packaged:  fileExists(filepath.Join(exeDir, "runtime")),
+		exeDir:   exeDir,
+		stateDir: stateDir,
+		version:  appVersion,
+		helper:   helper,
+		root:     root,
+		frpc:     companion(root, exeDir, "frpc.exe", []string{"frp_0.71.1_windows_amd64", "frpc.exe"}),
+		cli:      companion(root, exeDir, "zviewer-cli-windows-amd64.exe", []string{"zviewer-cli", "zviewer-cli-windows-amd64.exe"}),
+		hostExe:  resolveHostExe(exeDir, root),
+		packaged: fileExists(filepath.Join(exeDir, "runtime")),
 	}
 	if err := app.bootstrap(); err != nil {
 		fatalDialog("ZViewer 配置读取失败", err.Error()+"\n配置目录："+stateDir)
@@ -164,8 +164,8 @@ func main() {
 	// Windows N 无重定向位图的窗口无法被 GDI 截屏，调试时用该开关切成不透明。
 	opaque := os.Getenv("ZVIEWER_SHELL_OPAQUE") == "1"
 	windowOptions := &windowsopts.Options{
-		Theme:               windowsopts.SystemDefault,
-		BackdropType:        windowsopts.Mica,
+		Theme:        windowsopts.SystemDefault,
+		BackdropType: windowsopts.Mica,
 		// 浏览器配置随运行状态目录走，避免与其它 WebView2 宿主抢同一份配置。
 		WebviewUserDataPath: filepath.Join(stateDir, "webview"),
 		WindowClassName:     "zviewerWindow",

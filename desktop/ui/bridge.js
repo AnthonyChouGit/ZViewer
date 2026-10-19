@@ -1,6 +1,6 @@
-// Wails 桥接层：把 Go 绑定包装成 Electron preload 暴露的同名 API。
-// Electron 下 preload 已注入 window.zviewerDesktop，这里的判断会直接跳过；
-// 浏览器预览（preview-server）也不会命中，界面仍走演示态。
+// 桥接层：把 Go 绑定包装成界面唯一认的 window.zviewerDesktop。
+// 只在 WebView2（wails.localhost）里生效；浏览器预览（preview-server）不命中，
+// 界面仍走演示态。若同名对象已存在则直接退出，避免重复注入。
 (() => {
   'use strict';
   if (window.zviewerDesktop) return;

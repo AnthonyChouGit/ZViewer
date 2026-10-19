@@ -1,7 +1,7 @@
 package main
 
 // 系统托盘：Wails v2 没有内置托盘，这里直接用 Shell_NotifyIcon 实现，
-// 菜单项与 Electron 版保持一致（显示控制台 / 启停服务 / 打开网页端 / 退出）。
+// 菜单项固定为显示控制台 / 启停服务 / 打开网页端 / 退出。
 
 import (
 	"errors"
@@ -303,7 +303,7 @@ func trayWindowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 	return result
 }
 
-// popup 弹出与 Electron 版同构的托盘菜单。
+// popup 弹出托盘右键菜单。
 func (t *trayIcon) popup() {
 	if t == nil || t.hwnd == 0 {
 		return

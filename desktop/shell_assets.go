@@ -5,7 +5,8 @@ import (
 	"io/fs"
 )
 
-// 直接嵌入 desktop/ui，Electron 与 Wails 两个壳在迁移期共用同一份界面。
+// 直接嵌入 desktop/ui：界面不依赖任何运行时资源文件，
+// 单文件 EXE 即可完整渲染，也省掉打包时的静态目录同步。
 //
 //go:embed all:ui
 var uiAssets embed.FS

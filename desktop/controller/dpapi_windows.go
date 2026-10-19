@@ -2,8 +2,8 @@
 
 package controller
 
-// DPAPI 封装：与 Electron safeStorage 一样按当前 Windows 用户加密，
-// 因此已有 settings.json 里的 base64 DPAPI 密文可以被直接解开。
+// DPAPI 封装：沿用旧版 safeStorage 的密文格式，按当前 Windows 用户加密，
+// 因此历史 settings.json 里的 base64 DPAPI 密文可以被直接解开。
 
 import (
 	"encoding/base64"

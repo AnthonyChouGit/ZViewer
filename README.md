@@ -213,4 +213,4 @@ services:
 
 ## Windows 桌面控制台（可选）
 
-Windows 用户可构建带头像图标的目录 GUI，双击分发目录唯一的 `ZViewer.exe` 打开控制台，组件放在 `app/`，无需安装或自解包。控制台提供系统托盘、本机 HTTPS、自建 FRP、可保存的监听端口，以及直接在 GUI 内配置和扫码登录的 ZViewerCLI 高画质代理。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有服务端网页与命令行源码保持兼容。
+Windows 用户可构建原生目录 GUI（Go + 系统 WebView2，无需安装运行时，也不依赖 Electron），双击分发目录唯一的 `ZViewerShell.exe` 打开控制台，运行包放在同级 `runtime/`。控制台提供系统托盘、本机 HTTPS、自建 FRP、可保存的监听端口，以及直接在窗口内配置和扫码登录的 ZViewerCLI 高画质代理。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有服务端网页与命令行源码保持兼容。
