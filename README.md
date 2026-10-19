@@ -209,3 +209,7 @@ services:
 - 默认音频走 3333/udp，防火墙需放行；可在管理端切换为 TCP，需额外放行 3337/tcp（Docker 需补端口映射）
 - 纯内网 / 特殊 NAT 环境 STUN 探测失败时，用 `LIVEKIT_NODE_IP` 指定服务器公网 IP
 - 需要 TURN/TLS 中继时，在 compose 中补 `5349` 端口并配置 `LIVEKIT_TURN_*` 三项变量
+
+## Windows 桌面控制台（可选）
+
+Windows 用户可使用带系统托盘的桌面控制台管理本机服务、localhost HTTPS、自建 FRP 与监听端口，并通过默认浏览器打开网页端。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有命令行启动与网页界面继续保留。
