@@ -12,6 +12,7 @@ import {
   type WatchTogetherState,
   type MovieDto,
   type Movie,
+  type PreviewPlayRequest,
   mapDtoToMovie,
 } from '@/store/roomStore'
 import { type QualityOption } from '@/modules/movie-source/resolveSource'
@@ -376,17 +377,7 @@ export function useWatchTogether({
 
     // 观众端：接收房主广播的预览源，直接加载播放（不经过影片列表）
     const handlePreviewSource = (payload: {
-      source: {
-        url: string
-        title?: string
-        sourceType?: string
-        format?: MediaFormat
-        audioUrl?: string
-        videoCodec?: string
-        audioCodec?: string
-        headers?: Record<string, string>
-        duration?: number
-      }
+      source: PreviewPlayRequest
     }) => {
       if (isHostRef.current) return
       const video = videoRef.current
@@ -405,6 +396,8 @@ export function useWatchTogether({
         playbackRate: watchTogether.playbackRate,
         duration: source.duration ?? 0,
         headers: source.headers,
+        playsvideoEnabled: source.playsvideoEnabled !== false,
+        noProxyFallback: source.noProxyFallback === true,
         isPreview: true,
         previewTitle: source.title,
       }
@@ -1316,19 +1309,7 @@ export function useWatchTogether({
    * 用于 ani-subs / Kazumi 等番剧源选集后的实时播放。
    */
   const previewPlay = useCallback(
-    (params: {
-      url: string
-      title?: string
-      sourceType?: string
-      format?: MediaFormat
-      audioUrl?: string
-      videoCodec?: string
-      audioCodec?: string
-      headers?: Record<string, string>
-      duration?: number
-      /** 影片级浏览器播放引擎（playsvideo）开关：false 时强制原生直连播放 */
-      playsvideoEnabled?: boolean
-    }) => {
+    (params: PreviewPlayRequest) => {
       const video = videoRef.current
       if (!video) return
 
@@ -1352,6 +1333,7 @@ export function useWatchTogether({
         headers: params.headers,
         // 预览源同样遵循影片级浏览器播放引擎开关（添加面板统一传入）
         playsvideoEnabled: params.playsvideoEnabled !== false,
+        noProxyFallback: params.noProxyFallback === true,
         isPreview: true,
         previewTitle: params.title,
       }
@@ -1383,6 +1365,8 @@ export function useWatchTogether({
               audioCodec: params.audioCodec,
               headers: params.headers,
               duration: params.duration,
+              playsvideoEnabled: params.playsvideoEnabled,
+              noProxyFallback: params.noProxyFallback === true,
             },
           })
         })

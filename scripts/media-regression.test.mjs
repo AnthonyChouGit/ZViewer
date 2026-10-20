@@ -56,14 +56,91 @@ test('PGS RLE handles literal, transparent, short/long colored runs and line end
   assert.throws(() => decodePgsRle(Uint8Array.from([0,0x85,1]),4,1), /行长度/);
 });
 
-function loadLocalTs(file, requireFn = () => { throw new Error('Unexpected import'); }) {
-  const code = ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+function loadLocalTs(file, requireFn = () => { throw new Error('Unexpected import'); }, extraCode = '') {
+  const code = ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   const exports = {};
-  new Function('exports','require',code)(exports,requireFn);
+  new Function('exports','require',code + extraCode)(exports,requireFn);
   return exports;
 }
 
 const syncState = loadLocalTs('frontend/src/modules/sync-playback/services/state-merge.ts');
+const mediaPolicy = loadLocalTs('frontend/src/modules/movie-source/media-policy.ts');
+
+test('data-source routing and statistics honor relay OFF/ON, including MP4 and previews', () => {
+  for (const sourceType of ['anime', 'kazumi', 'cms']) {
+    for (const serverProxy of [undefined, false, true]) {
+      const movie = { sourceType, serverProxy, directLink: false };
+      assert.equal(mediaPolicy.usesDirectMedia(movie), serverProxy !== true);
+      assert.equal(mediaPolicy.isDirectPlayback({ sourceUrl: 'https://media.example/video.mp4' }, movie), serverProxy !== true);
+    }
+    assert.equal(mediaPolicy.usesDirectMedia({ sourceType, serverProxy: true, directLink: true }), false);
+  }
+  for (const module of ['', 'kazumi/', 'cms/', 'anisubs/']) {
+    assert.equal(mediaPolicy.isDirectPlayback({ sourceUrl: `/api/stream/${module}proxy?url=https%3A%2F%2Fmedia.example%2Fvideo`, noProxyFallback: true }), false);
+  }
+  assert.equal(mediaPolicy.isDirectPlayback({ sourceUrl: 'https://media.example/index.m3u8', noProxyFallback: true }), true);
+  assert.equal(mediaPolicy.isDirectPlayback({}, { sourceType: 'webdav', directLink: true }), true);
+  assert.equal(mediaPolicy.isDirectPlayback({}, { sourceType: 'webdav', directLink: false }), false);
+  assert.equal(mediaPolicy.isDirectPlayback({}, { sourceType: 'mp4' }), true);
+});
+
+test('CMS, ani-subs and Kazumi resolvers carry direct policy through the host/viewer wire state', async () => {
+  const resolved = { url: 'https://media.example/episode.m3u8', format: 'hls', headers: { Referer: 'https://source.example/' } };
+  const proxy = (url) => `/api/stream/cms/proxy?url=${encodeURIComponent(url)}`;
+  const resolver = loadLocalTs('frontend/src/modules/movie-source/resolver.ts', (name) => {
+    if (name === './media-policy') return mediaPolicy;
+    if (name === '@/modules/cms/api') return { resolveCmsEpisode: async () => resolved, buildCmsProxyUrl: proxy };
+    if (name === '@/modules/anisubs') return { resolveAniSubsEpisode: async () => resolved, buildAniSubsProxyUrl: proxy };
+    if (name === '@/lib/mediaFormat') return { detectMediaFormat: () => 'hls' };
+    return {};
+  });
+  for (const sourceType of ['anime', 'cms', 'kazumi']) {
+    for (const serverProxy of [false, true]) {
+      const movie = { sourceType, serverProxy, directLink: false, id: 1, url: serverProxy ? proxy(resolved.url) : resolved.url, format: 'hls', sourceMeta: { sourceId: 'fixture', episode: { id: '1' }, vodId: '1', playFromIndex: 0, episodeIndex: 0 } };
+      const result = await resolver.resolveMovieSource({ movie, sourceType });
+      assert.equal(result.noProxyFallback, !serverProxy, sourceType);
+      assert.equal(result.sourceUrl, serverProxy ? proxy(resolved.url) : resolved.url);
+      const state = { sourceUrl: result.sourceUrl, sourceType, noProxyFallback: result.noProxyFallback, currentTime: 0, isPlaying: true, playbackRate: 1 };
+      const received = syncState.restoreStateSnapshot({}, JSON.parse(JSON.stringify(syncState.buildStateFromVideo(null, state))));
+      assert.equal(received.noProxyFallback, !serverProxy);
+      assert.equal(mediaPolicy.isDirectPlayback(received, movie), !serverProxy);
+      assert.equal(syncState.isStateEqual(state, { ...state, noProxyFallback: !state.noProxyFallback }), false);
+    }
+  }
+});
+
+test('HLS transport keeps direct manifests, segments, keys and maps off the media proxy', () => {
+  const previousWindow = globalThis.window, previousStorage = globalThis.localStorage;
+  globalThis.window = { location: { origin: 'https://watch.example', hostname: 'watch.example', protocol: 'https:' } };
+  globalThis.localStorage = { getItem: () => null };
+  try {
+    const urlProxy = loadLocalTs('frontend/src/modules/player/services/url-proxy.ts');
+    const hlsProxy = loadLocalTs('frontend/src/modules/player/services/hls-proxy.ts');
+    class BaseLoader { load(context) { this.requested = context.url; } }
+    const { factory } = loadLocalTs('frontend/src/modules/player/engines/hls-engine.ts', name => {
+      if (name === 'hls.js') return { default: { DefaultConfig: { loader: BaseLoader } } };
+      if (name === '@/lib/api') return { getApiUrl: () => 'https://watch.example' };
+      if (name === '../services/hls-proxy') return hlsProxy;
+      if (name === '../services/url-proxy') return urlProxy;
+      if (name === './hls-ad-filter') return { isCmsProxyEndpoint: () => false };
+      return {};
+    }, '\nexports.factory = createProxyLoader;');
+    const source = 'https://media.example/master.m3u8';
+    const DirectLoader = factory(source, undefined, true);
+    const RelayLoader = factory('/api/stream/kazumi/proxy?url=' + encodeURIComponent(source), undefined, false);
+    for (const file of ['master.m3u8', 'child/index.m3u8', 'chunk.ts', 'encryption.key', 'init.mp4']) {
+      const target = 'https://media.example/' + file;
+      const direct = new DirectLoader(); direct.load({ url: target }, {}, {});
+      assert.equal(direct.requested, target);
+      const relay = new RelayLoader(); relay.load({ url: target }, {}, {});
+      const request = new URL(relay.requested);
+      assert.equal(request.pathname, '/api/stream/kazumi/proxy');
+      assert.equal(request.searchParams.get('url'), target);
+    }
+  } finally {
+    globalThis.window = previousWindow; globalThis.localStorage = previousStorage;
+  }
+});
 const biliState = {
   sourceUrl: 'https://media.example/video.m4s', sourceType: 'bilibili',
   audioUrl: 'https://media.example/audio.m4s', format: 'dash',

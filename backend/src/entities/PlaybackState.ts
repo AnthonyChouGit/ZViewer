@@ -89,6 +89,10 @@ export class PlaybackState {
   @Column({ type: 'text', nullable: true })
   headers!: string | null;
 
+  /** 保留直连策略；旧记录为空，恢复后按影片配置重新解析。 */
+  @Column({ type: 'boolean', nullable: true })
+  noProxyFallback!: boolean | null;
+
   /** 是否为预览源（不入影片列表） */
   @Column({ type: 'boolean', default: false })
   isPreview!: boolean;
