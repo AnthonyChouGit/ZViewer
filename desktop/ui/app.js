@@ -135,11 +135,11 @@
         },
         {
           title: 'Cloudflare Tunnel',
-          body: '<p>cloudflared 从本机主动向 Cloudflare 建立隧道，由 Cloudflare 分配一个 <code>trycloudflare.com</code> 地址，本机不需要公网 IP 与端口映射。</p><p>临时地址随隧道关闭失效；要固定域名需配置 Cloudflare 命名隧道，需要一张外国银行卡。</p>'
+          body: '<p><strong>先备一张外国银行卡，每月免费 1000 GB 流量。</strong>固定域名的用法要把自有域名托管到 Cloudflare，开通时须绑定境外支付方式；只取临时地址则不必绑卡。</p><p>cloudflared 由本机向 Cloudflare 边缘发起出站连接，所以不需要公网 IP、端口映射，也不必在路由器或防火墙放行入站端口；外网访问的是 Cloudflare 一侧的地址。</p><p>临时地址走快速隧道（TryCloudflare），形如 <code>xxx.trycloudflare.com</code>，随隧道关闭失效；固定地址走命名隧道，需账号与自有域名。</p>'
         },
         {
           title: '怎么选',
-          body: '<ul><li><strong>有公网 IPv6</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选 FRP，端口与地址可自行安排。</li><li><strong>访问者固定、人数不多</strong>：选虚拟局域网，不暴露公网，边界最简单，但每个人都要安装软件。</li><li><strong>不想维护服务器、也不想让访问者装软件</strong>：选 Cloudflare Tunnel，需要一张外国银行卡。</li></ul><p>同一时间只保留一条入口，多开容易混淆端口与证书状态。</p>'
+          body: '<ul><li><strong>有公网 IPv6</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选 FRP，端口与地址可自行安排。</li><li><strong>访问者固定、人数不多</strong>：选虚拟局域网，不暴露公网，边界最简单，但每个人都要安装软件。</li><li><strong>要固定域名、又不想开放公网端口</strong>：选 Cloudflare Tunnel，需要一张外国银行卡，每月免费 1000 GB 流量。</li></ul>'
         }
       ],
       foot: '四种方式都要求本机 ZViewer 服务已启动；IPv6 与 FRP 还需在路由器或安全组放行对应端口。'
