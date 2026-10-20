@@ -29,7 +29,7 @@
       <button class="nav-toggle" id="nav-toggle" aria-label="折叠导航" aria-expanded="true"><span class="icon-glyph">&#xE700;</span></button>
       <a class="brand" href="#overview" aria-label="ZViewer 首页"><img class="brand-avatar" src="app-icon.png" alt="ZViewer 图标"><div>ZViewer<small>Windows 控制台</small></div></a>
     </div>
-    <div class="workspace"><span class="workspace-icon" data-icon="monitor"></span><div>本地工作空间<small>Windows · 运行包管理</small></div><span class="workspace-dot"></span></div>
+    <div class="workspace" id="workspace-card"><span class="workspace-icon" data-icon="monitor"></span><div class="workspace-text"><span>ZViewer 运行状态</span><small id="workspace-state">未启动</small></div><span class="workspace-dot" id="workspace-dot" data-state="stopped" role="img" aria-label="ZViewer 未启动"></span><button class="workspace-action" id="workspace-action" type="button" data-action="toggle-run">启动</button></div>
     <div class="nav-caption">工作空间</div>
     <nav aria-label="主导航">
       <a href="#overview" data-page="overview"><span data-icon="grid"></span><span class="nav-label">服务总览</span></a>

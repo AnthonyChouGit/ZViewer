@@ -114,6 +114,7 @@
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
     else if (state.page === 'connect') ensureIPv6();
     ui.preview.syncUpdate(snapshot);
+    ui.syncWorkspace?.();
     $('#footer-status').textContent = snapshot.backend === 'running' ? `本地服务运行中 · ${current().port}` : `本地服务 · ${labels[snapshot.backend]}`;
   }
   function tunnelKey(snapshot) { const t = snapshot?.tunnel; return t ? `${t.available}|${t.state}|${t.url}` : ''; }

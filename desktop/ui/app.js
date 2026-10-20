@@ -460,6 +460,24 @@
     return heading('应用设置', '调整窗口、托盘与启动行为。') + `<div class="settings-grid"><section><div class="panel"><div class="panel-heading"><h2>窗口与系统托盘</h2><span class="pill ${state.native ? 'green' : ''}">${state.native ? '原生托盘已启用' : '浏览器预览'}</span></div>${toggle('closeToTray', '关闭窗口时最小化到托盘', '从通知区域恢复窗口。')}${toggle('remember', '记住界面偏好', '在本机保存界面偏好，不保存认证 Token。')}<div class="switch-row"><div><strong>登录 Windows 后启动</strong><p>尚未接入，未修改系统自启。</p></div><span class="pill">后续接入</span></div><div class="switch-row"><div><strong>启动时自动运行服务</strong><p>与登录启动相互独立。</p></div><span class="pill">后续接入</span></div></div><div class="panel section-title"><div><h2>托盘交互</h2><p class="settings-description">${state.native ? '关闭按钮按上方偏好处理。' : '桌面窗口使用系统托盘；浏览器中可预览菜单。'}</p></div>${button('预览菜单', 'tray-preview', 'tray')}</div><div class="help-card"><strong>系统托盘与系统服务</strong><p>桌面程序可隐藏窗口并常驻通知区域，无需安装系统服务。</p></div></section><aside class="panel"><div class="about-mark"><img src="app-icon.png" alt="ZViewer 标志"><div><h2>ZViewer</h2><p>WINDOWS DESKTOP</p></div></div><div class="version">0.1.0 <small>LOCAL BUILD</small></div><p class="settings-description">Windows 桌面控制台<br>网页端与命令行运行包独立部署。</p><div class="panel-line"></div><div class="subheading">本地运行包</div>${[['backend', 'zviewer-backend.exe'], ['cert', 'zviewer-cert.exe'], ['livekit', 'livekit-server.exe'], ['web', 'frontend/dist']].map(([key, label]) => `<div class="file-check"><code>${label}</code><span>${info ? (info[key] ? '已检测到' : '未找到') : '桌面版中检测'}</span></div>`).join('')}<p class="certificate-note">文件存在表示运行包可用，不代表进程已启动。</p></aside></div>`;
   }
   function navigate(page) { if (!titles[page]) page = 'overview'; state.page = page; if (location.hash !== `#${page}`) location.hash = page; else render(); }
+  // 左上角状态卡：绿点=主服务运行中，红点=未启动；按钮与服务总览共用 toggle-run。
+  function syncWorkspace() {
+    const dot = $('#workspace-dot'), label = $('#workspace-state'), button = $('#workspace-action');
+    if (!label || !button) return;
+    const backend = state.live ? state.server?.backend || 'stopped' : state.running ? 'running' : 'stopped';
+    const running = backend === 'running';
+    const busy = backend === 'starting' || backend === 'stopping';
+    const port = state.live ? state.server?.active?.port || state.config?.port : '';
+    const text = running ? `运行中${port ? ` · ${port}` : ''}` : ({ starting: '启动中', stopping: '停止中', error: '运行异常' })[backend] || '未启动';
+    label.textContent = text;
+    if (dot) {
+      dot.dataset.state = running ? 'running' : 'stopped';
+      dot.setAttribute('aria-label', running ? 'ZViewer 运行中' : 'ZViewer 未启动');
+    }
+    button.textContent = running ? '停止' : '启动';
+    button.disabled = busy;
+    button.setAttribute('aria-label', running ? '停止 ZViewer 服务' : '启动 ZViewer 服务');
+  }
   function render() {
     const main = $('#main'), pageView = $('#page-view'), cliView = $('#cli-view');
     const frame = cliView.querySelector('#cli-settings-frame');
@@ -483,6 +501,7 @@
     $('#tray-label').textContent = state.native ? '收起到托盘' : '托盘预览';
     $('#footer-status').textContent = state.live ? (state.server?.backend === 'running' ? '本地服务运行中' : '原生托盘已启用') : state.native ? '原生托盘已启用' : '本地界面预览';
     icons();
+    syncWorkspace();
     if (state.live && state.page === 'cli') window.dispatchEvent(new Event('zviewer-cli-visible'));
   }
   function localCertDemo() {
@@ -629,7 +648,7 @@
       navToggle.setAttribute('title', collapsed ? '展开导航' : '折叠导航');
     });
   }
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, logs, settings, updateModal, syncUpdate }, refreshLogs };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, logs, settings, updateModal, syncUpdate }, refreshLogs, syncWorkspace };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {
