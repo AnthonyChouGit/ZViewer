@@ -70,10 +70,10 @@ npm --prefix desktop run package                    # 打包成 ZIP 并输出 SH
 
 `.github/workflows/build.yml` 的 `build-gui` job 跑的就是这条链路：取 Windows 运行包 → `npm run shell:dist --skip-cli` → `npm run package`，产物作为 `zviewer-gui-windows-x64` artifact 与单文件版一起进 Release。
 
-`shell:dist` 输出 `desktop/dist-gui/ZViewer-Windows-v0.4.1-x64`，结构如下（分发或移动时保留整个文件夹）：
+`shell:dist` 输出 `desktop/dist-gui/zviewer-windows-x64-GUI`，与命令行包同名、仅追加 `GUI`；`package` 打出同名的 `zviewer-windows-x64-GUI.zip`。结构如下（分发或移动时保留整个文件夹）：
 
 ```text
-ZViewer-Windows-v0.4.1-x64/
+zviewer-windows-x64-GUI/
   ZViewerShell.exe                  # 唯一用户启动 EXE
   assets/ZViewer.ProcessHost.exe    # 进程监管宿主（Job Object）
   runtime/                          # 后端、LiveKit、FRP、CLI 与网页

@@ -1,5 +1,6 @@
 // 组装可分发目录：原生壳 + 进程监管宿主 + 运行包 + CLI/FRP 与许可证。
-// 产物默认 desktop/dist-gui/ZViewer-Windows-v<version>-x64，可用 ZVIEWER_OUT_DIR 改写。
+// 产物默认 desktop/dist-gui/zviewer-windows-x64-GUI，可用 ZVIEWER_OUT_DIR 改写。
+// 目录名与命令行包一致，仅追加 GUI 后缀，使同一次发布里两个包一眼可辨。
 //
 // 用法：
 //   node scripts/build-dist.mjs               准备工具并完整打包
@@ -22,7 +23,7 @@ const cliDir = join(tools, 'zviewer-cli');
 const cliExe = join(cliDir, 'zviewer-cli-windows-amd64.exe');
 const runtimeSource = process.env.ZVIEWER_RUNTIME_ROOT || join(repo, 'dist', 'win');
 const outRoot = process.env.ZVIEWER_OUT_DIR || join(desktop, 'dist-gui');
-const distribution = join(outRoot, `ZViewer-Windows-v${pkg.version}-x64`);
+const distribution = join(outRoot, 'zviewer-windows-x64-GUI');
 
 function requireFile(file, hint) {
   if (!existsSync(file)) throw new Error(`缺少 ${file}${hint ? '：' + hint : ''}`);

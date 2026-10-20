@@ -29,10 +29,10 @@ func TestPickUpdateAsset(t *testing.T) {
 	assets := []releaseAsset{
 		{Name: "zviewer-windows-x64.zip", Size: 1},
 		{Name: "SHA256SUMS.txt", Size: 1},
-		{Name: "ZViewer-Windows-v0.4.2-x64.zip", Size: 2048},
+		{Name: "zviewer-windows-x64-GUI.zip", Size: 2048},
 	}
 	asset, ok := pickUpdateAsset(assets)
-	if !ok || asset.Name != "ZViewer-Windows-v0.4.2-x64.zip" || asset.Size != 2048 {
+	if !ok || asset.Name != "zviewer-windows-x64-GUI.zip" || asset.Size != 2048 {
 		t.Fatalf("unexpected asset: %+v ok=%v", asset, ok)
 	}
 	if _, ok := pickUpdateAsset(assets[:2]); ok {
@@ -41,7 +41,7 @@ func TestPickUpdateAsset(t *testing.T) {
 }
 
 func TestApplyScriptWaitsForExit(t *testing.T) {
-	script := applyScript(`C:\Users\Zero\AppData\Roaming\ZViewer\updates\0.4.2\ZViewer-Windows-v0.4.2-x64.zip`,
+	script := applyScript(`C:\Users\Zero\AppData\Roaming\ZViewer\updates\0.4.2\zviewer-windows-x64-GUI.zip`,
 		`C:\Apps\ZViewer`, `C:\Apps\ZViewer\ZViewerShell.exe`, 4321)
 	for _, want := range []string{
 		"$procId = 4321",
@@ -54,7 +54,7 @@ func TestApplyScriptWaitsForExit(t *testing.T) {
 			t.Fatalf("script missing %q", want)
 		}
 	}
-	if !strings.Contains(script, `'C:\Users\Zero\AppData\Roaming\ZViewer\updates\0.4.2\ZViewer-Windows-v0.4.2-x64.zip'`) {
+	if !strings.Contains(script, `'C:\Users\Zero\AppData\Roaming\ZViewer\updates\0.4.2\zviewer-windows-x64-GUI.zip'`) {
 		t.Fatal("path should be single quoted")
 	}
 }

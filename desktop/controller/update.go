@@ -29,8 +29,9 @@ import (
 const updateRepo = "Zero-wyc/ZViewer"
 
 var (
-	errNoRelease   = errors.New("没有可用的正式版本")
-	updateAssetExp = regexp.MustCompile(`^ZViewer-Windows-v[0-9][^/]*x64\.zip$`)
+	errNoRelease = errors.New("没有可用的正式版本")
+	// 发布页里同时有命令行的 zviewer-windows-x64.zip，只认带 -GUI 后缀的运行包。
+	updateAssetExp = regexp.MustCompile(`(?i)^zviewer-windows-[^/]*-gui\.zip$`)
 	updateHostExp  = regexp.MustCompile(`(?i)^(github\.com|api\.github\.com|objects\.githubusercontent\.com|release-assets\.githubusercontent\.com)$`)
 	updateTagExp   = regexp.MustCompile(`^v?\d+`)
 )
@@ -288,7 +289,7 @@ func applyScript(pkg, target, exe string, pid int) string {
 func (c *Controller) packagePath(tag, asset string) string {
 	name := asset
 	if name == "" {
-		name = "ZViewer-Windows-x64.zip"
+		name = "zviewer-windows-x64-GUI.zip"
 	}
 	return filepath.Join(c.dir, "updates", tag, filepath.Base(name))
 }

@@ -11,8 +11,8 @@ import zipfile
 desktop = Path(__file__).resolve().parents[1]
 version = json.loads((desktop / 'package.json').read_text(encoding='utf-8'))['version']
 release = Path(os.environ['ZVIEWER_OUT_DIR']).resolve() if os.environ.get('ZVIEWER_OUT_DIR') else desktop / 'dist-gui'
-portable = release / f'ZViewer-Windows-v{version}-x64'
-archive = release / f'ZViewer-Windows-v{version}-x64.zip'
+portable = release / 'zviewer-windows-x64-GUI'
+archive = release / 'zviewer-windows-x64-GUI.zip'
 entry = portable / 'ZViewerShell.exe'
 if archive.exists():
     raise SystemExit(f'Archive already exists: {archive}')
@@ -40,4 +40,4 @@ existing = checksum_file.read_text(encoding='ascii').splitlines() if checksum_fi
 names = {name for _, name in checksums}
 existing = [line for line in existing if line.split('  ', 1)[-1] not in names]
 checksum_file.write_text('\n'.join(existing + [f'{digest}  {name}' for digest, name in checksums]) + '\n', encoding='ascii')
-print(json.dumps({'archive': str(archive), 'bytes': archive.stat().st_size, 'files': len(files), 'crc': 'passed', 'sha256': checksums[0][0]}, indent=2))
+print(json.dumps({'archive': str(archive), 'version': version, 'bytes': archive.stat().st_size, 'files': len(files), 'crc': 'passed', 'sha256': checksums[0][0]}, indent=2))
