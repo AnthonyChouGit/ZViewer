@@ -44,7 +44,7 @@
     frpTab: 'client', ipv6: null,
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
-    events: [], prefs
+    events: [], prefs, updateOpen: false, updateKey: ''
   };
   function clock() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
   function addEvent(message, source = 'console', level = 'INFO') { state.events.unshift({ time: clock(), source, level, message }); state.events.length = Math.min(state.events.length, 100); }
@@ -172,6 +172,70 @@
     const link = document.createElement('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
   function modal(content) { $('#modal-content').innerHTML = content; $('#modal').showModal(); }
+  // ---------- 软件更新 ----------
+  // 检查与下载都在主进程完成；界面只读快照里的 update 状态，下载期间不退出程序。
+  const updateLabels = { idle: '未检查', checking: '检查中', latest: '已是最新', available: '有新版', downloading: '下载中', ready: '待安装', error: '失败' };
+  function updateReport() { return state.live ? state.server?.update || null : null; }
+  function sizeText(bytes) {
+    if (!bytes) return '';
+    const mb = bytes / 1024 / 1024;
+    return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+  }
+  function updateBody(report) {
+    const name = report?.state || 'idle';
+    if (!state.live) return '检查更新、下载与安装只在 Windows 桌面版中执行；浏览器预览不会访问 GitHub。';
+    if (name === 'checking') return '正在查询 GitHub 上的最新正式版本。';
+    if (name === 'latest') return '当前已是最新正式版本。';
+    if (name === 'available') return `发现新版本 v${esc(report.latest)}，安装包 ${sizeText(report.size)}。下载完成后才会重启安装。`;
+    if (name === 'downloading') return `正在下载 v${esc(report.latest)}，已完成 ${report.progress}%。下载期间控制台可以继续使用。`;
+    if (name === 'ready') return `v${esc(report.latest)} 已下载并校验完成。点击重启后退出控制台，覆盖运行包并自动重新启动。`;
+    if (name === 'error') return esc(report?.error || '检查失败。');
+    return '尚未检查更新。';
+  }
+  function updateActions(report) {
+    const name = state.live ? report?.state || 'idle' : 'preview';
+    if (name === 'downloading') return `<button class="btn" disabled>${icon('download')}下载中 ${report.progress}%</button>`;
+    if (name === 'ready') return `${button('重启并安装', 'update-apply', 'refresh', 'primary')}${button('打开发布页', 'update-page', 'link')}`;
+    if (name === 'available') return `${button('下载更新', 'update-download', 'download', 'primary')}${button('打开发布页', 'update-page', 'link')}`;
+    return button(name === 'checking' ? '正在检查…' : '检查更新', 'update-check', 'refresh', 'primary');
+  }
+  function updateModal() {
+    const report = updateReport();
+    const name = state.live ? report?.state || 'idle' : 'preview';
+    const tone = name === 'available' || name === 'ready' ? 'green' : name === 'error' ? 'red' : '';
+    const current = state.info?.version || '0.1.0';
+    const latest = report?.latest ? `v${report.latest}` : '—';
+    const progress = name === 'downloading' ? `<div class="update-progress"><i style="width:${Math.min(100, Math.max(0, report.progress))}%"></i></div>` : '';
+    const meta = report?.checkedAt ? `上次检查 ${esc(report.checkedAt)}` : '尚未检查';
+    const auto = state.live ? Boolean(state.config?.autoCheckUpdate ?? report?.autoCheck) : true;
+    return `<div class="update-head"><div><h2>软件更新</h2><p>发布来源 github.com/Zero-wyc/ZViewer${report?.notes ? ` · ${esc(report.notes)}` : ''}</p></div><span class="pill ${tone}"><i></i>${updateLabels[name] || '未检查'}</span></div>
+      <div class="update-grid"><div><span>当前版本</span><strong>v${esc(current)}</strong></div><div><span>最新版本</span><strong>${latest}</strong></div></div>
+      <p class="update-state">${updateBody(report)}</p>${progress}
+      <div class="modal-actions">${updateActions(report)}</div>
+      <div class="switch-row update-auto"><div><strong>自动检查更新</strong><p>启动后检查一次，此后每 6 小时检查；只检查，不自动下载。</p></div><button class="switch" role="switch" aria-label="自动检查更新" aria-checked="${auto}" data-action="update-auto" ${state.live ? '' : 'disabled'}></button></div>
+      <p class="update-note">${icon('info')}<span>${meta}。安装包来自 GitHub Release，下载完成后校验 SHA256 与压缩包结构，通过后才允许安装。</span></p>`;
+  }
+  function openUpdate() {
+    state.updateOpen = true; state.updateKey = '';
+    modal(updateModal());
+    const report = updateReport();
+    if (state.live && (!report || report.state === 'idle')) updateCommand('update-check');
+  }
+  function syncUpdate(snapshot) {
+    const report = snapshot?.update || null;
+    const dot = $('#update-dot');
+    if (dot) dot.hidden = !(report && report.available && report.state !== 'downloading');
+    const key = report ? `${report.state}|${report.progress}|${report.latest}|${report.error}|${snapshot?.config?.autoCheckUpdate}|${report.checkedAt}` : '';
+    if (state.updateOpen && $('#modal')?.open && key !== state.updateKey) {
+      state.updateKey = key;
+      $('#modal-content').innerHTML = updateModal();
+    }
+  }
+  async function updateCommand(name, payload) {
+    if (!window.zviewerDesktop?.command) { toast('更新在 Windows 桌面版中可用'); return null; }
+    try { return await window.zviewerDesktop.command(name, payload || {}); }
+    catch (error) { toast(String(error?.message || error).replace(/^.*Error: /, '')); return null; }
+  }
   function setRunning(running, notify = true) {
     state.running = !!running;
     if (notify) window.zviewerDesktop?.demoState(state.running).catch(() => toast('托盘状态同步失败，请重新打开窗口。'));
@@ -179,7 +243,7 @@
     render();
     toast(state.running ? '演示状态：未启动后端' : '演示已停止');
   }
-  function activity() { return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc(e.source === 'frp' ? '穿透配置' : e.source === 'cert' ? '本机 HTTPS' : e.source === 'backend' ? '演示状态' : e.source === 'tunnel' ? 'Cloudflare 隧道' : '控制台')}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join(''); }
+  function activity() { return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc(e.source === 'frp' ? '穿透配置' : e.source === 'cert' ? '本机 HTTPS' : e.source === 'backend' ? '演示状态' : e.source === 'tunnel' ? 'Cloudflare 隧道' : e.source === 'update' ? '软件更新' : '控制台')}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join(''); }
   function overview() {
     const service = (name, subtitle, ico, color, status, left, right) => `<article class="service-card"><div class="service-top"><span class="icon-box ${color}">${icon(ico)}</span><span class="pill ${status.includes('演示') ? 'green' : ''}"><i></i>${status}</span></div><div><h3>${name}</h3><p>${subtitle}</p></div><div class="service-meta"><span>${left}</span><code>${right}</code></div></article>`;
     return heading('服务总览', '本机服务、证书与穿透的运行状态。') +
@@ -342,7 +406,7 @@
   function filteredEvents() { return state.events.filter(e => (state.logLevel === 'all' || e.level === state.logLevel) && (state.logSource === 'all' || e.source === state.logSource) && `${e.message} ${e.source}`.toLowerCase().includes(state.logSearch.toLowerCase())); }
   function logLines() { return filteredEvents().map(e => `<div class="log-line"><span class="log-time">${esc(e.time)}</span><span class="log-level ${e.level}">${esc(e.level)}</span><span class="log-source">${esc(e.source)}</span><span class="log-message">${esc(e.message)}</span></div>`).join('') || '<div class="empty">没有匹配的日志</div>'; }
   function logs() {
-    return heading('运行日志', '查看控制台操作记录；后端日志在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'tunnel', 'cli'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取服务日志</span></div></section><div class="help-card"><strong>日志保存方式</strong><p>按来源分流，达到 2 MB 后滚动保存；导出前屏蔽 Token、JWT 与私钥。</p></div>`;
+    return heading('运行日志', '查看控制台操作记录；后端日志在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'tunnel', 'cli', 'update'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取服务日志</span></div></section><div class="help-card"><strong>日志保存方式</strong><p>按来源分流，达到 2 MB 后滚动保存；导出前屏蔽 Token、JWT 与私钥。</p></div>`;
   }
   function settings() {
     const info = state.info?.runtime;
@@ -390,6 +454,17 @@
     else if (name === 'probe-ipv6') toast('公网 IPv6 检测在 Windows 桌面版中执行');
     else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('Cloudflare Tunnel 在 Windows 桌面版中启动');
     else if (name === 'close-modal') $('#modal').close();
+    else if (name === 'open-update') openUpdate();
+    else if (name === 'update-check') await updateCommand('update-check');
+    else if (name === 'update-download') await updateCommand('update-download');
+    else if (name === 'update-apply') { const ok = await updateCommand('update-apply'); if (ok) toast('正在退出并安装更新'); }
+    else if (name === 'update-page') await updateCommand('update-page');
+    else if (name === 'update-auto') {
+      if (!state.live) { toast('自动检查在 Windows 桌面版中生效'); return; }
+      await updateCommand('save', { config: { autoCheckUpdate: !updateReport()?.autoCheck } });
+      state.updateKey = '';
+      $('#modal-content').innerHTML = updateModal();
+    }
     else if (name === 'docs') { if (window.zviewerDesktop) await window.zviewerDesktop.openDocs(); else window.open('https://docx.zviewer.zero251.xyz/', '_blank', 'noopener,noreferrer'); }
     else if (name === 'export-frp') {
       const error = frpError();
@@ -414,6 +489,7 @@
     else if (name === 'tray-toggle') { $('#modal').close(); setRunning(!state.running); }
     else if (name === 'tray-logs') { $('#modal').close(); navigate('logs'); }
   }
+  $('#modal').addEventListener('close', () => { state.updateOpen = false; });
   document.addEventListener('click', event => {
     if (!event.target.closest('.tutorial')) closeTutorials();
     const tutorialToggle = event.target.closest('[data-tutorial-toggle]');
@@ -491,7 +567,7 @@
       navToggle.setAttribute('title', collapsed ? '展开导航' : '折叠导航');
     });
   }
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, logs, settings }, refreshLogs };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, logs, settings, updateModal, syncUpdate }, refreshLogs };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {

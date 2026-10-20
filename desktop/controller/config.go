@@ -21,20 +21,21 @@ import (
 
 // Config 对应 config.cjs 的 defaults。
 type Config struct {
-	Port           int       `json:"port"`
-	RtmpPort       int       `json:"rtmpPort"`
-	FlvPort        int       `json:"flvPort"`
-	LivekitPort    int       `json:"livekitPort"`
-	LivekitTcpPort int       `json:"livekitTcpPort"`
-	BindHost       string    `json:"bindHost"`
-	Https          bool      `json:"https"`
-	CloseToTray    bool      `json:"closeToTray"`
-	LaunchAtLogin  bool      `json:"launchAtLogin"`
-	AutoStart      bool      `json:"autoStart"`
-	Domain         string    `json:"domain"`
-	LanIP          string    `json:"lanIp"`
-	Cli            CliConfig `json:"cli"`
-	Frp            FrpConfig `json:"frp"`
+	Port            int       `json:"port"`
+	RtmpPort        int       `json:"rtmpPort"`
+	FlvPort         int       `json:"flvPort"`
+	LivekitPort     int       `json:"livekitPort"`
+	LivekitTcpPort  int       `json:"livekitTcpPort"`
+	BindHost        string    `json:"bindHost"`
+	Https           bool      `json:"https"`
+	CloseToTray     bool      `json:"closeToTray"`
+	LaunchAtLogin   bool      `json:"launchAtLogin"`
+	AutoStart       bool      `json:"autoStart"`
+	AutoCheckUpdate bool      `json:"autoCheckUpdate"`
+	Domain          string    `json:"domain"`
+	LanIP           string    `json:"lanIp"`
+	Cli             CliConfig `json:"cli"`
+	Frp             FrpConfig `json:"frp"`
 }
 
 type CliConfig struct {
@@ -60,7 +61,7 @@ func DefaultConfig() Config {
 	return Config{
 		Port: 3333, RtmpPort: 3334, FlvPort: 3335, LivekitPort: 3336, LivekitTcpPort: 3337,
 		BindHost: "127.0.0.1", Https: false,
-		CloseToTray: true, LaunchAtLogin: false, AutoStart: false,
+		CloseToTray: true, LaunchAtLogin: false, AutoStart: false, AutoCheckUpdate: true,
 		Domain: "localhost", LanIP: "",
 		Cli: CliConfig{Port: 9333, AutoStart: false, User: ""},
 		Frp: FrpConfig{Host: "", Port: 7000, AdvertiseIP: "", Voice: true, Rtmp: true, Tcp: false,
@@ -244,6 +245,7 @@ func Validate(input map[string]any) (Config, error) {
 	target.CloseToTray = asBool(base["closeToTray"])
 	target.LaunchAtLogin = asBool(base["launchAtLogin"])
 	target.AutoStart = asBool(base["autoStart"])
+	target.AutoCheckUpdate = asBool(base["autoCheckUpdate"])
 
 	domain, ok := asString(base["domain"])
 	if !ok || !IsHostname(domain) || net.ParseIP(domain) != nil {

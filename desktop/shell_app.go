@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync/atomic"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -44,6 +45,7 @@ func (a *App) bootstrap() error {
 		CliExecutable: a.cli,
 		HostExe:       a.hostExe,
 		Helper:        a.helper,
+		Version:       a.version,
 		Cipher:        controller.Dpapi{},
 		OnUpdate:      a.emitUpdate,
 	})
@@ -73,6 +75,26 @@ func (a *App) afterStartup() {
 		if _, err := a.ctrl.Start(); err != nil {
 			a.ctrl.Log(err.Error(), "backend", "ERROR")
 		}
+	}
+	go a.checkUpdatesPeriodically()
+}
+
+// checkUpdatesPeriodically 启动后延迟检查一次，此后每 6 小时复检；只检查，不自动下载。
+func (a *App) checkUpdatesPeriodically() {
+	timer := time.NewTimer(6 * time.Second)
+	defer timer.Stop()
+	for {
+		<-timer.C
+		if a.quitting.Load() {
+			return
+		}
+		if a.ctrl.Store().Value.AutoCheckUpdate {
+			report := a.ctrl.CheckUpdate(false)
+			if report.Available {
+				a.ctrl.Log("发现新版本 "+report.Latest+"（当前 "+report.Current+"）", "update", "INFO")
+			}
+		}
+		timer.Reset(6 * time.Hour)
 	}
 }
 
@@ -245,12 +267,45 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		}
 		a.emitUpdate()
 		return true, nil
+	case "update-check":
+		return a.ctrl.CheckUpdate(true), nil
+	case "update-download":
+		return a.ctrl.StartUpdateDownload()
+	case "update-apply":
+		return a.applyUpdate()
+	case "update-page":
+		target := a.ctrl.UpdateReport().PageURL
+		if target == "" {
+			target = "https://github.com/Zero-wyc/ZViewer/releases"
+		}
+		runtime.BrowserOpenURL(a.ctx, target)
+		return true, nil
 	case "export":
 		return a.exportFile(payloadString(payload, "kind"))
 	case "open-data":
 		return a.openDataDir()
 	}
 	return nil, errors.New("不支持的操作")
+}
+
+// applyUpdate 交给独立脚本接管：本进程退出后解压覆盖运行目录，再启动新版本。
+func (a *App) applyUpdate() (bool, error) {
+	exe := filepath.Join(a.exeDir, "ZViewerShell.exe")
+	script, err := a.ctrl.PrepareUpdate(a.exeDir, exe, os.Getpid())
+	if err != nil {
+		return false, err
+	}
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script)
+	hideWindow(cmd)
+	if err := cmd.Start(); err != nil {
+		return false, fmt.Errorf("无法启动更新程序：%w", err)
+	}
+	a.ctrl.Log("更新包已就绪，程序即将退出并安装", "update", "INFO")
+	go func() {
+		sleep(600)
+		a.quit()
+	}()
+	return true, nil
 }
 
 func (a *App) openLocalPage(manager bool) error {

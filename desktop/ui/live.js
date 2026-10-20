@@ -9,7 +9,7 @@
   function current() { return state.server.active || state.config; }
   function pill(status) { return `<span class="pill ${['running','registered'].includes(status) ? 'green' : ''}"><i></i>${labels[status] || status}</span>`; }
   function activity() {
-    return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc({ console: '控制台', backend: '主服务', voice: 'LiveKit 语音', cert: 'HTTPS 证书', frp: 'FRP 穿透', tunnel: 'Cloudflare 隧道', cli: '高画质代理' }[e.source] || e.source)}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join('');
+    return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc({ console: '控制台', backend: '主服务', voice: 'LiveKit 语音', cert: 'HTTPS 证书', frp: 'FRP 穿透', tunnel: 'Cloudflare 隧道', cli: '高画质代理', update: '软件更新' }[e.source] || e.source)}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join('');
   }
   function overview() {
     const s = state.server, c = current();
@@ -113,6 +113,7 @@
     if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot)) || state.page === 'connect' && (tunnelBefore !== tunnelKey(snapshot) || entryBefore !== entryKey(snapshot))) ui.render();
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
     else if (state.page === 'connect') ensureIPv6();
+    ui.preview.syncUpdate(snapshot);
     $('#footer-status').textContent = snapshot.backend === 'running' ? `本地服务运行中 · ${current().port}` : `本地服务 · ${labels[snapshot.backend]}`;
   }
   function tunnelKey(snapshot) { const t = snapshot?.tunnel; return t ? `${t.available}|${t.state}|${t.url}` : ''; }

@@ -51,6 +51,7 @@ type Snapshot struct {
 	Frp           string          `json:"frp"`
 	Cli           CliSnapshot     `json:"cli"`
 	Tunnel        TunnelReport    `json:"tunnel"`
+	Update        UpdateReport    `json:"update"`
 	Pid           *int            `json:"pid"`
 	VoicePid      *int            `json:"voicePid"`
 	FrpPid        *int            `json:"frpPid"`
@@ -69,6 +70,7 @@ type Options struct {
 	CliExecutable string
 	HostExe       string
 	Helper        string
+	Version       string
 	Cipher        Cipher
 	OnUpdate      func()
 }
@@ -79,6 +81,7 @@ type Controller struct {
 	frpc    string
 	hostExe string
 	helper  string
+	version string
 
 	store *Store
 	certs *Certificates
@@ -108,6 +111,13 @@ type Controller struct {
 	ipv6   *IPv6Report
 	ipv6At time.Time
 
+	updateMu   sync.Mutex
+	update     UpdateReport
+	updateAt   time.Time
+	updateBusy bool
+	updateURL  string
+	updateSum  string
+
 	operation   int32
 	livekitMu   sync.Mutex
 	livekitStop bool
@@ -122,10 +132,12 @@ func New(opts Options) (*Controller, error) {
 		frpc:         opts.Frpc,
 		hostExe:      opts.HostExe,
 		helper:       opts.Helper,
+		version:      opts.Version,
 		onUpdate:     opts.OnUpdate,
 		events:       []Event{},
 		backendState: "stopped", voiceState: "stopped", frpState: "stopped", tunnelState: "stopped",
 		frpRegistered: map[string]bool{},
+		update:        UpdateReport{State: "idle", Current: opts.Version},
 	}
 	cipher := opts.Cipher
 	if cipher == nil {
@@ -247,6 +259,7 @@ func (c *Controller) Snapshot() Snapshot {
 		Cli: c.cli.Snapshot(),
 		Pid: backendPid, VoicePid: livekid, FrpPid: frpPid,
 		Tunnel:        c.tunnelReport(),
+		Update:        c.UpdateReport(),
 		TokenSaved:    c.store.HasToken(),
 		Certificate:   CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
 		Events:        events,
