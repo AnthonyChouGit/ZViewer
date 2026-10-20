@@ -50,6 +50,7 @@ type Snapshot struct {
 	Voice         string          `json:"voice"`
 	Frp           string          `json:"frp"`
 	Cli           CliSnapshot     `json:"cli"`
+	Tunnel        TunnelReport    `json:"tunnel"`
 	Pid           *int            `json:"pid"`
 	VoicePid      *int            `json:"voicePid"`
 	FrpPid        *int            `json:"frpPid"`
@@ -89,14 +90,23 @@ type Controller struct {
 	backend       *Proc
 	frp           *Proc
 	livekit       *Proc
+	tunnel        *Proc
 	backendState  string
 	voiceState    string
 	frpState      string
+	tunnelState   string
+	tunnelURL     string
+	tunnelMessage string
+	tunnelExe     string
 	active        *Config
 	trusted       bool
 	frpRegistered map[string]bool
 	voiceKey      string
 	voiceSecret   string
+
+	ipv6Mu sync.Mutex
+	ipv6   *IPv6Report
+	ipv6At time.Time
 
 	operation   int32
 	livekitMu   sync.Mutex
@@ -114,7 +124,7 @@ func New(opts Options) (*Controller, error) {
 		helper:       opts.Helper,
 		onUpdate:     opts.OnUpdate,
 		events:       []Event{},
-		backendState: "stopped", voiceState: "stopped", frpState: "stopped",
+		backendState: "stopped", voiceState: "stopped", frpState: "stopped", tunnelState: "stopped",
 		frpRegistered: map[string]bool{},
 	}
 	cipher := opts.Cipher
@@ -236,6 +246,7 @@ func (c *Controller) Snapshot() Snapshot {
 		WebURL: c.WebURL(), Backend: backend, Voice: voice, Frp: frp,
 		Cli: c.cli.Snapshot(),
 		Pid: backendPid, VoicePid: livekid, FrpPid: frpPid,
+		Tunnel:        c.tunnelReport(),
 		TokenSaved:    c.store.HasToken(),
 		Certificate:   CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
 		Events:        events,
@@ -706,6 +717,9 @@ func (c *Controller) stopBackend() error {
 	if err := c.stopFrp(); err != nil {
 		c.log(err.Error(), "frp", "ERROR")
 	}
+	if err := c.stopTunnel(); err != nil {
+		c.log(err.Error(), "tunnel", "ERROR")
+	}
 	if _, err := c.cli.Stop(); err != nil {
 		c.log(err.Error(), "cli", "ERROR")
 	}
@@ -1053,6 +1067,7 @@ func (c *Controller) verifyCli(pid, port int) error {
 }
 
 func (c *Controller) Shutdown() error {
+	// stopBackend 会一并回收 FRP、隧道与 CLI 进程。
 	_, err := c.Stop()
 	return err
 }

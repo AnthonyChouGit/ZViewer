@@ -19,6 +19,7 @@
     arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
     external: '<path d="M14 3h7v7m0-7L10 14m0-10H4v16h16v-6"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',
+    link: '<path d="M10 13a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 4.3l-1.3 1.3"/><path d="M14 11a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 19.7l1.3-1.3"/>',
     cloud: '<path d="M6 19a5 5 0 1 1 0-10 7 7 0 0 1 13-2 6 6 0 0 1 0 12Z"/>',
     server: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01m5-11h5m-5 11h5"/>',
     mic: '<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/>',
@@ -35,12 +36,12 @@
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.info}</svg>`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = selector => document.querySelector(selector);
-  const titles = { overview: '服务总览', frp: 'FRP 穿透', cert: '证书与域名', cli: '高画质代理', logs: '运行日志', settings: '应用设置' };
+  const titles = { overview: '服务总览', connect: '连接方式', frp: 'FRP 穿透', cert: '证书与域名', cli: '高画质代理', logs: '运行日志', settings: '应用设置' };
   let prefs = { closeToTray: true, remember: true };
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem('zviewer-ui-prefs') || '{}') }; } catch { /* Use safe defaults if storage is unavailable. */ }
   const state = {
     page: 'overview', running: false, certReady: false, native: false, info: null,
-    frpTab: 'client',
+    frpTab: 'client', ipv6: null,
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
     events: [], prefs
@@ -151,7 +152,7 @@
     render();
     toast(state.running ? '演示状态：未启动后端' : '演示已停止');
   }
-  function activity() { return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc(e.source === 'frp' ? '穿透配置' : e.source === 'cert' ? '本机 HTTPS' : e.source === 'backend' ? '演示状态' : '控制台')}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join(''); }
+  function activity() { return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc(e.source === 'frp' ? '穿透配置' : e.source === 'cert' ? '本机 HTTPS' : e.source === 'backend' ? '演示状态' : e.source === 'tunnel' ? 'Cloudflare 隧道' : '控制台')}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join(''); }
   function overview() {
     const service = (name, subtitle, ico, color, status, left, right) => `<article class="service-card"><div class="service-top"><span class="icon-box ${color}">${icon(ico)}</span><span class="pill ${status.includes('演示') ? 'green' : ''}"><i></i>${status}</span></div><div><h3>${name}</h3><p>${subtitle}</p></div><div class="service-meta"><span>${left}</span><code>${right}</code></div></article>`;
     return heading('服务总览', '本机服务、证书与穿透的运行状态。') +
@@ -221,10 +222,98 @@
         <div class="cli-embed-hint">启动代理 → 扫码登录 → 连接服务器，然后回到网页端使用高画质代理。</div>
       </section></div>`;
   }
+  const connectLinks = {
+    frp: [
+      ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
+      ['OpenFrp', 'openfrp.net', 'https://www.openfrp.net/'],
+      ['cpolar', 'cpolar.com', 'https://www.cpolar.com/'],
+      ['ngrok', 'ngrok.com', 'https://ngrok.com/']
+    ],
+    lan: [
+      ['ZeroTier', 'zerotier.com', 'https://www.zerotier.com/'],
+      ['Tailscale', 'tailscale.com', 'https://tailscale.com/'],
+      ['EasyTier', 'easytier.cn', 'https://easytier.cn/']
+    ],
+    tunnel: [
+      ['cloudflared 下载', 'github.com/cloudflare', 'https://github.com/cloudflare/cloudflared/releases/latest'],
+      ['Cloudflare 文档', 'developers.cloudflare.com', 'https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/']
+    ]
+  };
+  function linkList(items) {
+    return `<div class="link-list">${items.map(([name, host, url]) => `<a href="${esc(url)}" data-external="${esc(url)}" rel="noreferrer"><span>${esc(name)}</span><small>${esc(host)}</small><span class="link-arrow">↗</span></a>`).join('')}</div>`;
+  }
+  function connectCard(options) {
+    const { name, color = '', title, copy, status, tone = '', body, actions = '' } = options;
+    return `<article class="connect-card"><div class="connect-head"><span class="icon-box ${color}">${icon(name)}</span><div class="connect-title"><h2>${title}</h2><p>${copy}</p></div><span class="pill ${tone}"><i></i>${status}</span></div><div class="connect-body">${body}</div>${actions ? `<div class="connect-actions">${actions}</div>` : ''}</article>`;
+  }
+  function connect() {
+    const live = Boolean(state.live), v6 = state.ipv6;
+    const config = live ? state.server?.active || state.config || {} : {};
+    const port = config.port || 3333;
+    // IPv6：地址只来自外部接口，没有则明确显示“没有”。
+    const v6Body = !v6
+      ? `<p class="connect-value is-empty">未检测</p><p class="connect-note">打开本页时经外部接口检测本机公网 IPv6，不读取本机网卡。</p>`
+      : v6.ok
+        ? `<p class="connect-value"><code>${esc(v6.address)}</code></p><p class="connect-note">${esc(v6.source)} · ${esc(v6.checkedAt)} 检测。外部接口已通过 IPv6 访问到本机，地址可在公网路由；路由器与 Windows 防火墙仍需放行入站端口。</p>`
+        : `<p class="connect-value is-empty">没有</p><p class="connect-note">${esc(v6.reason || '没有探测到公网 IPv6。')}可改用下面的中转方式。</p>`;
+    const v6Actions = `${button(v6 ? '重新检测' : '检测 IPv6', 'probe-ipv6', 'refresh')}${v6?.ok ? `<button class="btn" data-copy="${esc(v6.address)}">${icon('copy')}复制地址</button>` : ''}`;
+
+    const frpState = live ? state.server.frp : '';
+    const frpLabels = { registered: '已连通', connecting: '连接中', error: '异常' };
+    const frpStatus = live ? frpLabels[frpState] || '未连接' : '未配置';
+
+    const tunnel = live ? state.server.tunnel : null;
+    const tunnelLabels = { stopped: '未运行', connecting: '连接中', stopping: '停止中', error: '异常' };
+    const tunnelStatus = !tunnel || !tunnel.available ? '需安装' : tunnel.state === 'running' ? '已连通' : tunnelLabels[tunnel.state] || '未运行';
+    const tunnelBusy = Boolean(tunnel) && ['connecting', 'running'].includes(tunnel.state);
+    let tunnelBody;
+    if (!tunnel) {
+      tunnelBody = `<p class="connect-value is-empty">桌面版中可用</p><p class="connect-note">cloudflared 由本机向外建立隧道，不需要公网 IP 与端口映射；临时地址随隧道关闭失效。</p>`;
+    } else if (!tunnel.available) {
+      tunnelBody = `<p class="connect-value is-empty">未找到 cloudflared</p><p class="connect-note">下载 cloudflared.exe 放到运行包目录（或加入 PATH）后重新打开本页。</p>`;
+    } else if (tunnel.url) {
+      tunnelBody = `<p class="connect-value"><code>${esc(tunnel.url)}</code></p><p class="connect-note">本机 127.0.0.1:${esc(port)} 经 Cloudflare 中转到该地址，仅本次会话有效。</p>`;
+    } else {
+      tunnelBody = `<p class="connect-value is-empty">${tunnelLabels[tunnel.state] || '未运行'}</p><p class="connect-note">${tunnel.state === 'error' ? '隧道已退出，请查看运行日志。' : '启动后由 Cloudflare 分配临时地址，稍候片刻。'}</p>`;
+    }
+    const tunnelActions = !tunnel || !tunnel.available
+      ? `<a class="btn" href="https://github.com/cloudflare/cloudflared/releases/latest" data-external="https://github.com/cloudflare/cloudflared/releases/latest">${icon('download')}下载 cloudflared</a>`
+      : `${button(tunnelBusy ? '停止隧道' : '启动隧道', tunnelBusy ? 'tunnel-stop' : 'tunnel-start', tunnelBusy ? 'stop' : 'cloud', 'primary')}${tunnel.url ? `<button class="btn" data-copy="${esc(tunnel.url)}">${icon('copy')}复制地址</button>` : ''}`;
+
+    return heading('连接方式', '从外网访问本机服务的四种方式，按需选择一种。') +
+      `<div class="connect-grid">${
+        connectCard({
+          name: 'globe', color: 'orange', title: 'IPv6 直连', copy: '运营商下发公网 IPv6 时，外网设备直接访问该地址。',
+          status: !v6 ? '未检测' : v6.ok ? '可用' : '没有', tone: v6?.ok ? 'green' : '',
+          body: v6Body, actions: v6Actions
+        })
+      }${
+        connectCard({
+          name: 'network', title: '内网穿透 FRP', copy: '用一台公网服务器把本机端口反向转发出去。',
+          status: frpStatus, tone: frpState === 'registered' ? 'green' : '',
+          body: `<p class="connect-note">VPS 上运行 frps，本机运行 frpc，两端用同一 Token 认证。地址、Token 与端口映射在本机填写后即可连接。</p>${linkList(connectLinks.frp)}`,
+          actions: `<button class="btn primary" data-nav="frp">${icon('arrow')}配置本机 FRP</button>`
+        })
+      }${
+        connectCard({
+          name: 'link', title: '虚拟局域网', copy: '让外网设备与本机加入同一虚拟网段，再用内网地址访问。',
+          status: '需客户端',
+          body: `<p class="connect-note">两端都安装同一款组网软件并加入同一网络，用分配的虚拟 IP 访问本机。本机服务需监听局域网或双栈地址。</p>${linkList(connectLinks.lan)}`,
+          actions: `<button class="btn" data-nav="settings">${icon('settings')}调整监听范围</button>`
+        })
+      }${
+        connectCard({
+          name: 'cloud', title: 'Cloudflare Tunnel', copy: 'cloudflared 从本机向外建立隧道，由 Cloudflare 分配地址。',
+          status: tunnelStatus, tone: tunnel?.state === 'running' ? 'green' : '',
+          body: tunnelBody + linkList(connectLinks.tunnel), actions: tunnelActions
+        })
+      }</div>` +
+      `<div class="footnote">${icon('info')}没有公网 IPv4 时，FRP、虚拟局域网与 Cloudflare Tunnel 都可以中转；同一时间建议只保留一条入口。</div>`;
+  }
   function filteredEvents() { return state.events.filter(e => (state.logLevel === 'all' || e.level === state.logLevel) && (state.logSource === 'all' || e.source === state.logSource) && `${e.message} ${e.source}`.toLowerCase().includes(state.logSearch.toLowerCase())); }
   function logLines() { return filteredEvents().map(e => `<div class="log-line"><span class="log-time">${esc(e.time)}</span><span class="log-level ${e.level}">${esc(e.level)}</span><span class="log-source">${esc(e.source)}</span><span class="log-message">${esc(e.message)}</span></div>`).join('') || '<div class="empty">没有匹配的日志</div>'; }
   function logs() {
-    return heading('运行日志', '查看控制台操作记录；后端日志在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'cli'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取服务日志</span></div></section><div class="help-card"><strong>日志保存方式</strong><p>按来源分流，达到 2 MB 后滚动保存；导出前屏蔽 Token、JWT 与私钥。</p></div>`;
+    return heading('运行日志', '查看控制台操作记录；后端日志在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'tunnel', 'cli'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取服务日志</span></div></section><div class="help-card"><strong>日志保存方式</strong><p>按来源分流，达到 2 MB 后滚动保存；导出前屏蔽 Token、JWT 与私钥。</p></div>`;
   }
   function settings() {
     const info = state.info?.runtime;
@@ -239,7 +328,7 @@
     pageView.hidden = state.page === 'cli'; cliView.hidden = state.page !== 'cli';
     $('#crumb').textContent = titles[state.page];
     document.querySelectorAll('[data-page]').forEach(a => { const active = a.dataset.page === state.page; a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-    const markup = (state.live && state.views ? state.views : { overview, frp, cert, cli, logs, settings })[state.page]();
+    const markup = (state.live && state.views ? state.views : { overview, connect, frp, cert, cli, logs, settings })[state.page]();
     // Both containers stay attached. Hiding the CLI view preserves its browsing context across navigation.
     if (frame && !state.cliEmbedUrl) frame.remove();
     else if (frame && frame.getAttribute('src') !== state.cliEmbedUrl) frame.setAttribute('src', state.cliEmbedUrl);
@@ -269,6 +358,8 @@
     else if (name === 'open-manager') modal(`<h2>打开本机管理页面</h2><div class="dns-example">https://localhost:3333</div><p>服务尚未接入。正式版本会先确认服务与证书就绪，再打开默认浏览器。</p><div class="modal-actions">${button('查看本机 HTTPS', 'go-cert', 'shield')}${button('知道了', 'close-modal', '', 'primary')}</div>`);
     else if (name === 'go-cert') { $('#modal').close(); navigate('cert'); }
     else if (name === 'local-cert') localCertDemo();
+    else if (name === 'probe-ipv6') toast('公网 IPv6 检测在 Windows 桌面版中执行');
+    else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('Cloudflare Tunnel 在 Windows 桌面版中启动');
     else if (name === 'close-modal') $('#modal').close();
     else if (name === 'docs') { if (window.zviewerDesktop) await window.zviewerDesktop.openDocs(); else window.open('https://docx.zviewer.zero251.xyz/', '_blank', 'noopener,noreferrer'); }
     else if (name === 'export-frp') {
@@ -312,6 +403,13 @@
       // 桌面端走 Wails 运行时用系统浏览器打开；浏览器预览退化为新标签页。
       if (window.runtime?.BrowserOpenURL) window.runtime.BrowserOpenURL(url);
       else window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const copyTarget = event.target.closest('[data-copy]');
+    if (copyTarget) {
+      navigator.clipboard.writeText(copyTarget.dataset.copy)
+        .then(() => toast('已复制地址'))
+        .catch(() => toast('剪贴板不可用，可手动选择地址复制'));
       return;
     }
     const tutorialSection = event.target.closest('[data-tutorial-section]');
@@ -364,7 +462,7 @@
       navToggle.setAttribute('title', collapsed ? '展开导航' : '折叠导航');
     });
   }
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, frp, cert, cli, logs, settings }, refreshLogs };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, logs, settings }, refreshLogs };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {

@@ -5,11 +5,11 @@
   const { state, icon, esc, heading, button, notice, tutorial } = ui;
   const $ = selector => document.querySelector(selector);
   const labels = { stopped: '未启动', starting: '启动中', running: '运行中', stopping: '停止中', error: '异常', degraded: '待检查', connecting: '连接中', registered: '代理已注册' };
-  let initialized = false, busy = false, serviceDraft = null, cliEmbedPending = false;
+  let initialized = false, busy = false, serviceDraft = null, cliEmbedPending = false, ipv6Pending = false, ipv6Tried = false;
   function current() { return state.server.active || state.config; }
   function pill(status) { return `<span class="pill ${['running','registered'].includes(status) ? 'green' : ''}"><i></i>${labels[status] || status}</span>`; }
   function activity() {
-    return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc({ console: '控制台', backend: '主服务', voice: 'LiveKit 语音', cert: 'HTTPS 证书', frp: 'FRP 穿透', cli: '高画质代理' }[e.source] || e.source)}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join('');
+    return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc({ console: '控制台', backend: '主服务', voice: 'LiveKit 语音', cert: 'HTTPS 证书', frp: 'FRP 穿透', tunnel: 'Cloudflare 隧道', cli: '高画质代理' }[e.source] || e.source)}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join('');
   }
   function overview() {
     const s = state.server, c = current();
@@ -104,15 +104,26 @@
     return previous !== state.cliEmbedUrl;
   }
   function sync(snapshot, initial = false) {
-    const cliBefore = cliViewKey(state.server);
+    const cliBefore = cliViewKey(state.server), tunnelBefore = tunnelKey(state.server);
     const embedChanged = syncCliEmbed(snapshot);
     state.server = snapshot; state.events = snapshot.events; state.info.runtime = snapshot.runtime;
     if (initial) {
       state.config = structuredClone(snapshot.config); state.frp = structuredClone(snapshot.config.frp);
     }
-    if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot))) ui.render();
+    if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot)) || state.page === 'connect' && tunnelBefore !== tunnelKey(snapshot)) ui.render();
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
+    else if (state.page === 'connect') ensureIPv6();
     $('#footer-status').textContent = snapshot.backend === 'running' ? `本地服务运行中 · ${current().port}` : `本地服务 · ${labels[snapshot.backend]}`;
+  }
+  function tunnelKey(snapshot) { const t = snapshot?.tunnel; return t ? `${t.available}|${t.state}|${t.url}` : ''; }
+  // 首次进入“连接方式”页时探测公网 IPv6；结果缓存在 state.ipv6，手动刷新时重新探测。
+  function ensureIPv6() {
+    if (state.ipv6 !== null || ipv6Pending || ipv6Tried || state.page !== 'connect') return;
+    ipv6Pending = true; ipv6Tried = true;
+    window.zviewerDesktop.command('probe-ipv6', {})
+      .then(report => { state.ipv6 = report; if (state.page === 'connect') ui.render(); })
+      .catch(error => ui.toast(error.message.replace(/^.*Error: /, '')))
+      .finally(() => { ipv6Pending = false; });
   }
   async function command(action, payload) {
     if (busy) { ui.toast('正在处理上一项操作，请稍后'); return; }
@@ -151,11 +162,18 @@
       await command('save',{config:{frp:state.frp},token:token || undefined}); ui.render(); ui.toast('FRP 配置已保存，Token 已通过 Windows 加密保护');
     } else if (action === 'toggle-frp') { await command(['connecting','registered'].includes(state.server.frp) ? 'frp-stop' : 'frp-start'); ui.render(); }
     else if (action === 'export-frp') await command('export',{kind:state.frpTab === 'server' ? 'frps' : 'frpc'});
+    else if (action === 'probe-ipv6') {
+      const report = await window.zviewerDesktop.command('probe-ipv6', {});
+      state.ipv6 = report; ui.render();
+      ui.toast(report.ok ? `公网 IPv6：${report.address}` : '没有探测到公网 IPv6');
+    }
+    else if (action === 'tunnel-start') { await command('tunnel-start'); ui.render(); ui.toast('正在建立 Cloudflare 隧道，地址显示后即可使用'); }
+    else if (action === 'tunnel-stop') { await command('tunnel-stop'); ui.render(); ui.toast('Cloudflare 隧道已停止'); }
     else if (action === 'export-logs') await command('export',{kind:'logs'});
     else if (action === 'export-ca') await command('export',{kind:'ca'});
     else if (action === 'open-data') await command('open-data');
   }
-  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','open-data']);
+  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
   function cliValues() { return { port: $('#cli-port').value, autoStart: $('#cli-auto-start').getAttribute('aria-checked') === 'true', user: $('#cli-user').value.trim() }; }
   document.addEventListener('click',event => {
     if (!state.live) return;
@@ -192,14 +210,16 @@
   function init(info) {
     if (initialized) return; initialized = true;
     state.live = true; state.info = info; state.native = true;
-    state.views = {overview,frp,cert,cli:ui.preview.cli,logs,settings}; state.frpConfigOverride = frpCode;
+    state.views = { overview, connect: ui.preview.connect, frp, cert, cli: ui.preview.cli, logs, settings }; state.frpConfigOverride = frpCode;
     const buildLabel = $('.build-label');
     if (buildLabel) buildLabel.textContent = `WINDOWS DESKTOP · ${info.version}`;
     const status = $('.statusbar > span:last-child');
     if (status) status.innerHTML = `Windows 桌面控制台<span class="footer-separator">/</span>版本 ${esc(info.version)}`;
     sync(info,true);
+    ensureIPv6();
     window.zviewerDesktop.onUpdate(snapshot => sync(snapshot));
   }
+  window.addEventListener('hashchange', () => setTimeout(ensureIPv6, 0));
   window.addEventListener('zviewer-ready',event=>init(event.detail));
   if (state.info?.live) init(state.info);
 })();

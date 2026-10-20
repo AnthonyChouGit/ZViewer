@@ -235,6 +235,16 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		}
 		a.emitUpdate()
 		return true, nil
+	case "probe-ipv6":
+		return a.ctrl.ProbeIPv6(true), nil
+	case "tunnel-start":
+		return a.ctrl.StartTunnel()
+	case "tunnel-stop":
+		if err := a.ctrl.StopTunnel(); err != nil {
+			return nil, err
+		}
+		a.emitUpdate()
+		return true, nil
 	case "export":
 		return a.exportFile(payloadString(payload, "kind"))
 	case "open-data":

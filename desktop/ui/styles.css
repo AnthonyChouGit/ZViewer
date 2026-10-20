@@ -598,6 +598,43 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 }
 .footnote svg { width: 14px; height: 14px; flex-shrink: 0; }
 
+/* ---------- 连接方式 ---------- */
+.connect-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.connect-card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid var(--card-stroke); border-radius: var(--radius-card);
+  background: var(--card-bg);
+}
+.connect-head { display: flex; align-items: flex-start; gap: 12px; }
+.connect-title { flex: 1; min-width: 0; }
+.connect-title h2 { font-size: var(--text-body); line-height: 20px; font-weight: 600; color: var(--text-primary); }
+.connect-title p { margin-top: 2px; color: var(--text-secondary); font-size: 12px; line-height: 16px; }
+.connect-head .pill { flex-shrink: 0; }
+.connect-body { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.connect-value {
+  margin: 0; padding: 10px 12px;
+  border: 1px solid var(--divider); border-radius: var(--radius-control);
+  background: var(--layer-alt); color: var(--text-primary);
+  font-size: 13px; line-height: 18px; overflow-wrap: anywhere;
+}
+.connect-value code { font-family: var(--font-mono); font-size: 12px; }
+.connect-value.is-empty { color: var(--text-tertiary); }
+.connect-note { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 17px; }
+.connect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.connect-actions .btn { text-decoration: none; }
+.link-list { display: flex; flex-direction: column; border: 1px solid var(--divider); border-radius: var(--radius-control); overflow: hidden; }
+.link-list a {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; min-height: 36px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--text-primary); font-size: 12px; text-decoration: none;
+}
+.link-list a:last-child { border-bottom: 0; }
+.link-list a:hover { background: var(--card-bg-hover); color: var(--accent); }
+.link-list a small { color: var(--text-tertiary); font-size: 11px; font-family: var(--font-mono); }
+.link-arrow { margin-left: auto; color: var(--text-tertiary); font-size: 11px; }
+
 /* ---------- FRP / 代码 ---------- */
 .mapping {
   display: grid; grid-template-columns: minmax(140px, 1fr) 44px 56px 16px 100px;
@@ -867,6 +904,7 @@ dialog p { margin-top: 8px; color: var(--text-secondary); font-size: 12px; line-
   nav a > :not(.icon-glyph):not(svg) { display: none; }
   .main-shell { left: 48px; }
   .service-grid, .bottom-grid { grid-template-columns: 1fr; }
+  .connect-grid { grid-template-columns: 1fr; }
   .hero { grid-template-columns: 1fr; }
   .hero-art { display: none; }
   .mapping, .mapping-head { grid-template-columns: minmax(100px, 1fr) 40px 48px 12px 88px; }
