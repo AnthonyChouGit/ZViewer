@@ -68,6 +68,8 @@ npm --prefix desktop run shell:dist                 # 首次会构建 CLI，耗�
 npm --prefix desktop run package                    # 打包成 ZIP 并输出 SHA256
 ```
 
+`.github/workflows/build.yml` 的 `build-gui` job 跑的就是这条链路：取 Windows 运行包 → `npm run shell:dist --skip-cli` → `npm run package`，产物作为 `zviewer-gui-windows-x64` artifact 与单文件版一起进 Release。
+
 `shell:dist` 输出 `desktop/dist-gui/ZViewer-Windows-v0.4.1-x64`，结构如下（分发或移动时保留整个文件夹）：
 
 ```text

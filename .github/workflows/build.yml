@@ -1,4 +1,5 @@
-# ZViewer 单文件版自动构建（Windows + Linux）
+# ZViewer 自动构建：单文件版（Windows + Linux）、Docker 镜像与 Windows GUI
+# Windows GUI（Go/Wails 原生壳）在 build-gui job 中构建，产物与单文件版一起进 Release。
 # 触发方式：
 #   1. push 到 main 分支 → 构建并发布到 GitHub Releases (prerelease tag: latest)
 #   2. push tag (v*) → 构建并发布到 GitHub Releases (正式版)
@@ -7,7 +8,7 @@
 # 两次 workflow。gate job 在 main 推送时检测 HEAD 是否已被 v* tag 指向，
 # 是则跳过 dev 构建（同 commit 的正式版构建会接管）。
 
-name: Build Single-File (Windows + Linux)
+name: Build (Single-File + Windows GUI)
 
 on:
   push:
@@ -169,10 +170,85 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+  # Windows GUI（Go/Wails 原生壳）：复用 build 的 Windows 运行包，编译壳、组装目录并打 ZIP。
+  # 只跑 windows-latest：ProcessHost 依赖 .NET Framework 的 csc.exe，壳链接 -H windowsgui。
+  build-gui:
+    needs: [gate, build]
+    if: needs.gate.outputs.skip != 'true'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 26
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 直接复用 build job 的 Windows 产物，保证 GUI 与单文件版是同一份后端与网页
+      - name: Download Windows runtime
+        uses: actions/download-artifact@v7
+        with:
+          name: zviewer-windows-x64
+          path: dist/win
+
+      - name: Extract runtime
+        shell: pwsh
+        run: Expand-Archive -Path dist/win/zviewer-windows-x64.zip -DestinationPath dist/win -Force
+
+      # git checkout 不保留 mtime，syso 可能比 ico 旧，会使 build-shell 尝试用 rsrc 重新生成
+      # （CI 未安装该工具）。这里把资源文件的时间戳推新，直接命中已入库的图标资源。
+      - name: Refresh icon resource timestamp
+        shell: bash
+        run: touch desktop/rsrc_windows_amd64.syso
+
+      - name: Inject version (desktop)
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF#refs/tags/}" != "${GITHUB_REF}" ]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            VERSION="0.0.0-dev.${GITHUB_SHA:0:7}"
+          else
+            VERSION="0.0.0-manual"
+          fi
+          echo "Injecting desktop version: $VERSION"
+          node -e "const fs=require('fs');const p=require('./desktop/package.json');p.version='$VERSION';fs.writeFileSync('./desktop/package.json',JSON.stringify(p,null,2)+'\n')"
+
+      # shell:dist 依次：编译 ProcessHost（csc）→ 下载并校验 FRP（prepare-tools.ps1）
+      # → go build 壳 → 复制 runtime、许可证 → 写 BUILD-MANIFEST.json
+      # --skip-cli：ZViewerCLI 在独立仓库，CI 不构建，高画质代理需用户自备运行包
+      - name: Build portable GUI
+        run: npm --prefix desktop run shell:dist -- --skip-cli
+
+      - name: Package ZIP + SHA256
+        run: npm --prefix desktop run package
+
+      - name: Upload GUI artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: zviewer-gui-windows-x64
+          path: |
+            desktop/dist-gui/*.zip
+            desktop/dist-gui/SHA256SUMS.txt
+          retention-days: 30
+
   # main 分支推送：创建/更新 prerelease（tag: latest），确保持久化保存单文件产物
   release-latest:
     if: github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, build-gui]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -198,6 +274,7 @@ jobs:
 
             下载说明：
             - Windows: 下载 `zviewer-windows-x64.zip`，解压后运行 `start.bat`
+            - Windows GUI: 下载 `ZViewer-Windows-*-x64.zip`，解压后运行 `ZViewerShell.exe`（附 `SHA256SUMS.txt`）
             - Linux: 下载 `zviewer-linux-x64.tar.gz`，解压后运行 `./start.sh`
             - Docker: `docker pull zerowyc0721/zviewer:dev`（main 分支最新构建；正式版请用 `:latest` 或具体版本号）
 
@@ -206,6 +283,8 @@ jobs:
           files: |
             zviewer-linux-x64.tar.gz
             zviewer-windows-x64.zip
+            ZViewer-Windows-*-x64.zip
+            SHA256SUMS.txt
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -213,7 +292,7 @@ jobs:
   # tag 推送：创建正式版 Release
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, build-gui]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -262,6 +341,7 @@ jobs:
             echo "## 下载说明"
             echo ""
             echo "- **Windows**: 下载 \`zviewer-windows-x64.zip\`，解压后运行 \`start.bat\`"
+            echo "- **Windows GUI**: 下载 \`ZViewer-Windows-*-x64.zip\`，解压后运行 \`ZViewerShell.exe\`（附 \`SHA256SUMS.txt\`）"
             echo "- **Linux**: 下载 \`zviewer-linux-x64.tar.gz\`，解压后运行 \`./start.sh\`"
             echo "- **Docker**: \`docker pull zerowyc0721/zviewer:${VERSION}\`"
           } > release_body.md
@@ -281,6 +361,8 @@ jobs:
           files: |
             zviewer-linux-x64.tar.gz
             zviewer-windows-x64.zip
+            ZViewer-Windows-*-x64.zip
+            SHA256SUMS.txt
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
