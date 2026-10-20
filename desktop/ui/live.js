@@ -40,10 +40,9 @@
       .replace('>3337</code>', `>${esc(state.config.livekitTcpPort || 3337)}</code>`);
   }
   function cert() {
-    const local = state.certMode === 'local', s = state.server.certificate, c = state.config;
-    const domain = local ? 'localhost' : state.certDomain;
-    return heading('证书与域名', '签发本地证书、安装当前用户信任，再打开管理页面。', tutorial('cert')) +
-      `<div class="tabs"><button data-cert-mode="local" class="${local ? 'active' : ''}">本机 localhost</button><button data-cert-mode="lan" class="${!local ? 'active' : ''}">高级：内网域名</button></div><div class="form-layout"><section class="panel"><div class="panel-heading"><h2>${local ? '本机 localhost' : '为内网地址签发证书'}</h2>${pill(s.valid ? 'running' : 'stopped')}</div>${local ? '<p class="wizard-copy">无需填写域名与 IP。程序将签发 localhost 证书，启用 HTTPS，并保留现有服务端口。</p>' : `<label class="field"><span>自定义内网域名</span><input id="cert-domain" value="${esc(state.certDomain)}" placeholder="zviewer.home.arpa"></label><label class="field"><span>本机内网 IP <small>可选，填写后加入证书 SAN</small></span><input id="cert-ip" value="${esc(state.certIp)}" placeholder="例如 192.168.1.100"></label>`}<div class="dns-example">https://${esc(domain)}:${esc(c.port)}/admin</div>${notice('证书由本机专用 CA 签发。私钥仅保存在当前用户配置目录；安装信任时将显示证书指纹。')}<div class="check-item">${icon('check')}<div><strong>1. 签发证书并启用 HTTPS</strong><br>已有有效证书直接复用；运行中的服务会重启。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装本机信任</strong><br>只安装到当前 Windows 用户，可撤销。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong><br>直接访问 /admin，由服务端处理登录。</div></div><div class="live-toolbar">${button('签发并启用 HTTPS',local ? 'local-cert' : 'lan-cert','lock','primary')}${s.valid && !s.trusted ? button('安装本机信任','trust-cert','shield') : ''}${s.trusted ? button('打开管理页面','open-manager','external') : ''}</div>${!local ? '<div class="help-card"><strong>名称解析需要单独配置</strong><p>证书签发不会创建 DNS 记录。请在访问设备 hosts 或内网 DNS 中配置域名；其他设备还需安装公开 CA 证书。</p></div>' : ''}</section><aside class="panel"><div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3>${esc(s.exists ? c.domain : domain)}</h3><p>${s.valid ? `有效期至 ${esc(s.validTo)}` : '尚未签发证书'}<br>${s.trusted ? '当前用户已信任' : '当前用户尚未安装信任'}</p></div><div class="meta-list"><div class="meta-line"><span>监听端口</span><span>${esc(c.port)}</span></div><div class="meta-line"><span>HTTPS 配置</span><span>${c.https ? '已启用' : '未启用'}</span></div><div class="meta-line"><span>证书 SAN</span><span>${esc(s.san || 'localhost / 127.0.0.1 / ::1')}</span></div></div>${s.fingerprint ? `<p class="certificate-fingerprint">CA SHA-256<br>${esc(s.fingerprint)}</p>` : ''}<div class="live-toolbar">${s.valid ? button('导出公开 CA','export-ca','download') : ''}${s.trusted ? button('撤销本机信任','untrust-cert','shield') : ''}${!local ? button('导出解析说明','export-hosts','download') : ''}</div></aside></div>`;
+    const s = state.server.certificate, c = state.config;
+    return heading('证书与域名', '签发 localhost 证书、安装当前用户信任，再打开管理页面。', tutorial('cert')) +
+      `<div class="form-layout"><section class="panel"><div class="panel-heading"><h2>本机 localhost</h2>${pill(s.valid ? 'running' : 'stopped')}</div><p class="wizard-copy">无需填写域名与 IP。程序将签发 localhost 证书，启用 HTTPS，并保留现有服务端口；局域网与公网设备访问需另行准备证书。</p><div class="dns-example">https://localhost:${esc(c.port)}/admin</div>${notice('证书由本机专用 CA 签发。私钥仅保存在当前用户配置目录；安装信任时将显示证书指纹。')}<div class="check-item">${icon('check')}<div><strong>1. 签发证书并启用 HTTPS</strong><br>已有有效证书直接复用；运行中的服务会重启。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装本机信任</strong><br>只安装到当前 Windows 用户，可撤销。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong><br>直接访问 /admin，由服务端处理登录。</div></div><div class="live-toolbar">${button('签发并启用 HTTPS','local-cert','lock','primary')}${s.valid && !s.trusted ? button('安装本机信任','trust-cert','shield') : ''}${s.trusted ? button('打开管理页面','open-manager','external') : ''}</div></section><aside class="panel"><div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3>${esc(s.exists ? c.domain : 'localhost')}</h3><p>${s.valid ? `有效期至 ${esc(s.validTo)}` : '尚未签发证书'}<br>${s.trusted ? '当前用户已信任' : '当前用户尚未安装信任'}</p></div><div class="meta-list"><div class="meta-line"><span>监听端口</span><span>${esc(c.port)}</span></div><div class="meta-line"><span>HTTPS 配置</span><span>${c.https ? '已启用' : '未启用'}</span></div><div class="meta-line"><span>证书 SAN</span><span>${esc(s.san || 'localhost / 127.0.0.1 / ::1')}</span></div></div>${s.fingerprint ? `<p class="certificate-fingerprint">CA SHA-256<br>${esc(s.fingerprint)}</p>` : ''}<div class="live-toolbar">${s.valid ? button('导出公开 CA','export-ca','download') : ''}${s.trusted ? button('撤销本机信任','untrust-cert','shield') : ''}</div></aside></div>`;
   }
   function serviceValues() {
     return {
@@ -110,8 +109,6 @@
     state.server = snapshot; state.events = snapshot.events; state.info.runtime = snapshot.runtime;
     if (initial) {
       state.config = structuredClone(snapshot.config); state.frp = structuredClone(snapshot.config.frp);
-      state.certDomain = snapshot.config.domain === 'localhost' ? 'zviewer.home.arpa' : snapshot.config.domain;
-      state.certIp = snapshot.config.lanIp;
     }
     if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot))) ui.render();
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
@@ -143,10 +140,8 @@
     }
     else if (action === 'cli-stop') { await command('cli-stop'); ui.toast('高画质代理已停止'); }
     else if (action === 'cli-save') { await command('cli-save', cliValues()); state.cliDraft = null; ui.render(); ui.toast('代理配置已保存，内置设置会自动带入后端地址'); }
-    else if (action === 'local-cert' || action === 'lan-cert') {
-      const domain = action === 'local-cert' ? 'localhost' : $('#cert-domain').value.trim().toLowerCase();
-      const ip = action === 'local-cert' ? '' : $('#cert-ip').value.trim();
-      await command('https',{domain,ip}); ui.render(); ui.toast('HTTPS 已就绪，请安装本机信任后打开管理页面');
+    else if (action === 'local-cert') {
+      await command('https',{domain:'localhost',ip:''}); ui.render(); ui.toast('HTTPS 已就绪，请安装本机信任后打开管理页面');
     } else if (action === 'trust-cert' || action === 'untrust-cert') { const result = await command(action === 'trust-cert' ? 'trust' : 'untrust'); ui.render(); ui.toast(result?.canceled ? '已取消安装信任' : '本机信任状态已更新'); }
     else if (action === 'save-service') {
       const config = serviceValues();
@@ -158,10 +153,9 @@
     else if (action === 'export-frp') await command('export',{kind:state.frpTab === 'server' ? 'frps' : 'frpc'});
     else if (action === 'export-logs') await command('export',{kind:'logs'});
     else if (action === 'export-ca') await command('export',{kind:'ca'});
-    else if (action === 'export-hosts') await command('export',{kind:'hosts'});
     else if (action === 'open-data') await command('open-data');
   }
-  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','lan-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','export-hosts','open-data']);
+  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','open-data']);
   function cliValues() { return { port: $('#cli-port').value, autoStart: $('#cli-auto-start').getAttribute('aria-checked') === 'true', user: $('#cli-user').value.trim() }; }
   document.addEventListener('click',event => {
     if (!state.live) return;

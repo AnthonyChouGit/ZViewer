@@ -40,7 +40,7 @@
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem('zviewer-ui-prefs') || '{}') }; } catch { /* Use safe defaults if storage is unavailable. */ }
   const state = {
     page: 'overview', running: false, certReady: false, native: false, info: null,
-    frpTab: 'client', certMode: 'local', certStep: 1, certDomain: 'zviewer.home.arpa', certIp: '192.168.1.100',
+    frpTab: 'client',
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
     events: [], prefs
@@ -84,18 +84,18 @@
       sections: [
         {
           title: '为什么要配置证书',
-          body: '<p>浏览器会把 http 页面标记为不安全，麦克风、剪贴板、Service Worker 等能力只在安全上下文（https 或 localhost）下可用。</p><p>供局域网设备访问时，还需要一张它们信任的证书，否则每台设备都要手动跳过警告。</p>'
+          body: '<p>浏览器会把 http 页面标记为不安全，麦克风、剪贴板、Service Worker 等能力只在安全上下文（https 或 localhost）下可用。</p><p>本控制台只为当前电脑签发 localhost 证书；局域网或公网设备访问需要另外准备证书与域名解析。</p>'
         },
         {
-          title: '本机证书与内网证书的区别',
-          body: '<ul><li><strong>本机证书</strong>：只对 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 生效，仅当前电脑可访问，不需要 DNS。</li><li><strong>内网证书</strong>：把域名或内网 IP 写入证书 SAN，需要把域名解析到该 IP（hosts 或内网 DNS），其他设备还要安装并信任根证书。</li></ul>'
+          title: '证书覆盖哪些地址',
+          body: '<ul><li>只对 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 生效，不包含内网 IP 与自定义域名。</li><li>不需要配置 DNS、hosts 或路由器。</li><li>证书由本机专用 CA 签发，私钥只留在当前用户配置目录。</li></ul>'
         },
         {
           title: '配置方法',
-          body: '<ol><li>选择范围：仅本机访问选“本机 localhost”；供局域网设备访问选“高级：内网域名”。</li><li>签发：程序用本机专用 CA 生成证书，私钥保存在当前用户配置目录，不外传。</li><li>安装信任：只写入当前 Windows 用户的信任存储，可随时撤销。</li><li>启用 HTTPS：在应用设置里打开“使用 HTTPS”，保存并重启服务。</li><li>内网场景：为访问设备配置 DNS 或 hosts，并安装导出的公开 CA 证书。</li></ol>'
+          body: '<ol><li>点击签发按钮，程序用本机 CA 生成 localhost 证书；已有有效证书时直接复用。</li><li>安装当前用户信任，浏览器不再提示证书错误，可随时撤销。</li><li>在应用设置里确认“使用 HTTPS”已开启，保存并重启服务。</li><li>打开管理页面，地址为 <code>https://localhost:3333</code>。</li></ol>'
         }
       ],
-      foot: '签发证书不会创建 DNS 记录；根 CA 私钥不可分享。'
+      foot: '根 CA 私钥不可分享；撤销信任后浏览器会重新提示证书错误。'
     },
     cli: {
       title: '高画质代理教程',
@@ -189,21 +189,11 @@
       `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>自建 frps</small></div><div class="form-row"><label class="field"><span>VPS 地址</span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证 Token <small>不保存、不导出明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">导出模板从 FRP_TOKEN 环境变量读取凭据。输入内容不会保存。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音需放行对应 UDP 端口；选用 TCP 语音时，管理端语音模式需同步设为 TCP。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('查看文档', 'docs', 'book')}${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据采用环境变量占位，未写入明文</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div><div class="help-card"><strong>部署步骤</strong><p>两台机器使用同一 FRP_TOKEN；部署 frps 并放行端口，再用 frpc verify 校验配置。传输 TLS 与网页 HTTPS 独立配置。</p></div></section></div>`;
   }
   function certPreview() {
-    const local = state.certMode === 'local', domain = local ? 'localhost' : state.certDomain;
-    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">${esc(domain)}</h3><p>${local ? '本机访问，无需配置 DNS 或 hosts。' : '用于内网设备，需额外配置域名解析。'}<br>本地自签，尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://${esc(domain)}:3333</span></div><div class="meta-line"><span>签发方式</span><span>${local ? '现有 zviewer-cert.exe · localhost' : '本地 CA · 高级配置'}</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>首次使用需要单独安装信任</span></div></div><div class="check-item">${icon('check')}<div><strong>localhost 仅用于本机</strong><br>打开管理页面不需要路由器或公网域名。</div></div><div class="check-item">${icon('lock')}<div><strong>私钥仅保存在本机</strong><br>只导出公开证书，根 CA 私钥不可分享。</div></div>`;
+    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问，无需配置 DNS 或 hosts。<br>本地自签，尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>现有 zviewer-cert.exe · localhost</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>首次使用需要单独安装信任</span></div></div><div class="check-item">${icon('check')}<div><strong>localhost 仅用于本机</strong><br>打开管理页面不需要路由器或公网域名。</div></div><div class="check-item">${icon('lock')}<div><strong>私钥仅保存在本机</strong><br>只导出公开证书，根 CA 私钥不可分享。</div></div>`;
   }
   function cert() {
-    const local = state.certMode === 'local';
-    let content;
-    if (local) {
-      content = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">推荐</span></div><p class="wizard-copy">无需填写域名与 IP。为 localhost 签发自签证书，启用 HTTPS 后打开管理页面。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong><br>已有有效证书时直接复用。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong><br>安装信任后，浏览器不再提示证书错误。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong><br>由默认浏览器打开。</div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
-    } else {
-      const steps = `<div class="steps">${['访问地址', '解析与信任', '完成预览'].map((label, i) => `${i ? '<span class="step-line"></span>' : ''}<div class="wizard-step ${state.certStep === i + 1 ? 'current' : ''}"><b>${i + 1}</b>${label}</div>`).join('')}</div>`;
-      if (state.certStep === 1) content = steps + `<label class="field"><span>自定义内网域名 <small>高级选项</small></span><input id="cert-domain" value="${esc(state.certDomain)}" placeholder="zviewer.home.arpa" maxlength="253"></label><label class="field"><span>本机内网 IP <small>当前为示例，请修改</small></span><input id="cert-ip" value="${esc(state.certIp)}" placeholder="192.168.1.100"></label><div class="mini-label">证书将包含这些名称（SAN）</div><div class="san-list" id="san-list">${[state.certDomain, state.certIp, 'localhost', '127.0.0.1', '::1'].map(s => `<span class="san">${esc(s)}</span>`).join('')}</div><div class="validation" id="cert-error" role="alert"></div><div class="form-actions">${button('下一步：解析与信任', 'cert-next', 'arrow', 'primary')}</div>`;
-      else if (state.certStep === 2) content = steps + notice('内网域名需要在访问设备上解析。<strong>签发证书不会创建 DNS 记录。</strong>') + `<h3>本机 hosts 记录预览</h3><div class="dns-example">${esc(state.certIp)}&nbsp;&nbsp;${esc(state.certDomain)}</div><p class="wizard-copy">该记录仅对本机生效。其他设备需配置内网 DNS 或各自的 hosts，并安装并信任根证书。</p><div class="help-card"><strong>不修改路由器配置</strong><p>hosts 修改支持备份与撤销；路由器 DNS 需手动配置。</p></div><div class="form-actions">${button('上一步', 'cert-back')}${button('完成方案预览', 'cert-next', 'check', 'primary')}</div>`;
-      else content = steps + `<div class="big-check">${icon('check')}</div><h2>方案已生成</h2><p class="wizard-copy">域名与 SAN 已生成，未签发证书，也未安装信任。</p><div class="dns-example">https://${esc(state.certDomain)}:3333</div><div class="form-actions">${button('返回修改', 'cert-reset')}${button('下载配置清单', 'export-cert', 'download', 'primary')}</div>`;
-    }
-    return heading('证书与域名', '默认使用 localhost 自签证书；内网域名需自行配置解析。', tutorial('cert')) + `<div class="tabs"><button data-cert-mode="local" class="${local ? 'active' : ''}">本机 localhost</button><button data-cert-mode="lan" class="${!local ? 'active' : ''}">高级：内网域名</button></div><div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
+    const content = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">仅本机</span></div><p class="wizard-copy">为 localhost 签发自签证书，启用 HTTPS 后打开管理页面。局域网与公网设备访问需另行准备证书。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong><br>已有有效证书时直接复用。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong><br>安装信任后，浏览器不再提示证书错误。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong><br>由默认浏览器打开。</div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
+    return heading('证书与域名', '签发 localhost 自签证书，并安装当前用户信任。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
   function cli() {
     const live = Boolean(state.live), saved = state.config?.cli || { port: 9333, autoStart: false, user: '' };
@@ -267,11 +257,6 @@
     icons();
     if (state.live && state.page === 'cli') window.dispatchEvent(new Event('zviewer-cli-visible'));
   }
-  function readCert() {
-    const domain = $('#cert-domain'), ip = $('#cert-ip');
-    if (domain) state.certDomain = domain.value.trim().toLowerCase();
-    if (ip) state.certIp = ip.value.trim();
-  }
   function localCertDemo() {
     state.certReady = true;
     addEvent('已演示本机证书流程，未实际执行。', 'cert');
@@ -297,20 +282,6 @@
     } else if (name === 'copy-frp') {
       try { await navigator.clipboard.writeText(frpConfig(state.frpTab === 'server')); toast('已复制配置模板，未包含输入的 Token'); }
       catch { toast('剪贴板不可用，可使用“导出配置模板”'); }
-    } else if (name === 'cert-next') {
-      readCert();
-      if (state.certStep === 1) {
-        const ip = state.certIp.split('.').map(Number);
-        const privateV4 = validHost(state.certIp) && /^[\d.]+$/.test(state.certIp) && (ip[0] === 10 || (ip[0] === 192 && ip[1] === 168) || (ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31));
-        const error = !validHost(state.certDomain) || !state.certDomain.includes('.') || /^[\d.]+$/.test(state.certDomain) || state.certDomain.includes(':') ? '请输入合法的内网域名，例如 zviewer.home.arpa。' : !privateV4 ? '请输入 10.x、172.16–31.x 或 192.168.x 范围内的内网 IPv4 地址。' : '';
-        if (error) { $('#cert-error').textContent = error; return; }
-      }
-      state.certStep = Math.min(3, state.certStep + 1); render();
-    } else if (name === 'cert-back') { state.certStep = Math.max(1, state.certStep - 1); render(); }
-    else if (name === 'cert-reset') { state.certStep = 1; render(); }
-    else if (name === 'export-cert') {
-      download('zviewer-lan-https-plan.txt', `ZViewer 内网 HTTPS 配置清单（未实际执行）\n\n域名：${state.certDomain}\n内网 IP：${state.certIp}\nURL：https://${state.certDomain}:3333\nSAN：${state.certDomain}, ${state.certIp}, localhost, 127.0.0.1, ::1\n\n1. 使用本地 CA 签发证书，不要把内网域名传给公网 ACME 流程。\n2. 配置内网 DNS，或在访问电脑 hosts 中添加：${state.certIp} ${state.certDomain}\n3. 各访问设备安装并信任公开根证书。不要分享 CA 私钥。\n4. 启用后端 HTTPS，并分别验证网页、WebSocket、语音与共享。\n\n若仅本机使用，直接选择默认 localhost，无需内网 DNS。\n`);
-      toast('配置清单已下载，未生成证书或私钥');
     } else if (name === 'export-logs') {
       download('zviewer-preview-events.log', '# ZViewer GUI prototype events only\n' + filteredEvents().map(e => `${e.time} ${e.level} [${e.source}] ${e.message}`).join('\n'));
       toast('已导出当前筛选的日志');
@@ -355,7 +326,6 @@
     const nav = event.target.closest('[data-nav]'); if (nav) { navigate(nav.dataset.nav); return; }
     const btn = event.target.closest('[data-action]'); if (btn) { action(btn.dataset.action).catch(error => toast(`操作未完成：${error.message}`)); return; }
     const frpTab = event.target.closest('[data-frp-tab]'); if (frpTab) { state.frpTab = frpTab.dataset.frpTab; render(); return; }
-    const certTab = event.target.closest('[data-cert-mode]'); if (certTab) { readCert(); state.certMode = certTab.dataset.certMode; render(); return; }
     const pref = event.target.closest('[data-pref]');
     if (pref) {
       state.prefs[pref.dataset.pref] = !state.prefs[pref.dataset.pref];
@@ -368,11 +338,6 @@
   document.addEventListener('input', event => {
     const target = event.target;
     if (target.matches('[data-frp-field]')) { state.frp[target.dataset.frpField] = target.value; $('#frp-code').textContent = frpConfig(state.frpTab === 'server'); $('#frp-error').textContent = ''; }
-    if (!state.live && (target.id === 'cert-domain' || target.id === 'cert-ip')) {
-      readCert(); $('#cert-preview').innerHTML = certPreview();
-      $('#san-list').innerHTML = [state.certDomain, state.certIp, 'localhost', '127.0.0.1', '::1'].map(s => `<span class="san">${esc(s)}</span>`).join('');
-      $('#cert-error').textContent = '';
-    }
     if (target.id === 'log-search') { state.logSearch = target.value; if (!state.paused) refreshLogs(); }
   });
   document.addEventListener('change', event => {
@@ -399,7 +364,7 @@
       navToggle.setAttribute('title', collapsed ? '展开导航' : '折叠导航');
     });
   }
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, readCert, preview: { overview, frp, cert, cli, logs, settings }, refreshLogs };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, frp, cert, cli, logs, settings }, refreshLogs };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {

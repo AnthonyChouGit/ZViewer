@@ -445,7 +445,6 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
   display: block; margin: 6px 0 0;
   color: var(--text-tertiary); font-size: 12px; line-height: 16px;
 }
-.mini-label { margin: 12px 0 8px; font-weight: 600; color: var(--text-secondary); }
 .checkbox { width: 16px; height: 16px; accent-color: var(--accent); }
 .validation { min-height: 18px; margin-top: 8px; color: var(--system-critical); font-size: 12px; }
 .muted { color: var(--text-tertiary); }
@@ -646,23 +645,7 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .path-flow > span { color: var(--text-tertiary); }
 
 /* ---------- 证书 ---------- */
-.steps { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-.wizard-step { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 12px; }
-.wizard-step b {
-  width: 24px; height: 24px; display: grid; place-items: center;
-  border: 1px solid var(--control-stroke-strong); border-radius: 50%;
-  font-size: 11px; font-weight: 400;
-}
-.wizard-step.current { color: var(--text-primary); }
-.wizard-step.current b { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-.step-line { flex: 1; height: 1px; background: var(--divider); }
 .wizard-copy { color: var(--text-secondary); font-size: 12px; line-height: 18px; }
-.san-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.san {
-  padding: 3px 8px; border: 1px solid var(--control-stroke); border-radius: var(--radius-control);
-  background: var(--layer-alt); color: var(--text-secondary);
-  font-family: var(--font-mono); font-size: 11px;
-}
 .certificate {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   padding: 20px 16px; text-align: center;
