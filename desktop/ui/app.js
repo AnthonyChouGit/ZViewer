@@ -423,15 +423,14 @@
         connectCard({
           name: 'network', title: '服务商 FRP', copy: '用服务商提供的公网节点做内网穿透，注册即用。',
           status: live ? frpStatus : '需注册', tone: frpState === 'registered' ? 'green' : '',
-          body: `<p class="connect-note">注册服务商后，把它给出的服务器地址、端口与 Token 填进本机 FRP，客户端仍是同一个 frpc。访问地址、端口与带宽由服务商决定，免费节点通常限速；本机同一时间只连接一台服务器，换地址即切换。</p>${linkList(connectLinks.frpProvider)}`,
-          actions: `<button class="btn primary" data-frp-open="client">${icon('arrow')}配置本机 FRP</button>`
+          body: `<p class="connect-note">注册服务商后，把它给出的服务器地址、端口与 Token 填进本机 FRP，客户端仍是同一个 frpc。访问地址、端口与带宽由服务商决定，免费节点通常限速；本机同一时间只连接一台服务器，换地址即切换。</p>${linkList(connectLinks.frpProvider)}`
         })
       }${
         connectCard({
           name: 'server', title: '自建 FRP', copy: '在自己的 VPS 上运行 frps，端口与带宽完全自管。',
           status: live ? frpStatus : '需 VPS', tone: frpState === 'registered' ? 'green' : '',
           body: `<p class="connect-note">自己的 VPS 运行 frps，本机 frpc 连自己的服务器。端口、域名与带宽全自管，需在 VPS 安全组与系统防火墙放行映射端口；控制台可生成两端配置。</p>${linkList(connectLinks.frpSelf)}`,
-          actions: `<button class="btn primary" data-frp-open="server">${icon('server')}生成 frps 配置</button>`
+          actions: `<button class="btn primary" data-frp-open="client">${icon('arrow')}配置本机 FRP</button>`
         })
       }${
         connectCard({
