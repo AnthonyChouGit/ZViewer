@@ -104,18 +104,20 @@
     return previous !== state.cliEmbedUrl;
   }
   function sync(snapshot, initial = false) {
-    const cliBefore = cliViewKey(state.server), tunnelBefore = tunnelKey(state.server);
+    const cliBefore = cliViewKey(state.server), tunnelBefore = tunnelKey(state.server), entryBefore = entryKey(state.server);
     const embedChanged = syncCliEmbed(snapshot);
     state.server = snapshot; state.events = snapshot.events; state.info.runtime = snapshot.runtime;
-    if (initial) {
-      state.config = structuredClone(snapshot.config); state.frp = structuredClone(snapshot.config.frp);
-    }
-    if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot)) || state.page === 'connect' && tunnelBefore !== tunnelKey(snapshot)) ui.render();
+    // 配置随快照更新，端口或 HTTPS 改变后连接方式页不会残留旧地址。
+    state.config = structuredClone(snapshot.config);
+    if (initial) state.frp = structuredClone(snapshot.config.frp);
+    if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot)) || state.page === 'connect' && (tunnelBefore !== tunnelKey(snapshot) || entryBefore !== entryKey(snapshot))) ui.render();
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
     else if (state.page === 'connect') ensureIPv6();
     $('#footer-status').textContent = snapshot.backend === 'running' ? `本地服务运行中 · ${current().port}` : `本地服务 · ${labels[snapshot.backend]}`;
   }
   function tunnelKey(snapshot) { const t = snapshot?.tunnel; return t ? `${t.available}|${t.state}|${t.url}` : ''; }
+  // 外部访问地址由主服务端口与 HTTPS 决定，两者变化都要重绘入口卡片。
+  function entryKey(snapshot) { const c = snapshot?.active || snapshot?.config || {}; return `${c.port}|${c.https}`; }
   // 首次进入“连接方式”页时探测公网 IPv6；结果缓存在 state.ipv6，手动刷新时重新探测。
   function ensureIPv6() {
     if (state.ipv6 !== null || ipv6Pending || ipv6Tried || state.page !== 'connect') return;
