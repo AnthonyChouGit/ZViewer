@@ -201,8 +201,6 @@
     state.views = {overview,frp,cert,cli:ui.preview.cli,logs,settings}; state.frpConfigOverride = frpCode;
     const buildLabel = $('.build-label');
     if (buildLabel) buildLabel.textContent = `WINDOWS DESKTOP · ${info.version}`;
-    const badge = $('.preview-badge');
-    if (badge) badge.innerHTML = '<i></i>本地运行';
     const status = $('.statusbar > span:last-child');
     if (status) status.innerHTML = `Windows 桌面控制台<span class="footer-separator">/</span>版本 ${esc(info.version)}`;
     sync(info,true);

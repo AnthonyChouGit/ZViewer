@@ -205,12 +205,6 @@ body.nav-collapsed .settings-link::before { left: -4px; }
 .slash { color: var(--text-tertiary); margin: 0 6px; }
 #crumb { color: var(--text-secondary); }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
-.preview-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  color: var(--text-secondary); font-size: 12px;
-}
-.preview-badge i { width: 8px; height: 8px; border-radius: 50%; background: var(--system-success); }
-.toolbar-divider { width: 1px; height: 16px; background: var(--divider); }
 .toolbar-button {
   display: inline-flex; align-items: center; gap: 8px;
   height: var(--control-height); padding: 0 12px;
