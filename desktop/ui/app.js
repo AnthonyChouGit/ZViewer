@@ -251,11 +251,12 @@
     const config = live ? state.server?.active || state.config || {} : {};
     const port = config.port || 3333;
     // IPv6：地址只来自外部接口，没有则明确显示“没有”。
-    const v6Body = !v6
+    const v6Body = (!v6
       ? `<p class="connect-value is-empty">未检测</p><p class="connect-note">打开本页时经外部接口检测本机公网 IPv6，不读取本机网卡。</p>`
       : v6.ok
         ? `<p class="connect-value"><code>${esc(v6.address)}</code></p><p class="connect-note">${esc(v6.source)} · ${esc(v6.checkedAt)} 检测。外部接口已通过 IPv6 访问到本机，地址可在公网路由；路由器与 Windows 防火墙仍需放行入站端口。</p>`
-        : `<p class="connect-value is-empty">没有</p><p class="connect-note">${esc(v6.reason || '没有探测到公网 IPv6。')}可改用下面的中转方式。</p>`;
+        : `<p class="connect-value is-empty">没有</p><p class="connect-note">${esc(v6.reason || '没有探测到公网 IPv6。')}可改用下面的中转方式。</p>`) +
+      `<p class="connect-hint">如果你有 IPv4 公网地址，那么应该不需要我教你其他的了。</p>`;
     const v6Actions = `${button(v6 ? '重新检测' : '检测 IPv6', 'probe-ipv6', 'refresh')}${v6?.ok ? `<button class="btn" data-copy="${esc(v6.address)}">${icon('copy')}复制地址</button>` : ''}`;
 
     const frpState = live ? state.server.frp : '';
