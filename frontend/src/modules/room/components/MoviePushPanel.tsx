@@ -393,6 +393,7 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           sourceType: 'anime',
           format: resolved.format,
           playsvideoEnabled,
+          noProxyFallback: !serverProxy,
         })
 
         // 2. 同时异步加入影片列表（不阻塞预览播放）
@@ -465,6 +466,7 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           sourceType: 'kazumi',
           format: resolved.format,
           playsvideoEnabled,
+          noProxyFallback: !serverProxy,
         })
 
         void addMovie(roomId, {
@@ -637,6 +639,7 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           sourceType: 'cms',
           format: resolved.format,
           playsvideoEnabled,
+          noProxyFallback: !serverProxy,
         })
 
         // 落库：sourceMeta 元数据（直链短时效），播放时实时重解析

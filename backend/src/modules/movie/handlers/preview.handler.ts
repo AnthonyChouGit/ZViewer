@@ -27,6 +27,8 @@ export interface PreviewSourcePayload {
     audioCodec?: string;
     headers?: Record<string, string>;
     duration?: number;
+    playsvideoEnabled?: boolean;
+    noProxyFallback?: boolean;
   };
 }
 

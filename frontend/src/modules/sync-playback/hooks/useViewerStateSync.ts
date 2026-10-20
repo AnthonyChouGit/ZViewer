@@ -292,13 +292,13 @@ export function useViewerStateSync({
       // 广播链路 broadcastState 恒携带 diff（computeStateDiff），仅 forceSync 不带，
       // 据此可靠区分。观众端对这类全量广播做强制应用（含 currentTime 硬校正）。
       const isForceSync = payload.diff === undefined
-      const state = restoreStateSnapshot(
-        useRoomStore.getState().watchTogether,
-        payload.state
-      )
+      const previous = useRoomStore.getState().watchTogether
+      const state = restoreStateSnapshot(previous, payload.state)
 
       // 判断是否为 sourceUrl 变化
-      const isSourceChange = lastAppliedSourceUrlRef.current !== state.sourceUrl
+      const isSourceChange =
+        lastAppliedSourceUrlRef.current !== state.sourceUrl ||
+        previous.noProxyFallback !== state.noProxyFallback
       setWatchTogether(state)
 
       const processState = async (s: WatchTogetherState, force = false) => {

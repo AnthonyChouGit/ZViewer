@@ -170,7 +170,8 @@ export function isStateEqual(
     a.format !== b.format ||
     a.videoCodec !== b.videoCodec ||
     a.audioCodec !== b.audioCodec ||
-    a.cid !== b.cid
+    a.cid !== b.cid ||
+    a.noProxyFallback !== b.noProxyFallback
   ) {
     return false
   }

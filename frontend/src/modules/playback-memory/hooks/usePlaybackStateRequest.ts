@@ -109,7 +109,10 @@ export function usePlaybackStateRequest({
 
           // 重试等待期间可能已通过房主广播（useViewerStateSync）应用过该源，
           // 此时不再重复 attach，避免重复解析 / 覆盖已就绪的播放器
-          if (lastAppliedSourceUrlRef.current === state.sourceUrl) {
+          if (
+            lastAppliedSourceUrlRef.current === state.sourceUrl &&
+            useRoomStore.getState().watchTogether.noProxyFallback === state.noProxyFallback
+          ) {
             return
           }
           const video = videoRef.current

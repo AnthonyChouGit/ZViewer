@@ -55,6 +55,20 @@ async function listen(t, app) {
   );
   return `http://127.0.0.1:${server.address().port}`;
 }
+test("direct media policy survives database reload and retains explicit relay mode", async () => {
+  const { PlaybackMemoryService } = require("../../backend/dist/modules/playback-memory/playback-memory.service");
+  const roomId = "media-policy-reload";
+  await save(Room, { roomId, mode: "watch-together", ownerUserId: owner.id });
+  const memory = new PlaybackMemoryService();
+  for (const noProxyFallback of [true, false, undefined]) {
+    await memory.setPlayback(roomId, { sourceUrl: "https://media.example/index.m3u8", sourceType: "anime", format: "hls", noProxyFallback, currentTime: 1, isPlaying: false, playbackRate: 1 }, "fixture-host");
+    await memory.flushAllDirty();
+    const restored = await new PlaybackMemoryService().getRawPlayback(roomId);
+    assert.equal(restored.noProxyFallback, noProxyFallback);
+  }
+  await memory.clearPlayback(roomId);
+});
+
 test("IPv6 literals and normalized IPv4 mappings cannot bypass private-host detection", () => {
   for (const host of [
     "[::1]",

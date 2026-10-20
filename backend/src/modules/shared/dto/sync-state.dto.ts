@@ -71,6 +71,8 @@ export interface SyncStateDto {
   acceptQuality?: QualityOptionDto[];
   /** 源指定的防盗链 headers */
   headers?: Record<string, string>;
+  /** 禁止媒体引擎把直连源重新包装为服务端代理。 */
+  noProxyFallback?: boolean;
   /** 是否为预览源（不入影片列表） */
   isPreview?: boolean;
   /** 预览源显示标题 */

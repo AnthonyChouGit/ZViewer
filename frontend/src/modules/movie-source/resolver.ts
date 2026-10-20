@@ -23,6 +23,7 @@ import { resolveMovieDirectUrl } from '@/modules/direct-link/directLinkApi'
 import { resolveAniSubsEpisode, buildAniSubsProxyUrl } from '@/modules/anisubs'
 import { resolveCmsEpisode, buildCmsProxyUrl } from '@/modules/cms/api'
 import type { CmsSourceMeta } from '@/modules/cms/types'
+import { usesDirectMedia } from './media-policy'
 
 /** 房主刷新恢复时由后端返回的最近一次播放状态（源相关子集） */
 export interface RecoverySourceInfo {
@@ -407,6 +408,7 @@ export async function resolveAnimeOnline(
       : resolved.url
 
   return {
+    noProxyFallback: usesDirectMedia(movie),
     sourceUrl: finalUrl,
     audioUrl: undefined,
     format: resolved.format as MediaFormat | undefined,
@@ -450,6 +452,7 @@ export async function resolveCmsOnline(
       : resolved.url
 
   return {
+    noProxyFallback: usesDirectMedia(movie),
     sourceUrl: finalUrl,
     audioUrl: undefined,
     format: resolved.format as MediaFormat | undefined,
@@ -590,8 +593,7 @@ export async function resolveMovieSource({
     headers: undefined,
     reusedRecoveryUrl: false,
     playsvideoEnabled: movie.playsvideoEnabled !== false,
-    // 挂载直链模式（movie.directLink）：强制直链直连（noProxyFallback），
-    // 直连失败不回退服务器代理，直接提示。
-    noProxyFallback: movie.directLink === true,
+    // 挂载直链与数据源关闭中转均禁止播放器重新包装为服务端代理。
+    noProxyFallback: usesDirectMedia(movie),
   }
 }
