@@ -119,15 +119,19 @@
     },
     connect: {
       title: '连接方式教程',
-      caption: '四种方式的取舍',
+      caption: '五种方式的取舍',
       sections: [
         {
           title: 'IPv6 直连',
           body: '<p>运营商已下发公网 IPv6 时，外网设备直接用本机地址访问，不经过第三方中转。</p><p>页面给出带端口的完整地址，复制到浏览器即可打开。需在路由器与 Windows 防火墙放行该端口；运营商前缀变化后地址随之变化。</p>'
         },
         {
-          title: '内网穿透 FRP',
-          body: '<p>把本机端口反向转发到一台有公网 IP 的服务器（frps），外网访问服务器的端口即可到达本机。</p><p>可使用自有 VPS，或樱花内网穿透、OpenFrp 这类服务商的免费节点。访问地址、端口与带宽由服务器一侧决定。</p>'
+          title: '服务商 FRP',
+          body: '<p>在樱花内网穿透、OpenFrp、cpolar、ngrok 这类服务商注册，拿到它分配的服务器地址、端口与 Token，填进本机 FRP 即可。客户端仍是标准 frpc，不用自己维护服务器。</p><p>访问域名、远端端口与带宽由服务商决定；免费节点的域名随机、速度受限，部分服务商需实名或付费才能用自定义域名。</p>'
+        },
+        {
+          title: '自建 FRP',
+          body: '<p>租一台有公网 IP 的 VPS，在上面运行服务端 frps，本机运行 frpc，两端用同一 Token 认证。控制台可直接生成 frps.toml 与 frpc.toml 两份配置。</p><p>端口、域名与带宽完全由自己安排，速度和稳定性取决于 VPS 线路；需要自行在安全组与系统防火墙放行映射端口，并自行运维服务器。</p>'
         },
         {
           title: '虚拟局域网',
@@ -139,10 +143,10 @@
         },
         {
           title: '怎么选',
-          body: '<ul><li><strong>有公网 IPv6</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选 FRP，端口与地址可自行安排。</li><li><strong>访问者固定、人数不多</strong>：选虚拟局域网，不暴露公网，边界最简单，但每个人都要安装软件。</li><li><strong>要固定域名、又不想开放公网端口</strong>：选 Cloudflare Tunnel，需要一张外国银行卡，每月免费 1000 GB 流量。</li></ul>'
+          body: '<ul><li><strong>有公网 IPv6</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、不想维护服务器</strong>：选服务商 FRP，注册后填地址与 Token 即可，代价是带宽与域名受服务商限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选自建 FRP，端口与带宽可自行安排，需自己放行端口并运维。</li><li><strong>访问者固定、人数不多</strong>：选虚拟局域网，不暴露公网，边界最简单，但每个人都要安装软件。</li><li><strong>要固定域名、又不想开放公网端口</strong>：选 Cloudflare Tunnel，需要一张外国银行卡，每月免费 1000 GB 流量。</li></ul>'
         }
       ],
-      foot: '四种方式都要求本机 ZViewer 服务已启动；IPv6 与 FRP 还需在路由器或安全组放行对应端口。'
+      foot: '五种方式都要求本机 ZViewer 服务已启动；IPv6 与自建 FRP 还需在路由器、防火墙或安全组放行对应端口。'
     }
   };
 
@@ -307,8 +311,8 @@
   function frp() {
     const c = state.frp;
     function row(title, field, type, local, remote, checked, fixed = false) { return `<div class="mapping"><label><input class="checkbox" type="checkbox" data-frp-check="${field}" ${checked ? 'checked' : ''} ${fixed ? 'disabled' : ''}>${title}</label><span class="proto">${type}</span><code>${local}</code><span class="muted">→</span><input aria-label="${title}远端端口" type="number" min="1" max="65535" data-frp-field="${remote}" value="${esc(c[remote])}"></div>`; }
-    return heading('FRP 穿透', '通过自有 VPS 转发本机服务。', `${tutorial('frp')}<span class="pill orange"><i></i>未连接</span>`) +
-      `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>自建 frps</small></div><div class="form-row"><label class="field"><span>VPS 地址</span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证 Token <small>不保存、不导出明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">导出模板从 FRP_TOKEN 环境变量读取凭据。输入内容不会保存。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音需放行对应 UDP 端口；选用 TCP 语音时，管理端语音模式需同步设为 TCP。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('查看文档', 'docs', 'book')}${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据采用环境变量占位，未写入明文</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div><div class="help-card"><strong>部署步骤</strong><p>两台机器使用同一 FRP_TOKEN；部署 frps 并放行端口，再用 frpc verify 校验配置。传输 TLS 与网页 HTTPS 独立配置。</p></div></section></div>`;
+    return heading('FRP 穿透', '通过服务商节点或自有 VPS 转发本机服务。', `${tutorial('frp')}<span class="pill orange"><i></i>未连接</span>`) +
+      `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证 Token <small>不保存、不导出明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">导出模板从 FRP_TOKEN 环境变量读取凭据。输入内容不会保存。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音需放行对应 UDP 端口；选用 TCP 语音时，管理端语音模式需同步设为 TCP。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('查看文档', 'docs', 'book')}${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据采用环境变量占位，未写入明文</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div><div class="help-card"><strong>部署步骤</strong><p>两台机器使用同一 FRP_TOKEN；部署 frps 并放行端口，再用 frpc verify 校验配置。传输 TLS 与网页 HTTPS 独立配置。</p></div></section></div>`;
   }
   function certPreview() {
     return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问，无需配置 DNS 或 hosts。<br>本地自签，尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>现有 zviewer-cert.exe · localhost</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>首次使用需要单独安装信任</span></div></div><div class="check-item">${icon('check')}<div><strong>localhost 仅用于本机</strong><br>打开管理页面不需要路由器或公网域名。</div></div><div class="check-item">${icon('lock')}<div><strong>私钥仅保存在本机</strong><br>只导出公开证书，根 CA 私钥不可分享。</div></div>`;
@@ -344,11 +348,15 @@
       </section></div>`;
   }
   const connectLinks = {
-    frp: [
+    frpProvider: [
       ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
       ['OpenFrp', 'openfrp.net', 'https://www.openfrp.net/'],
       ['cpolar', 'cpolar.com', 'https://www.cpolar.com/'],
       ['ngrok', 'ngrok.com', 'https://ngrok.com/']
+    ],
+    frpSelf: [
+      ['frp 下载', 'github.com/fatedier/frp', 'https://github.com/fatedier/frp/releases'],
+      ['frp 官方文档', 'gofrp.org', 'https://gofrp.org/zh-cn/docs/']
     ],
     lan: [
       ['ZeroTier', 'zerotier.com', 'https://www.zerotier.com/'],
@@ -383,7 +391,8 @@
 
     const frpState = live ? state.server.frp : '';
     const frpLabels = { registered: '已连通', connecting: '连接中', error: '异常' };
-    const frpStatus = live ? frpLabels[frpState] || '未连接' : '未配置';
+    // 服务商节点与自建服务器共用同一个本机 frpc，状态标签前加 frpc 前缀，避免两张卡片看起来各连一条。
+    const frpStatus = live ? `frpc ${frpLabels[frpState] || '未连接'}` : '';
 
     const tunnel = live ? state.server.tunnel : null;
     const tunnelLabels = { stopped: '未运行', connecting: '连接中', stopping: '停止中', error: '异常' };
@@ -403,7 +412,7 @@
       ? `<a class="btn" href="https://github.com/cloudflare/cloudflared/releases/latest" data-external="https://github.com/cloudflare/cloudflared/releases/latest">${icon('download')}下载 cloudflared</a>`
       : `${button(tunnelBusy ? '停止隧道' : '启动隧道', tunnelBusy ? 'tunnel-stop' : 'tunnel-start', tunnelBusy ? 'stop' : 'cloud', 'primary')}${tunnel.url ? `<button class="btn" data-copy="${esc(tunnel.url)}">${icon('copy')}复制地址</button>` : ''}`;
 
-    return heading('连接方式', '从外网访问本机服务的四种方式，按需选择一种。', tutorial('connect')) +
+    return heading('连接方式', '从外网访问本机服务的五种方式，按需选择一种。', tutorial('connect')) +
       `<div class="connect-grid">${
         connectCard({
           name: 'globe', color: 'orange', title: 'IPv6 直连', copy: '运营商下发公网 IPv6 时，外网设备直接访问该地址。',
@@ -412,10 +421,17 @@
         })
       }${
         connectCard({
-          name: 'network', title: '内网穿透 FRP', copy: '用一台公网服务器把本机端口反向转发出去。',
-          status: frpStatus, tone: frpState === 'registered' ? 'green' : '',
-          body: `<p class="connect-note">VPS 上运行 frps，本机运行 frpc，两端用同一 Token 认证。地址、Token 与端口映射在本机填写后即可连接。</p>${linkList(connectLinks.frp)}`,
-          actions: `<button class="btn primary" data-nav="frp">${icon('arrow')}配置本机 FRP</button>`
+          name: 'network', title: '服务商 FRP', copy: '用服务商提供的公网节点做内网穿透，注册即用。',
+          status: live ? frpStatus : '需注册', tone: frpState === 'registered' ? 'green' : '',
+          body: `<p class="connect-note">注册服务商后，把它给出的服务器地址、端口与 Token 填进本机 FRP，客户端仍是同一个 frpc。访问地址、端口与带宽由服务商决定，免费节点通常限速；本机同一时间只连接一台服务器，换地址即切换。</p>${linkList(connectLinks.frpProvider)}`,
+          actions: `<button class="btn primary" data-frp-open="client">${icon('arrow')}配置本机 FRP</button>`
+        })
+      }${
+        connectCard({
+          name: 'server', title: '自建 FRP', copy: '在自己的 VPS 上运行 frps，端口与带宽完全自管。',
+          status: live ? frpStatus : '需 VPS', tone: frpState === 'registered' ? 'green' : '',
+          body: `<p class="connect-note">自己的 VPS 运行 frps，本机 frpc 连自己的服务器。端口、域名与带宽全自管，需在 VPS 安全组与系统防火墙放行映射端口；控制台可生成两端配置。</p>${linkList(connectLinks.frpSelf)}`,
+          actions: `<button class="btn primary" data-frp-open="server">${icon('server')}生成 frps 配置</button>`
         })
       }${
         connectCard({
@@ -431,7 +447,7 @@
           body: tunnelBody + linkList(connectLinks.tunnel), actions: tunnelActions
         })
       }</div>` +
-      `<div class="footnote">${icon('info')}没有公网 IPv4 时，FRP、虚拟局域网与 Cloudflare Tunnel 都可以中转；同一时间建议只保留一条入口。</div>`;
+      `<div class="footnote">${icon('info')}没有公网 IPv4 时，服务商 FRP、自建 FRP、虚拟局域网与 Cloudflare Tunnel 都能中转；同一时间建议只保留一条入口。</div>`;
   }
   function filteredEvents() { return state.events.filter(e => (state.logLevel === 'all' || e.level === state.logLevel) && (state.logSource === 'all' || e.source === state.logSource) && `${e.message} ${e.source}`.toLowerCase().includes(state.logSearch.toLowerCase())); }
   function logLines() { return filteredEvents().map(e => `<div class="log-line"><span class="log-time">${esc(e.time)}</span><span class="log-level ${e.level}">${esc(e.level)}</span><span class="log-source">${esc(e.source)}</span><span class="log-message">${esc(e.message)}</span></div>`).join('') || '<div class="empty">没有匹配的日志</div>'; }
@@ -569,6 +585,8 @@
     }
     const windowButton = event.target.closest('[data-window]');
     if (windowButton) { if (window.zviewerDesktop) window.zviewerDesktop.window(windowButton.dataset.window); else toast('窗口控制仅在 Windows 桌面版可用'); return; }
+    const frpOpen = event.target.closest('[data-frp-open]');
+    if (frpOpen) { state.frpTab = frpOpen.dataset.frpOpen === 'server' ? 'server' : 'client'; navigate('frp'); return; }
     const nav = event.target.closest('[data-nav]'); if (nav) { navigate(nav.dataset.nav); return; }
     const btn = event.target.closest('[data-action]'); if (btn) { action(btn.dataset.action).catch(error => toast(`操作未完成：${error.message}`)); return; }
     const frpTab = event.target.closest('[data-frp-tab]'); if (frpTab) { state.frpTab = frpTab.dataset.frpTab; render(); return; }

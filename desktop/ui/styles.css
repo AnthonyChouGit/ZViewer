@@ -600,6 +600,8 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 
 /* ---------- 连接方式 ---------- */
 .connect-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* 卡片数为奇数时，最后一张占满整行，避免末行留出半格空白。 */
+.connect-grid > .connect-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .connect-card {
   display: flex; flex-direction: column; gap: 14px;
   padding: 16px 20px;
