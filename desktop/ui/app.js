@@ -93,6 +93,25 @@
         }
       ],
       foot: '签发证书不会创建 DNS 记录；根 CA 私钥不可分享。'
+    },
+    cli: {
+      title: '高画质代理教程',
+      caption: 'ZViewerCLI · 本机 127.0.0.1',
+      sections: [
+        {
+          title: 'ZViewerCLI 是什么',
+          body: '<p><code>ZViewerCLI</code> 是随桌面端附带的命令行代理程序，在本机监听一个 HTTP 端口，默认 <code>9333</code>。</p><p>网页端播放器通过它取到哔哩哔哩的高画质播放地址，再由本机转发给浏览器。</p>'
+        },
+        {
+          title: '有什么作用',
+          body: '<ul><li>让网页播放器使用更高清晰度，避开浏览器端的解析限制。</li><li>只监听 <code>127.0.0.1</code>，请求不经过第三方服务器。</li><li>登录态由 CLI 自己的设置页处理，桌面控制台不读取 Cookie。</li></ul>'
+        },
+        {
+          title: '如何使用',
+          body: '<ol><li>在本页点击“启动代理”，端口默认 9333，需与其他 TCP 服务错开。</li><li>在右侧内置设置中扫码登录哔哩哔哩账号。</li><li>确认后端地址（默认跟随本地服务），点击“连接服务器”。</li><li>回到网页端打开视频，在清晰度菜单中选择高画质。</li><li>需要随服务一起启动时，打开“随 ZViewer 服务启动”后保存。</li></ol>'
+        }
+      ],
+      foot: '代理未启动时网页端仍可正常播放，只是清晰度受浏览器端限制；改端口后需重新启动代理。'
     }
   };
 
@@ -191,7 +210,7 @@
     const backend = state.server?.active || state.config || { https: false, port: 3333 };
     const backendUrl = state.server?.webUrl || `${backend.https ? 'https' : 'http'}://localhost:${backend.port || 3333}/`;
     const status = live ? labels[s.state] || '未启动' : '界面预览';
-    return heading('高画质代理', '内置 ZViewerCLI，为本机哔哩哔哩高画质播放提供代理。') +
+    return heading('高画质代理', '内置 ZViewerCLI，为本机哔哩哔哩高画质播放提供代理。', tutorial('cli')) +
       `<div class="cli-layout"><section class="panel cli-settings"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('watch')}</span><div><h2>ZViewerCLI</h2><p class="cli-caption">哔哩哔哩高画质代理</p></div></div><span class="pill ${s.state === 'running' && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
         <p class="cli-copy">在右侧完成代理配置、扫码登录与服务器连接，后端地址自动填入。网页账号可选，用于识别代理归属。</p>
         <div class="cli-address"><span>${icon('monitor')}仅本机访问</span><code>http://127.0.0.1:${esc(activePort)}</code></div>

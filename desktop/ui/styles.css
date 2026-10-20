@@ -167,6 +167,13 @@ nav a .icon-glyph, .settings-link .icon-glyph, .docs-link .icon-glyph { color: v
 .docs-link { color: var(--text-secondary); }
 .docs-link > span:last-child { margin-left: auto; font-size: 12px; }
 
+/* 分组标题之后再加一组导航：留出呼吸位，折叠态用一条细线代替标题 */
+.nav-caption-advanced { margin-top: 14px; }
+body.nav-collapsed .nav-caption-advanced {
+  display: block; height: 1px; margin: 6px 10px; padding: 0;
+  background: var(--divider);
+}
+
 
 /* ---------- 折叠态（NavigationView compact，48px） ---------- */
 body.nav-collapsed .sidebar { width: 48px; }
