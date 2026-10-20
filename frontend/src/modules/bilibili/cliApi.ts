@@ -1,4 +1,5 @@
 import type { ResolvedSource } from './types'
+import { getBilibiliVideoView } from './bilibiliApi'
 
 const BV_REGEX = /BV[0-9A-Za-z]{10}/
 
@@ -74,6 +75,8 @@ export function wrapResolvedSourceWithCliProxy(
 interface CliResolveResponse {
   success?: boolean
   message?: string
+  /** CLI 错误统一以 {"error":"..."} 返回（http.Error 分支），不带 message 字段 */
+  error?: string
   title?: string
   duration?: number
   cid?: number
@@ -126,6 +129,54 @@ export class CliResolveError extends Error {
 }
 
 /**
+ * CLI 解析前置查询失败（拿不到首个分 P 的 cid，无法向 CLI 发起解析）。
+ *
+ * 这一层失败与 CLI 本身是否可用无关，调用方应按「静默回退服务器端」处理，
+ * 不要弹「CLI 解析失败」打扰用户。
+ */
+export class CliPrecheckError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CliPrecheckError'
+  }
+}
+
+/**
+ * bvid → 首个分 P cid 的缓存。
+ *
+ * 同一 bvid 的 cid 不会变化，多 P 视频按分 P 调用时上游已带 cid，只有首次解析会用到缓存。
+ */
+const firstCidCache = new Map<string, number>()
+
+/**
+ * 取视频首个分 P 的 cid。
+ *
+ * CLI 的 `/resolve` 对 UGC（bvid）分支强制要求 cid：只有 bvid 时直接返回
+ * 400 `{"error":"缺少 bvid 或 cid"}`。而刚粘贴链接做首次解析时前端还没有 cid，
+ * 不补这一步就会每次先失败一次：前端抛 CliResolveError → 弹「…已回退到服务器端解析」
+ * → 最终走服务器端解析，CLI 高画质在首解析上永远不生效。
+ *
+ * 因此这里借后端 view 接口（匿名可查）补第一 P 的 cid 再发起 CLI 解析。
+ */
+async function resolveFirstPageCid(bvid: string): Promise<number> {
+  const cached = firstCidCache.get(bvid)
+  if (cached) return cached
+  let view: Awaited<ReturnType<typeof getBilibiliVideoView>>
+  try {
+    view = await getBilibiliVideoView(bvid)
+  } catch {
+    throw new CliPrecheckError('获取视频信息失败，改用服务器端解析')
+  }
+  const cid = view.cid || view.pages?.[0]?.cid || 0
+  if (!cid)
+    throw new CliPrecheckError('未取到视频分 P 的 cid，改用服务器端解析')
+  // 简单容量上限，避免长时间运行后无限增长
+  if (firstCidCache.size >= 200) firstCidCache.clear()
+  firstCidCache.set(bvid, cid)
+  return cid
+}
+
+/**
  * 通过本地 CLI 代理解析 B站 视频。
  *
  * CLI 使用用户自己的 Cookie 向后端 /api/cli/resolve 请求，可获取大会员等高画质地址。
@@ -136,7 +187,7 @@ export class CliResolveError extends Error {
  *
  * @param proxyUrl CLI 本地代理地址，例如 http://127.0.0.1:9333
  * @param bvid BV 号
- * @param cid 视频分 P 的 cid（可选，未指定时后端自动使用第一 P）
+ * @param cid 视频分 P 的 cid（可选，缺省时先经 view 接口补第一 P 的 cid）
  * @param qn 清晰度 qn（可选）
  * @param preferMp4 是否优先 MP4（可选，默认 false）
  * @param forceDash 是否强制使用 DASH 并禁用 MP4 降级（CLI 代理已连接时使用）
@@ -150,12 +201,13 @@ export async function resolveBilibiliViaCli(
   forceDash?: boolean
 ): Promise<ResolvedSource> {
   const base = proxyUrl.replace(/\/$/, '')
+  // CLI 缺 cid 会直接 400，首次解析（刚粘贴链接）先补第一 P 的 cid。
+  const effectiveCid =
+    cid != null && Number.isFinite(cid) ? cid : await resolveFirstPageCid(bvid)
   const params = new URLSearchParams({
     bvid,
+    cid: String(effectiveCid),
   })
-  if (cid != null && Number.isFinite(cid)) {
-    params.set('cid', String(cid))
-  }
   if (qn != null && Number.isFinite(qn)) {
     params.set('qn', String(qn))
   }
@@ -187,7 +239,9 @@ export async function resolveBilibiliViaCli(
 
   if (!res.ok || data.success === false || !data.videoUrl) {
     throw new CliResolveError(
-      data.message || `CLI 解析 B站 视频失败（HTTP ${res.status}）`
+      data.message ||
+        data.error ||
+        `CLI 解析 B站 视频失败（HTTP ${res.status}）`
     )
   }
 
@@ -200,7 +254,7 @@ export async function resolveBilibiliViaCli(
     duration: data.duration,
     format: (data.format as ResolvedSource['format']) || 'mp4',
     loggedIn: data.loggedIn,
-    cid: data.cid ?? cid,
+    cid: data.cid ?? effectiveCid,
     currentQn: data.currentQn,
     acceptQuality: data.acceptQuality,
     vipStatus: data.vipStatus,
@@ -267,7 +321,9 @@ export async function resolveBangumiViaCli(
 
   if (!res.ok || data.success === false || !data.videoUrl) {
     throw new CliResolveError(
-      data.message || `CLI 解析 B站 番剧失败（HTTP ${res.status}）`
+      data.message ||
+        data.error ||
+        `CLI 解析 B站 番剧失败（HTTP ${res.status}）`
     )
   }
 
