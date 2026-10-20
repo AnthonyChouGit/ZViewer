@@ -116,6 +116,33 @@
         }
       ],
       foot: '代理未启动时网页端仍可正常播放，只是清晰度受浏览器端限制。'
+    },
+    connect: {
+      title: '连接方式教程',
+      caption: '四种方式的取舍',
+      sections: [
+        {
+          title: 'IPv6 直连',
+          body: '<p>运营商已下发公网 IPv6 时，外网设备直接用本机地址访问，不经过第三方中转。</p><p>页面给出的是带端口的完整地址，复制到浏览器即可打开。需要路由器与 Windows 防火墙放行该端口；运营商前缀变化后地址随之变化。</p>'
+        },
+        {
+          title: '内网穿透 FRP',
+          body: '<p>把本机端口反向转发到一台有公网 IP 的服务器（frps），外网访问服务器的端口即可到达本机。</p><p>需要自有 VPS，或使用樱花内网穿透、OpenFrp 这类服务商的免费节点。访问地址、端口与带宽由服务器一侧决定。</p>'
+        },
+        {
+          title: '虚拟局域网',
+          body: '<p>两端安装同一款组网软件（ZeroTier、Tailscale、EasyTier 等），加入同一虚拟网络，再用分配的虚拟 IP 访问本机。</p><p>不向公网开放端口，只对网络内的设备可见；每台访问设备都要装客户端。</p>'
+        },
+        {
+          title: 'Cloudflare Tunnel',
+          body: '<p>cloudflared 从本机主动向 Cloudflare 建立隧道，由 Cloudflare 分配一个 <code>trycloudflare.com</code> 地址，本机不需要公网 IP 与端口映射。</p><p>临时地址随隧道关闭失效；要固定域名需自行配置 Cloudflare 命名隧道。</p>'
+        },
+        {
+          title: '怎么选',
+          body: '<ul><li><strong>有公网 IPv6、只自己用</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选 FRP，端口与地址可自行安排。</li><li><strong>只给固定几个人用</strong>：选虚拟局域网，不暴露公网，边界最简单。</li><li><strong>不想维护服务器、也不想让访问者装软件</strong>：选 Cloudflare Tunnel。</li></ul><p>同一时间只保留一条入口，多开容易混淆端口与证书状态。</p>'
+        }
+      ],
+      foot: '四种方式都要求本机服务已启动；IPv6 与 FRP 还需在路由器或安全组放行对应端口。'
     }
   };
 
@@ -282,7 +309,7 @@
       ? `<a class="btn" href="https://github.com/cloudflare/cloudflared/releases/latest" data-external="https://github.com/cloudflare/cloudflared/releases/latest">${icon('download')}下载 cloudflared</a>`
       : `${button(tunnelBusy ? '停止隧道' : '启动隧道', tunnelBusy ? 'tunnel-stop' : 'tunnel-start', tunnelBusy ? 'stop' : 'cloud', 'primary')}${tunnel.url ? `<button class="btn" data-copy="${esc(tunnel.url)}">${icon('copy')}复制地址</button>` : ''}`;
 
-    return heading('连接方式', '从外网访问本机服务的四种方式，按需选择一种。') +
+    return heading('连接方式', '从外网访问本机服务的四种方式，按需选择一种。', tutorial('connect')) +
       `<div class="connect-grid">${
         connectCard({
           name: 'globe', color: 'orange', title: 'IPv6 直连', copy: '运营商下发公网 IPv6 时，外网设备直接访问该地址。',
