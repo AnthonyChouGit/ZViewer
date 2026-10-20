@@ -136,9 +136,9 @@ IPv6 直连：打开页面时由程序经外部接口（`v6.ident.me` 等仅解�
 
 内网穿透 FRP：列出樱花内网穿透、OpenFrp、cpolar、ngrok，并可直接跳到“高级 → FRP 穿透”用自有 VPS 配置。
 
-虚拟局域网：列出 ZeroTier、Tailscale、EasyTier。两端加入同一网络后用虚拟 IP 访问，网页与信令监听范围需改为局域网或双栈。
+虚拟局域网：列出 ZeroTier、Tailscale、EasyTier。每台设备都要安装同一款软件并加入同一网络，再用虚拟 IP 访问，网页与信令监听范围需改为局域网或双栈。
 
-Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解析其输出的 `trycloudflare.com` 临时地址，停止隧道后地址失效。程序不内置 `cloudflared`，需自行下载后放入运行包目录或加入 PATH，未找到时按钮只提供下载入口。快速隧道地址随机、随会话失效；固定域名请改用 Cloudflare 命名隧道。
+Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解析其输出的 `trycloudflare.com` 临时地址，停止隧道后地址失效。程序不内置 `cloudflared`，需自行下载后放入运行包目录或加入 PATH，未找到时按钮只提供下载入口。快速隧道地址随机、随会话失效；固定域名请改用 Cloudflare 命名隧道，需要一张外国银行卡。
 
 ## 自建 FRP
 

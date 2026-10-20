@@ -123,26 +123,26 @@
       sections: [
         {
           title: 'IPv6 直连',
-          body: '<p>运营商已下发公网 IPv6 时，外网设备直接用本机地址访问，不经过第三方中转。</p><p>页面给出的是带端口的完整地址，复制到浏览器即可打开。需要路由器与 Windows 防火墙放行该端口；运营商前缀变化后地址随之变化。</p>'
+          body: '<p>运营商已下发公网 IPv6 时，外网设备直接用本机地址访问，不经过第三方中转。</p><p>页面给出带端口的完整地址，复制到浏览器即可打开。需在路由器与 Windows 防火墙放行该端口；运营商前缀变化后地址随之变化。</p>'
         },
         {
           title: '内网穿透 FRP',
-          body: '<p>把本机端口反向转发到一台有公网 IP 的服务器（frps），外网访问服务器的端口即可到达本机。</p><p>需要自有 VPS，或使用樱花内网穿透、OpenFrp 这类服务商的免费节点。访问地址、端口与带宽由服务器一侧决定。</p>'
+          body: '<p>把本机端口反向转发到一台有公网 IP 的服务器（frps），外网访问服务器的端口即可到达本机。</p><p>可使用自有 VPS，或樱花内网穿透、OpenFrp 这类服务商的免费节点。访问地址、端口与带宽由服务器一侧决定。</p>'
         },
         {
           title: '虚拟局域网',
-          body: '<p>两端安装同一款组网软件（ZeroTier、Tailscale、EasyTier 等），加入同一虚拟网络，再用分配的虚拟 IP 访问本机。</p><p>不向公网开放端口，只对网络内的设备可见；每台访问设备都要装客户端。</p>'
+          body: '<p>相关设备安装同一款虚拟局域网软件（ZeroTier、Tailscale、EasyTier 等），加入同一虚拟网络，再用分配的虚拟 IP 访问本机。</p><p>不向公网开放端口，网络外的设备无法访问；需要每个人都安装虚拟局域网软件。</p>'
         },
         {
           title: 'Cloudflare Tunnel',
-          body: '<p>cloudflared 从本机主动向 Cloudflare 建立隧道，由 Cloudflare 分配一个 <code>trycloudflare.com</code> 地址，本机不需要公网 IP 与端口映射。</p><p>临时地址随隧道关闭失效；要固定域名需自行配置 Cloudflare 命名隧道。</p>'
+          body: '<p>cloudflared 从本机主动向 Cloudflare 建立隧道，由 Cloudflare 分配一个 <code>trycloudflare.com</code> 地址，本机不需要公网 IP 与端口映射。</p><p>临时地址随隧道关闭失效；要固定域名需配置 Cloudflare 命名隧道，需要一张外国银行卡。</p>'
         },
         {
           title: '怎么选',
-          body: '<ul><li><strong>有公网 IPv6、只自己用</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选 FRP，端口与地址可自行安排。</li><li><strong>只给固定几个人用</strong>：选虚拟局域网，不暴露公网，边界最简单。</li><li><strong>不想维护服务器、也不想让访问者装软件</strong>：选 Cloudflare Tunnel。</li></ul><p>同一时间只保留一条入口，多开容易混淆端口与证书状态。</p>'
+          body: '<ul><li><strong>有公网 IPv6</strong>：选 IPv6 直连，链路最短，带宽不受中转限制。</li><li><strong>没有公网 IP、手上有 VPS</strong>：选 FRP，端口与地址可自行安排。</li><li><strong>访问者固定、人数不多</strong>：选虚拟局域网，不暴露公网，边界最简单，但每个人都要安装软件。</li><li><strong>不想维护服务器、也不想让访问者装软件</strong>：选 Cloudflare Tunnel，需要一张外国银行卡。</li></ul><p>同一时间只保留一条入口，多开容易混淆端口与证书状态。</p>'
         }
       ],
-      foot: '四种方式都要求本机服务已启动；IPv6 与 FRP 还需在路由器或安全组放行对应端口。'
+      foot: '四种方式都要求本机 ZViewer 服务已启动；IPv6 与 FRP 还需在路由器或安全组放行对应端口。'
     }
   };
 
@@ -361,7 +361,7 @@
     const tunnelBusy = Boolean(tunnel) && ['connecting', 'running'].includes(tunnel.state);
     let tunnelBody;
     if (!tunnel) {
-      tunnelBody = `<p class="connect-value is-empty">桌面版中可用</p><p class="connect-note">cloudflared 由本机向外建立隧道，不需要公网 IP 与端口映射；临时地址随隧道关闭失效。</p>`;
+      tunnelBody = `<p class="connect-value is-empty">桌面版中可用</p><p class="connect-note">cloudflared 由本机向外建立隧道，不需要公网 IP 与端口映射；临时地址随隧道关闭失效，固定域名需一张外国银行卡。</p>`;
     } else if (!tunnel.available) {
       tunnelBody = `<p class="connect-value is-empty">未找到 cloudflared</p><p class="connect-note">下载 cloudflared.exe 放到运行包目录（或加入 PATH）后重新打开本页。</p>`;
     } else if (tunnel.url) {
@@ -389,9 +389,9 @@
         })
       }${
         connectCard({
-          name: 'link', title: '虚拟局域网', copy: '让外网设备与本机加入同一虚拟网段，再用内网地址访问。',
+          name: 'link', title: '虚拟局域网', copy: '让外网设备与本机加入同一虚拟网络，再用虚拟 IP 访问。',
           status: '需客户端',
-          body: `<p class="connect-note">两端都安装同一款组网软件并加入同一网络，用分配的虚拟 IP 访问本机。本机服务需监听局域网或双栈地址。</p>${linkList(connectLinks.lan)}`,
+          body: `<p class="connect-note">每台设备都要安装同一款虚拟局域网软件并加入同一网络，用分配的虚拟 IP 访问本机。本机服务需监听局域网或双栈地址。</p>${linkList(connectLinks.lan)}`,
           actions: `<button class="btn" data-nav="settings">${icon('settings')}调整监听范围</button>`
         })
       }${
