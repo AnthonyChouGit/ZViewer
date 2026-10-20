@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +29,9 @@ import (
 // updateRepo 是发布来源，与 CI 中的仓库保持一致。
 const updateRepo = "Zero-wyc/ZViewer"
 
+// DefaultUpdateProxy 是默认的前缀式反代；GitHub 附件直连较慢时用它取同一份文件。
+const DefaultUpdateProxy = "https://gh-proxy.com"
+
 var (
 	errNoRelease = errors.New("没有可用的正式版本")
 	// 发布页里同时有命令行的 zviewer-windows-x64.zip，只认带 -GUI 后缀的运行包。
@@ -35,6 +39,27 @@ var (
 	updateHostExp  = regexp.MustCompile(`(?i)^(github\.com|api\.github\.com|objects\.githubusercontent\.com|release-assets\.githubusercontent\.com)$`)
 	updateTagExp   = regexp.MustCompile(`^v?\d+`)
 )
+
+// NormalizeUpdateProxy 校验前缀式反代：只接受 https 地址，去掉末尾斜杠；空串表示不走反代。
+func NormalizeUpdateProxy(raw string) (string, error) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(text)
+	if err != nil || !strings.EqualFold(parsed.Scheme, "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("更新反代需为 https:// 开头的前缀地址，例如 https://gh-proxy.com")
+	}
+	return strings.TrimRight(text, "/"), nil
+}
+
+// proxyURL 把目标地址直接接在前缀之后，这是 gh-proxy 一类服务约定的用法。
+func proxyURL(prefix, target string) string {
+	if prefix == "" || target == "" {
+		return target
+	}
+	return strings.TrimRight(prefix, "/") + "/" + target
+}
 
 // UpdateReport 是更新状态，直接进 Snapshot 供界面渲染。
 type UpdateReport struct {
@@ -50,6 +75,8 @@ type UpdateReport struct {
 	CheckedAt string `json:"checkedAt"`
 	Error     string `json:"error"`
 	AutoCheck bool   `json:"autoCheck"`
+	Proxy     bool   `json:"proxy"`
+	ProxyURL  string `json:"proxyUrl"`
 	Path      string `json:"-"`
 }
 
@@ -75,6 +102,18 @@ func (c *Controller) autoCheckEnabled() bool {
 		return true
 	}
 	return c.store.Value.AutoCheckUpdate
+}
+
+// updateProxyPrefix 返回当前生效的前缀反代；关闭或配置非法时返回空串（直连）。
+func (c *Controller) updateProxyPrefix() string {
+	if c.store == nil || !c.store.Value.UpdateProxy {
+		return ""
+	}
+	prefix, err := NormalizeUpdateProxy(c.store.Value.UpdateProxyURL)
+	if err != nil {
+		return ""
+	}
+	return prefix
 }
 
 // UpdateReport 返回当前更新状态。
@@ -107,7 +146,14 @@ func (c *Controller) CheckUpdate(force bool) UpdateReport {
 	c.updateMu.Unlock()
 	c.emit()
 
-	info, err := fetchLatestRelease(c.version)
+	prefix := c.updateProxyPrefix()
+	info, err := fetchLatestRelease(c.version, prefix)
+	usedProxy := prefix
+	if err != nil && prefix != "" {
+		// 反代不可用时回退直连，避免一个失效的前缀把检查更新整体卡死。
+		usedProxy = ""
+		info, err = fetchLatestRelease(c.version, "")
+	}
 	c.updateMu.Lock()
 	c.updateBusy = false
 	c.updateAt = time.Now()
@@ -120,7 +166,9 @@ func (c *Controller) CheckUpdate(force bool) UpdateReport {
 	case err != nil:
 		c.update.State, c.update.Available = "error", false
 		c.update.Error = err.Error()
+		c.update.Proxy, c.update.ProxyURL = false, ""
 	default:
+		c.update.Proxy, c.update.ProxyURL = usedProxy != "", usedProxy
 		c.update.Latest = strings.TrimPrefix(strings.TrimSpace(info.Tag), "v")
 		c.update.PageURL = info.URL
 		c.update.Notes = strings.TrimSpace(info.Name)
@@ -138,8 +186,8 @@ func (c *Controller) CheckUpdate(force bool) UpdateReport {
 		c.update.State = "available"
 		c.update.Asset = asset.Name
 		c.update.Size = asset.Size
-		c.updateURL = assetDownloadURL(asset)
-		c.updateSum = checksumURL(info.Assets)
+		c.updateURL, c.updateFallbackURL = downloadCandidates(asset, usedProxy)
+		c.updateSum = checksumURL(info.Assets, usedProxy)
 		c.update.Progress = 0
 	}
 	report := c.update
@@ -176,30 +224,37 @@ func (c *Controller) StartUpdateDownload() (UpdateReport, error) {
 	c.update.Progress = 0
 	c.update.Error = ""
 	c.update.Path = target
-	link, size, sum := c.updateURL, c.update.Size, c.updateSum
+	link, fallback, size, sum := c.updateURL, c.updateFallbackURL, c.update.Size, c.updateSum
 	report = c.update
 	c.updateMu.Unlock()
 	c.emit()
 
-	go c.downloadUpdate(link, target, size, sum, c.update.Asset)
+	go c.downloadUpdate(link, fallback, target, size, sum, c.update.Asset)
 	return report, nil
 }
 
 // downloadUpdate 流式下载并校验，成功后才把状态推进到 ready。
-func (c *Controller) downloadUpdate(link, target string, size int64, sum, asset string) {
-	err := downloadFile(link, target, size, func(done, total int64) {
-		progress := 0
+// 首选地址失败（例如反代不可用）时用回退地址再试一次，两次都失败才算失败。
+func (c *Controller) downloadUpdate(link, fallback, target string, size int64, sum, asset string) {
+	progress := func(done, total int64) {
+		value := 0
 		if total > 0 {
-			progress = int(done * 100 / total)
-			if progress > 99 && done < total {
-				progress = 99
+			value = int(done * 100 / total)
+			if value > 99 && done < total {
+				value = 99
 			}
 		}
 		c.updateMu.Lock()
-		c.update.Progress = progress
+		c.update.Progress = value
 		c.updateMu.Unlock()
 		c.emit()
-	})
+	}
+	allow := []string{proxyHost(link), proxyHost(fallback)}
+	err := downloadFile(link, target, size, allow, progress)
+	if err != nil && fallback != "" && fallback != link {
+		c.Log("首选下载地址失败，改用回退地址："+err.Error(), "update", "WARN")
+		err = downloadFile(fallback, target, size, allow, progress)
+	}
 	if err == nil {
 		err = verifyUpdatePackage(target)
 	}
@@ -295,9 +350,10 @@ func (c *Controller) packagePath(tag, asset string) string {
 }
 
 // fetchLatestRelease 取最新正式版；仓库只有预发布时会返回 errNoRelease。
-func fetchLatestRelease(current string) (releaseInfo, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	endpoint := "https://api.github.com/repos/" + updateRepo + "/releases/latest"
+// prefix 非空时把请求经前缀反代转发，例如 https://gh-proxy.com/https://api.github.com/...。
+func fetchLatestRelease(current, prefix string) (releaseInfo, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	endpoint := proxyURL(prefix, "https://api.github.com/repos/"+updateRepo+"/releases/latest")
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
 	if err != nil {
 		return releaseInfo{}, err
@@ -338,8 +394,7 @@ func pickUpdateAsset(assets []releaseAsset) (releaseAsset, bool) {
 	return releaseAsset{}, false
 }
 
-// assetDownloadURL 优先走 API 资产端点：国内直连 github.com 常超时，api.github.com 通常可达，
-// 两者最终都重定向到对象存储。
+// assetDownloadURL 走 API 资产端点：它不经过发布页的跳转，能直接拿到字节流。
 func assetDownloadURL(asset releaseAsset) string {
 	if asset.ID > 0 {
 		return fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", updateRepo, asset.ID)
@@ -347,10 +402,58 @@ func assetDownloadURL(asset releaseAsset) string {
 	return asset.URL
 }
 
+// downloadCandidates 返回首选与回退地址。
+// 走反代时首选是 github.com 直链套前缀（反代只代理 github.com 一类地址），回退是 API 端点；
+// 不走反代时首选 API 端点，没有回退。
+func downloadCandidates(asset releaseAsset, prefix string) (string, string) {
+	direct := assetDownloadURL(asset)
+	if prefix == "" {
+		return direct, ""
+	}
+	return proxyURL(prefix, asset.URL), direct
+}
+
+// proxyHost 取出地址的 host，用于下载白名单；解析失败时返回空串。
+func proxyHost(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// allowedUpdateHost 允许 GitHub 官方域与当前配置的反代域。
+func allowedUpdateHost(host string, extra []string) bool {
+	if updateHostExp.MatchString(host) {
+		return true
+	}
+	for _, item := range extra {
+		if item != "" && strings.EqualFold(item, host) {
+			return true
+		}
+	}
+	return false
+}
+
+// publicHost 判断是否公网域名或公网 IP，用于放行反代自身的 CDN 跳转，同时挡住内网地址。
+func publicHost(host string) bool {
+	if host == "" || strings.EqualFold(host, "localhost") {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return true
+	}
+	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast())
+}
+
 // checksumURL 找到发布页附带的 SHA256SUMS.txt，拿不到时返回空串（跳过校验）。
-func checksumURL(assets []releaseAsset) string {
+func checksumURL(assets []releaseAsset, prefix string) string {
 	for _, asset := range assets {
 		if strings.EqualFold(asset.Name, "SHA256SUMS.txt") {
+			if prefix != "" {
+				return proxyURL(prefix, asset.URL)
+			}
 			return assetDownloadURL(asset)
 		}
 	}
@@ -424,9 +527,10 @@ func fileSHA256(path string) (string, error) {
 }
 
 // downloadFile 写入临时文件，完成后原子改名；回调用于进度。
-func downloadFile(link, target string, size int64, onProgress func(done, total int64)) error {
+// allow 是额外放行的域名（当前反代），实际来源仍必须是 GitHub 官方域或该反代域。
+func downloadFile(link, target string, size int64, allow []string, onProgress func(done, total int64)) error {
 	parsed, err := url.Parse(link)
-	if err != nil || !strings.EqualFold(parsed.Scheme, "https") || !updateHostExp.MatchString(parsed.Hostname()) {
+	if err != nil || !strings.EqualFold(parsed.Scheme, "https") || !allowedUpdateHost(parsed.Hostname(), allow) {
 		return errors.New("下载地址不在允许的来源内")
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
@@ -447,8 +551,9 @@ func downloadFile(link, target string, size int64, onProgress func(done, total i
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("下载地址返回 %d", response.StatusCode)
 	}
-	// 跟随重定向后仍要确认最终来源，GitHub 会把包转到对象存储。
-	if final := response.Request.URL; final == nil || !strings.EqualFold(final.Scheme, "https") || !updateHostExp.MatchString(final.Hostname()) {
+	// 跟随重定向后仍要确认最终来源：GitHub 会转到对象存储，反代可能转到自己的 CDN。
+	if final := response.Request.URL; final == nil || !strings.EqualFold(final.Scheme, "https") ||
+		(!allowedUpdateHost(final.Hostname(), allow) && !publicHost(final.Hostname())) {
 		return errors.New("下载被重定向到未知来源")
 	}
 	total := response.ContentLength

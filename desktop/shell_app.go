@@ -280,6 +280,24 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		}
 		runtime.BrowserOpenURL(a.ctx, target)
 		return true, nil
+	case "update-proxy":
+		// 前端只提交反代相关字段，保存成功后立即重查，界面可直接看到新链路的结果。
+		patch := map[string]any{}
+		if flag, ok := payload["enabled"].(bool); ok {
+			patch["updateProxy"] = flag
+		}
+		if text, ok := payload["url"].(string); ok {
+			patch["updateProxyUrl"] = text
+		}
+		if len(patch) == 0 {
+			return nil, errors.New("缺少反代参数")
+		}
+		if _, err := a.ctrl.Save(patch, nil); err != nil {
+			return nil, err
+		}
+		report := a.ctrl.CheckUpdate(true)
+		a.emitUpdate()
+		return report, nil
 	case "export":
 		return a.exportFile(payloadString(payload, "kind"))
 	case "open-data":

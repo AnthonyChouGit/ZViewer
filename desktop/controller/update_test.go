@@ -67,3 +67,60 @@ func TestVersionParts(t *testing.T) {
 		t.Fatalf("unexpected parts: %v", parts)
 	}
 }
+
+func TestNormalizeUpdateProxy(t *testing.T) {
+	cases := []struct {
+		in    string
+		want  string
+		fails bool
+	}{
+		{"", "", false},
+		{DefaultUpdateProxy, DefaultUpdateProxy, false},
+		{"  https://gh-proxy.com/  ", "https://gh-proxy.com", false},
+		{"https://ghproxy.net/gh", "https://ghproxy.net/gh", false},
+		{"http://gh-proxy.com", "", true},
+		{"gh-proxy.com", "", true},
+		{"https://gh-proxy.com/?a=1", "", true},
+	}
+	for _, item := range cases {
+		got, err := NormalizeUpdateProxy(item.in)
+		if (err != nil) != item.fails || got != item.want {
+			t.Fatalf("NormalizeUpdateProxy(%q)=(%q,%v), want (%q, fails=%v)", item.in, got, err, item.want, item.fails)
+		}
+	}
+}
+
+func TestDownloadCandidates(t *testing.T) {
+	asset := releaseAsset{ID: 659024627, Name: "zviewer-windows-x64-GUI.zip", URL: "https://github.com/o/r/releases/download/v1/zviewer-windows-x64-GUI.zip"}
+	first, fallback := downloadCandidates(asset, DefaultUpdateProxy)
+	if first != DefaultUpdateProxy+"/"+asset.URL {
+		t.Fatalf("proxy url = %q", first)
+	}
+	if fallback != "https://api.github.com/repos/Zero-wyc/ZViewer/releases/assets/659024627" {
+		t.Fatalf("fallback = %q", fallback)
+	}
+	first, fallback = downloadCandidates(asset, "")
+	if first != "https://api.github.com/repos/Zero-wyc/ZViewer/releases/assets/659024627" || fallback != "" {
+		t.Fatalf("direct candidates = %q / %q", first, fallback)
+	}
+}
+
+func TestAllowedUpdateHost(t *testing.T) {
+	allow := []string{"gh-proxy.com"}
+	for _, host := range []string{"github.com", "api.github.com", "gh-proxy.com", "GH-PROXY.COM"} {
+		if !allowedUpdateHost(host, allow) {
+			t.Fatalf("%s should be allowed", host)
+		}
+	}
+	for _, host := range []string{"evil.example", "", "ghproxy.net"} {
+		if allowedUpdateHost(host, allow) {
+			t.Fatalf("%s should be rejected", host)
+		}
+	}
+	if publicHost("127.0.0.1") || publicHost("localhost") || publicHost("192.168.1.2") || publicHost("::1") {
+		t.Fatal("internal hosts must not pass publicHost")
+	}
+	if !publicHost("gh-proxy.com") || !publicHost("8.8.8.8") {
+		t.Fatal("public hosts should pass")
+	}
+}

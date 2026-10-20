@@ -208,11 +208,20 @@
     const progress = name === 'downloading' ? `<div class="update-progress"><i style="width:${Math.min(100, Math.max(0, report.progress))}%"></i></div>` : '';
     const meta = report?.checkedAt ? `上次检查 ${esc(report.checkedAt)}` : '尚未检查';
     const auto = state.live ? Boolean(state.config?.autoCheckUpdate ?? report?.autoCheck) : true;
+    const proxy = state.live ? Boolean(state.config?.updateProxy ?? report?.proxy) : true;
+    const proxyURL = state.config?.updateProxyUrl || report?.proxyUrl || 'https://gh-proxy.com';
+    const proxyNote = !state.live
+      ? '桌面版中检查更新时会先经该前缀转发；浏览器预览不联网。'
+      : report?.proxy
+        ? `本次检查已由 ${esc(report.proxyUrl || proxyURL)} 转发。`
+        : '当前为直连；GitHub 附件下载较慢时再开启。';
     return `<div class="update-head"><div><h2>软件更新</h2><p>发布来源 github.com/Zero-wyc/ZViewer${report?.notes ? ` · ${esc(report.notes)}` : ''}</p></div><span class="pill ${tone}"><i></i>${updateLabels[name] || '未检查'}</span></div>
       <div class="update-grid"><div><span>当前版本</span><strong>v${esc(current)}</strong></div><div><span>最新版本</span><strong>${latest}</strong></div></div>
       <p class="update-state">${updateBody(report)}</p>${progress}
       <div class="modal-actions">${updateActions(report)}</div>
       <div class="switch-row update-auto"><div><strong>自动检查更新</strong><p>启动后检查一次，此后每 6 小时检查；只检查，不自动下载。</p></div><button class="switch" role="switch" aria-label="自动检查更新" aria-checked="${auto}" data-action="update-auto" ${state.live ? '' : 'disabled'}></button></div>
+      <div class="switch-row update-proxy"><div><strong>使用前置反代</strong><p>检查和下载都先交给前缀式反代，默认 gh-proxy，可换成其它服务商。${proxyNote}</p></div><button class="switch" role="switch" aria-label="使用前置反代" aria-checked="${proxy}" data-action="update-proxy" ${state.live ? '' : 'disabled'}></button></div>
+      <div class="update-proxy-field"><input class="search-input" id="update-proxy-url" aria-label="反代前缀地址" value="${esc(proxyURL)}" placeholder="https://gh-proxy.com" spellcheck="false" ${state.live && proxy ? '' : 'disabled'}></div>
       <p class="update-note">${icon('info')}<span>${meta}。安装包来自 GitHub Release，下载完成后校验 SHA256 与压缩包结构，通过后才允许安装。</span></p>`;
   }
   function openUpdate() {
@@ -225,7 +234,7 @@
     const report = snapshot?.update || null;
     const dot = $('#update-dot');
     if (dot) dot.hidden = !(report && report.available && report.state !== 'downloading');
-    const key = report ? `${report.state}|${report.progress}|${report.latest}|${report.error}|${snapshot?.config?.autoCheckUpdate}|${report.checkedAt}` : '';
+    const key = report ? `${report.state}|${report.progress}|${report.latest}|${report.error}|${snapshot?.config?.autoCheckUpdate}|${snapshot?.config?.updateProxy}|${snapshot?.config?.updateProxyUrl}|${report.checkedAt}` : '';
     if (state.updateOpen && $('#modal')?.open && key !== state.updateKey) {
       state.updateKey = key;
       $('#modal-content').innerHTML = updateModal();
@@ -235,6 +244,27 @@
     if (!window.zviewerDesktop?.command) { toast('更新在 Windows 桌面版中可用'); return null; }
     try { return await window.zviewerDesktop.command(name, payload || {}); }
     catch (error) { toast(String(error?.message || error).replace(/^.*Error: /, '')); return null; }
+  }
+  // 反代状态先本地对齐，避免等快照回来前说明文字仍显示旧地址。
+  function patchUpdateProxy(enabled, url) {
+    if (!state.server?.update) return;
+    state.server.update.proxy = enabled;
+    state.server.update.proxyUrl = enabled ? url : '';
+  }
+  // 反代地址变化后立即保存并重查一次，界面随后显示新链路是否可用。
+  async function applyProxyURL(input) {
+    if (!state.live) return;
+    const fallback = state.config?.updateProxyUrl || 'https://gh-proxy.com';
+    const url = input.value.trim();
+    if (!url) { toast('反代地址不能为空'); input.value = fallback; return; }
+    if (url === state.config?.updateProxyUrl) return;
+    toast('正在按该反代重新检查更新…');
+    const next = await updateCommand('update-proxy', { enabled: true, url });
+    if (!next) { input.value = fallback; return; }
+    state.config = { ...state.config, updateProxy: true, updateProxyUrl: url };
+    patchUpdateProxy(true, url);
+    state.updateKey = '';
+    $('#modal-content').innerHTML = updateModal();
   }
   function setRunning(running, notify = true) {
     state.running = !!running;
@@ -465,6 +495,19 @@
       state.updateKey = '';
       $('#modal-content').innerHTML = updateModal();
     }
+    else if (name === 'update-proxy') {
+      if (!state.live) { toast('前置反代在 Windows 桌面版中生效'); return; }
+      const report = updateReport();
+      const enabled = !Boolean(state.config?.updateProxy ?? report?.proxy);
+      const url = $('#update-proxy-url')?.value.trim() || state.config?.updateProxyUrl || 'https://gh-proxy.com';
+      toast(enabled ? '正在按该反代重新检查更新…' : '已关闭前置反代，正在重新检查…');
+      const next = await updateCommand('update-proxy', { enabled, url });
+      if (!next) return;
+      state.config = { ...state.config, updateProxy: enabled, updateProxyUrl: url };
+      patchUpdateProxy(enabled, url);
+      state.updateKey = '';
+      $('#modal-content').innerHTML = updateModal();
+    }
     else if (name === 'docs') { if (window.zviewerDesktop) await window.zviewerDesktop.openDocs(); else window.open('https://docx.zviewer.zero251.xyz/', '_blank', 'noopener,noreferrer'); }
     else if (name === 'export-frp') {
       const error = frpError();
@@ -548,6 +591,7 @@
     if (target.matches('[data-frp-check]')) { state.frp[target.dataset.frpCheck] = target.checked; $('#frp-code').textContent = frpConfig(state.frpTab === 'server'); }
     if (target.id === 'log-source') { state.logSource = target.value; if (!state.paused) refreshLogs(); }
     if (target.id === 'log-level') { state.logLevel = target.value; if (!state.paused) refreshLogs(); }
+    if (target.id === 'update-proxy-url') applyProxyURL(target);
   });
   function refreshLogs() { $('#log-lines').innerHTML = logLines(); $('#log-count').textContent = `${filteredEvents().length} 条 · ${state.live ? '运行日志' : '操作记录'}`; }
   $('#tray-button').addEventListener('click', () => { if (window.zviewerDesktop) window.zviewerDesktop.window('tray'); else action('tray-preview'); });

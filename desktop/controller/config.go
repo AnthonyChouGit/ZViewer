@@ -32,6 +32,8 @@ type Config struct {
 	LaunchAtLogin   bool      `json:"launchAtLogin"`
 	AutoStart       bool      `json:"autoStart"`
 	AutoCheckUpdate bool      `json:"autoCheckUpdate"`
+	UpdateProxy     bool      `json:"updateProxy"`
+	UpdateProxyURL  string    `json:"updateProxyUrl"`
 	Domain          string    `json:"domain"`
 	LanIP           string    `json:"lanIp"`
 	Cli             CliConfig `json:"cli"`
@@ -62,6 +64,7 @@ func DefaultConfig() Config {
 		Port: 3333, RtmpPort: 3334, FlvPort: 3335, LivekitPort: 3336, LivekitTcpPort: 3337,
 		BindHost: "127.0.0.1", Https: false,
 		CloseToTray: true, LaunchAtLogin: false, AutoStart: false, AutoCheckUpdate: true,
+		UpdateProxy: true, UpdateProxyURL: DefaultUpdateProxy,
 		Domain: "localhost", LanIP: "",
 		Cli: CliConfig{Port: 9333, AutoStart: false, User: ""},
 		Frp: FrpConfig{Host: "", Port: 7000, AdvertiseIP: "", Voice: true, Rtmp: true, Tcp: false,
@@ -246,6 +249,16 @@ func Validate(input map[string]any) (Config, error) {
 	target.LaunchAtLogin = asBool(base["launchAtLogin"])
 	target.AutoStart = asBool(base["autoStart"])
 	target.AutoCheckUpdate = asBool(base["autoCheckUpdate"])
+	target.UpdateProxy = asBool(base["updateProxy"])
+	proxy, ok := asString(base["updateProxyUrl"])
+	if !ok {
+		return target, errors.New("更新反代地址无效")
+	}
+	proxy, err := NormalizeUpdateProxy(proxy)
+	if err != nil {
+		return target, err
+	}
+	target.UpdateProxyURL = proxy
 
 	domain, ok := asString(base["domain"])
 	if !ok || !IsHostname(domain) || net.ParseIP(domain) != nil {
