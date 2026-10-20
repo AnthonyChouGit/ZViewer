@@ -8,14 +8,14 @@
 
 同一 Windows 用户只运行一个正常实例。再次双击入口会恢复并聚焦已打开的窗口，最小化或收在托盘时也会唤回，不创建第二套受管服务。整个文件夹可复制、可移动，无需安装步骤，也不把运行包搬进用户缓存目录。
 
-| 内容 | 位置 |
-| --- | --- |
-| GUI 入口 | 运行目录中的 `ZViewerShell.exe` |
-| 进程监管宿主 | 同目录 `assets/ZViewer.ProcessHost.exe` |
+| 内容                     | 位置                                       |
+| ---------------------- | ---------------------------------------- |
+| GUI 入口                 | 运行目录中的 `ZViewerShell.exe`                |
+| 进程监管宿主                 | 同目录 `assets/ZViewer.ProcessHost.exe`     |
 | 后端、LiveKit、FRP、CLI 与网页 | `runtime/` 内的程序与 `runtime/frontend/dist` |
-| 后端环境与业务数据 | `runtime/.env`、`runtime/config` |
-| GUI 设置、证书、FRP 凭据与日志 | `%APPDATA%/ZViewerDesktop` |
-| ZViewerCLI 自身的登录配置 | `%USERPROFILE%/.zviewer/config.json` |
+| 后端环境与业务数据              | `runtime/.env`、`runtime/config`          |
+| GUI 设置、证书、FRP 凭据与日志    | `%APPDATA%/ZViewerDesktop`               |
+| ZViewerCLI 自身的登录配置     | `%USERPROFILE%/.zviewer/config.json`     |
 
 更新前先退出控制台并备份运行目录的 `.env`、`config` 和用户配置目录。替换程序时保留这些数据，不要把配置或数据库当作分发文件。当前 EXE 未配置代码签名，普通用户权限即可运行，不创建系统服务或修改系统防火墙。
 
@@ -44,12 +44,21 @@ node build-all.js --win
 npm --prefix desktop run shell:build
 ```
 
-产物为 `desktop/build/bin/ZViewerShell.exe`。开发期直接运行：
+产物为 `desktop/build/bin/ZViewerShell.exe`。开发期用 `dev` 脚本，一条命令完成「编译 + 独立配置目录 + 带日志启动」：
 
 ```powershell
-npm --prefix desktop run shell:build
-$env:ZVIEWER_RUNTIME_ROOT="C:/ZViewer/dist/win"; .\desktop\build\bin\ZViewerShell.exe
+npm --prefix desktop run dev
 ```
+
+它等价于 `build-shell.mjs --dev --console` 后运行 EXE：`-tags desktop,production,devtools` 保留 Wails 生产运行时但打开 WebView2 DevTools，默认用 `desktop/.runtime/dev-state` 作为配置目录，日志与 panic 输出直接回到当前终端，窗口内按 F12 或右键「检查」打开开发者工具。开关：`--no-build` 跳过编译直接跑已有 EXE，`--state-dir=<目录>`、`--runtime-root=<运行包>` 覆盖默认路径。开发实例与正式版共用单实例锁，正式版在运行时先退出它。
+
+只调界面样式可以不开壳，跑浏览器预览（走演示态，不接 Go）：
+
+```powershell
+npm --prefix desktop run preview   # http://127.0.0.1:17839
+```
+
+界面文件由 `go:embed` 编进 EXE，改 `ui/` 后必须重新编译才能在壳里看到，浏览器预览可以刷新即见。
 
 生成可分发目录与 ZIP：
 
@@ -97,7 +106,7 @@ npm --prefix desktop run check
 
 保持整个分发文件夹完整，双击根目录 `ZViewerShell.exe` 打开 GUI。
 
-首页“打开网页端”与“启动服务”使用相同按钮样式。点击后会先确保本机服务就绪，再用默认浏览器打开当前 HTTP/HTTPS 和端口对应的首页。首页及证书页的“打开管理页面”继续访问 `/admin`；托盘只保留“打开网页端”网页入口。默认首页 `http://localhost:3333/`，管理页 `http://localhost:3333/admin`。使用文档入口：https://docx.zviewer.zero251.xyz/ 。
+首页“打开网页端”与“启动服务”使用相同按钮样式。点击后会先确保本机服务就绪，再用默认浏览器打开当前 HTTP/HTTPS 和端口对应的首页。首页及证书页的“打开管理页面”继续访问 `/admin`；托盘只保留“打开网页端”网页入口。默认首页 `http://localhost:3333/`，管理页 `http://localhost:3333/admin`。使用文档入口：<https://docx.zviewer.zero251.xyz/> 。
 
 ## 端口、配置与托盘
 
@@ -138,9 +147,11 @@ CA、私钥与服务器证书保存在当前用户配置目录的 `tls`，目录
 `Shell_NotifyIcon` 的回调按**线程消息队列**投递，所以托盘窗口的 `CreateWindowEx` 与 `GetMessage` 循环必须在同一个被 `LockOSThread` 固定的线程里（`shell_tray.go` 的 `start`/`createWindow`/`messageLoop`）。如果分开写，窗口建在 A 线程、消息循环跑在 B 线程，图标能显示但左键点击永远不会触发。
 
 另外两处 Win32 细节：
+
 - `DestroyWindow` 只能由创建窗口的线程调用，退出时用 `PostMessage(WM_CLOSE)` 让托盘线程自己收尾；函数导出名是 `DestroyWindow`，没有 `W` 后缀。
 - 唤醒主窗口时先走 Wails 的 `WindowShow`，再用原生 `ShowWindow` + 置顶翻转 + 前台线程挂靠兜底，否则后台进程调用 `SetForegroundWindow` 会被前台锁静默拒绝。
 
 ## 上游贡献
 
 贡献内容应仅包含源码、应用图标、构建脚本和文档。排除本机配置、登录资料、数据库、证书私钥、运行时与下载缓存、测试输出和分发二进制。
+

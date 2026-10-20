@@ -3,6 +3,7 @@
 //
 // 用法：
 //   node scripts/build-shell.mjs                开发构建（带符号，隐藏控制台窗口）
+//   node scripts/build-shell.mjs --dev          调试构建（不含 production，启用 WebView2 DevTools）
 //   node scripts/build-shell.mjs --release      发布构建（-s -w 去符号）
 //   node scripts/build-shell.mjs --console      保留控制台窗口，便于观察 panic
 //   node scripts/build-shell.mjs --rebuild-host 强制重新编译 ProcessHost.exe
@@ -101,7 +102,11 @@ const linker = [`-X main.appVersion=${pkg.version}`];
 if (!flags.has('--console')) linker.push('-H', 'windowsgui');
 if (flags.has('--release')) linker.push('-s', '-w');
 
-const goArgs = ['build', '-tags', 'desktop,production', '-trimpath', '-ldflags', linker.join(' '), '-o', out, '.'];
+// Wails 必须带 production 或 dev 标签才会生成真正的应用（缺了会弹「build tags」提示后空转），
+// devtools 标签独立于此，单独打开 WebView2 的 DevTools（F12 / 右键检查）。
+const dev = flags.has('--dev');
+const tags = dev ? 'desktop,production,devtools' : 'desktop,production';
+const goArgs = ['build', '-tags', tags, '-trimpath', '-ldflags', linker.join(' '), '-o', out, '.'];
 console.log(`go ${goArgs.join(' ')}`);
 execFileSync('go', goArgs, { cwd: root, stdio: 'inherit' });
 
