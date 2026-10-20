@@ -52,7 +52,69 @@
   addEvent('FRP 模板已生成，未连接服务器。', 'frp');
   function icons() { document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); }); }
   function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toast.timer); toast.timer = setTimeout(() => $('#toast').classList.remove('visible'), 4000); }
-  function heading(title, subtitle, right = '') { return `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div>${right}</div>`; }
+  function heading(title, subtitle, right = '') { return `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div>${right ? `<div class="heading-actions">${right}</div>` : ''}</div>`; }
+
+  // 页面内教程：按钮固定在标题右侧，展开后是按主题折叠的说明文档。
+  const tutorials = {
+    frp: {
+      title: 'FRP 使用教程',
+      caption: 'frps + frpc · Token 认证',
+      sections: [
+        {
+          title: 'frp 是什么',
+          body: '<p>frp 是反向代理工具，用于把没有公网 IP 的本机服务，经一台公网 VPS 转发到互联网。</p><p>VPS 上运行服务端 <code>frps</code>，本机运行客户端 <code>frpc</code>；两者用同一个 Token 认证，并用 TLS 保护这条隧道本身。</p>'
+        },
+        {
+          title: '使用前需要什么',
+          body: '<ul><li>一台有公网 IPv4 的 VPS，Linux 或 Windows 均可。</li><li>在 VPS 安全组与系统防火墙放行控制端口和各映射端口。</li><li>一串自行生成的随机 Token，两端保持一致，只放环境变量，不写进配置文件。</li><li>本机 ZViewer 服务已启动，默认监听 3333。</li></ul>'
+        },
+        {
+          title: '怎么配置',
+          body: '<ol><li>在 VPS 写 <code>frps.toml</code>：<code>bindPort</code> 填控制端口，<code>auth.token</code> 从环境变量读取，<code>transport.tls.force = true</code>。</li><li>放行端口：控制端口 TCP、网页 TCP、UDP 语音对应 UDP、RTMP TCP；改用 TCP 语音时再放行对应 TCP 端口。</li><li>在本页填写 VPS 地址与控制端口，勾选需要的映射，核对本地端口。</li><li>导出 <code>frpc.toml</code> 放到本机，设置环境变量 <code>FRP_TOKEN</code> 后启动 frpc。</li><li>状态变为“代理已注册”后，外网用 <code>VPS_IP:远端端口</code> 访问。</li></ol>'
+        }
+      ],
+      foot: '传输层 TLS 只保护 frp 隧道，不等于浏览器 HTTPS；外网访问仍需按证书页配置证书。'
+    },
+    cert: {
+      title: '证书配置教程',
+      caption: '本机 CA · 当前用户信任',
+      sections: [
+        {
+          title: '为什么要配置证书',
+          body: '<p>浏览器会把 http 页面标记为不安全，麦克风、剪贴板、Service Worker 等能力只在安全上下文（https 或 localhost）下可用。</p><p>供局域网设备访问时，还需要一张它们信任的证书，否则每台设备都要手动跳过警告。</p>'
+        },
+        {
+          title: '本机证书与内网证书的区别',
+          body: '<ul><li><strong>本机证书</strong>：只对 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 生效，仅当前电脑可访问，不需要 DNS。</li><li><strong>内网证书</strong>：把域名或内网 IP 写入证书 SAN，需要把域名解析到该 IP（hosts 或内网 DNS），其他设备还要安装并信任根证书。</li></ul>'
+        },
+        {
+          title: '配置方法',
+          body: '<ol><li>选择范围：仅本机访问选“本机 localhost”；供局域网设备访问选“高级：内网域名”。</li><li>签发：程序用本机专用 CA 生成证书，私钥保存在当前用户配置目录，不外传。</li><li>安装信任：只写入当前 Windows 用户的信任存储，可随时撤销。</li><li>启用 HTTPS：在应用设置里打开“使用 HTTPS”，保存并重启服务。</li><li>内网场景：为访问设备配置 DNS 或 hosts，并安装导出的公开 CA 证书。</li></ol>'
+        }
+      ],
+      foot: '签发证书不会创建 DNS 记录；根 CA 私钥不可分享。'
+    }
+  };
+
+  function tutorial(key) {
+    const data = tutorials[key];
+    if (!data) return '';
+    const chevron = '<svg class="tutorial-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+    const sections = data.sections.map((section, index) => {
+      const open = index === 0;
+      return `<section class="tutorial-section" data-open="${open}"><button type="button" class="tutorial-section-head" data-tutorial-section aria-expanded="${open}"><span class="tutorial-index">${index + 1}</span><span>${section.title}</span>${chevron}</button><div class="tutorial-section-body">${section.body}</div></section>`;
+    }).join('');
+    return `<div class="tutorial"><button type="button" class="tutorial-toggle" data-tutorial-toggle aria-expanded="false" aria-haspopup="true" aria-controls="tutorial-${key}">${icon('book')}教程<svg class="tutorial-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="tutorial-menu" id="tutorial-${key}" role="dialog" aria-label="${data.title}" hidden><div class="tutorial-head"><div><strong>${data.title}</strong><small>${data.caption}</small></div><button type="button" class="tutorial-close" data-tutorial-close aria-label="关闭教程"><span class="icon-glyph">&#xE8BB;</span></button></div><div class="tutorial-sections">${sections}</div><p class="tutorial-foot">${data.foot}</p></div></div>`;
+  }
+
+  function closeTutorials() {
+    document.querySelectorAll('.tutorial-toggle[aria-expanded="true"]').forEach(toggle => {
+      toggle.setAttribute('aria-expanded', 'false');
+      const menu = toggle.parentElement.querySelector('.tutorial-menu');
+      if (menu) menu.hidden = true;
+    });
+  }
+
   function button(label, action, name, cls = '') { return `<button class="btn ${cls}" data-action="${action}">${name ? icon(name) : ''}${label}</button>`; }
   function notice(text, warm = false) { return `<div class="notice ${warm ? 'warm' : ''}">${icon('info')}<div>${text}</div></div>`; }
   function download(name, text, mime = 'text/plain;charset=utf-8') {
@@ -101,7 +163,7 @@
   function frp() {
     const c = state.frp;
     function row(title, field, type, local, remote, checked, fixed = false) { return `<div class="mapping"><label><input class="checkbox" type="checkbox" data-frp-check="${field}" ${checked ? 'checked' : ''} ${fixed ? 'disabled' : ''}>${title}</label><span class="proto">${type}</span><code>${local}</code><span class="muted">→</span><input aria-label="${title}远端端口" type="number" min="1" max="65535" data-frp-field="${remote}" value="${esc(c[remote])}"></div>`; }
-    return heading('FRP 穿透', '通过自有 VPS 转发本机服务。', '<span class="pill orange"><i></i>未连接</span>') +
+    return heading('FRP 穿透', '通过自有 VPS 转发本机服务。', `${tutorial('frp')}<span class="pill orange"><i></i>未连接</span>`) +
       `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>自建 frps</small></div><div class="form-row"><label class="field"><span>VPS 地址</span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证 Token <small>不保存、不导出明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">导出模板从 FRP_TOKEN 环境变量读取凭据。输入内容不会保存。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音需放行对应 UDP 端口；选用 TCP 语音时，管理端语音模式需同步设为 TCP。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('查看文档', 'docs', 'book')}${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据采用环境变量占位，未写入明文</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div><div class="help-card"><strong>部署步骤</strong><p>两台机器使用同一 FRP_TOKEN；部署 frps 并放行端口，再用 frpc verify 校验配置。传输 TLS 与网页 HTTPS 独立配置。</p></div></section></div>`;
   }
   function certPreview() {
@@ -119,7 +181,7 @@
       else if (state.certStep === 2) content = steps + notice('内网域名需要在访问设备上解析。<strong>签发证书不会创建 DNS 记录。</strong>') + `<h3>本机 hosts 记录预览</h3><div class="dns-example">${esc(state.certIp)}&nbsp;&nbsp;${esc(state.certDomain)}</div><p class="wizard-copy">该记录仅对本机生效。其他设备需配置内网 DNS 或各自的 hosts，并安装并信任根证书。</p><div class="help-card"><strong>不修改路由器配置</strong><p>hosts 修改支持备份与撤销；路由器 DNS 需手动配置。</p></div><div class="form-actions">${button('上一步', 'cert-back')}${button('完成方案预览', 'cert-next', 'check', 'primary')}</div>`;
       else content = steps + `<div class="big-check">${icon('check')}</div><h2>方案已生成</h2><p class="wizard-copy">域名与 SAN 已生成，未签发证书，也未安装信任。</p><div class="dns-example">https://${esc(state.certDomain)}:3333</div><div class="form-actions">${button('返回修改', 'cert-reset')}${button('下载配置清单', 'export-cert', 'download', 'primary')}</div>`;
     }
-    return heading('证书与域名', '默认使用 localhost 自签证书；内网域名需自行配置解析。') + `<div class="tabs"><button data-cert-mode="local" class="${local ? 'active' : ''}">本机 localhost</button><button data-cert-mode="lan" class="${!local ? 'active' : ''}">高级：内网域名</button></div><div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
+    return heading('证书与域名', '默认使用 localhost 自签证书；内网域名需自行配置解析。', tutorial('cert')) + `<div class="tabs"><button data-cert-mode="local" class="${local ? 'active' : ''}">本机 localhost</button><button data-cert-mode="lan" class="${!local ? 'active' : ''}">高级：内网域名</button></div><div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
   function cli() {
     const live = Boolean(state.live), saved = state.config?.cli || { port: 9333, autoStart: false, user: '' };
@@ -240,6 +302,23 @@
     else if (name === 'tray-logs') { $('#modal').close(); navigate('logs'); }
   }
   document.addEventListener('click', event => {
+    if (!event.target.closest('.tutorial')) closeTutorials();
+    const tutorialToggle = event.target.closest('[data-tutorial-toggle]');
+    if (tutorialToggle) {
+      const menu = tutorialToggle.parentElement.querySelector('.tutorial-menu');
+      const willOpen = menu.hidden;
+      closeTutorials();
+      if (willOpen) { menu.hidden = false; tutorialToggle.setAttribute('aria-expanded', 'true'); }
+      return;
+    }
+    if (event.target.closest('[data-tutorial-close]')) { closeTutorials(); return; }
+    const tutorialSection = event.target.closest('[data-tutorial-section]');
+    if (tutorialSection) {
+      const open = tutorialSection.closest('.tutorial-section').dataset.open === 'true';
+      tutorialSection.closest('.tutorial-section').dataset.open = String(!open);
+      tutorialSection.setAttribute('aria-expanded', String(!open));
+      return;
+    }
     const windowButton = event.target.closest('[data-window]');
     if (windowButton) { if (window.zviewerDesktop) window.zviewerDesktop.window(windowButton.dataset.window); else toast('窗口控制仅在 Windows 桌面版可用'); return; }
     const nav = event.target.closest('[data-nav]'); if (nav) { navigate(nav.dataset.nav); return; }
@@ -276,6 +355,7 @@
   $('#docs-link').addEventListener('click', () => action('docs'));
   document.addEventListener('keydown', event => {
     if ((event.ctrlKey && event.key.toLowerCase() === 'r') || event.key === 'F5') { event.preventDefault(); location.reload(); }
+    if (event.key === 'Escape') closeTutorials();
   });
   window.addEventListener('hashchange', () => { state.page = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'overview'; render(); });
   $('#modal').addEventListener('click', event => { if (event.target === $('#modal')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) $('#modal').close(); } });
@@ -288,7 +368,7 @@
       navToggle.setAttribute('title', collapsed ? '展开导航' : '折叠导航');
     });
   }
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, render, navigate, toast, modal, readCert, preview: { overview, frp, cert, cli, logs, settings }, refreshLogs };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, readCert, preview: { overview, frp, cert, cli, logs, settings }, refreshLogs };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {

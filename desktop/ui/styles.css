@@ -255,6 +255,73 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .eyebrow { display: none; }
 .heading-icon { display: none; }
 
+/* ---------- 标题右侧：教程下拉 ---------- */
+.heading-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.tutorial { position: relative; }
+.tutorial-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 26px; padding: 0 8px;
+  border: 1px solid var(--control-stroke); border-radius: var(--radius-control);
+  background: var(--control-fill); color: var(--text-secondary);
+  font-size: 12px; line-height: 1;
+}
+.tutorial-toggle:hover { background: var(--control-fill-hover); color: var(--text-primary); }
+.tutorial-toggle[aria-expanded="true"] {
+  background: var(--control-fill-pressed); color: var(--text-primary);
+  border-color: var(--control-stroke-strong);
+}
+.tutorial-toggle svg { width: 14px; height: 14px; }
+.tutorial-caret { color: var(--text-tertiary); }
+.tutorial-toggle[aria-expanded="true"] .tutorial-caret { transform: rotate(180deg); }
+
+.tutorial-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+  width: min(420px, calc(100vw - 72px));
+  max-height: min(70vh, 560px); overflow-y: auto;
+  padding: 4px;
+  background: var(--flyout-bg);
+  border: 1px solid var(--card-stroke);
+  border-radius: var(--radius-overlay);
+  box-shadow: var(--shadow-flyout);
+}
+.tutorial-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 12px 8px; }
+.tutorial-head strong { display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.tutorial-head small { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 11px; }
+.tutorial-close {
+  width: 24px; height: 24px; flex-shrink: 0;
+  display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: var(--radius-control);
+  background: transparent; color: var(--text-tertiary);
+}
+.tutorial-close:hover { background: var(--subtle-hover); color: var(--text-primary); }
+.tutorial-close .icon-glyph { font-size: 12px; }
+
+.tutorial-sections { padding: 0 4px; }
+.tutorial-section { border-top: 1px solid var(--divider); }
+.tutorial-section-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px; border: 0; border-radius: var(--radius-control);
+  background: transparent; color: var(--text-primary);
+  font-size: 12px; font-weight: 600; text-align: left;
+}
+.tutorial-section-head:hover { background: var(--subtle-hover); }
+.tutorial-index {
+  width: 18px; height: 18px; flex-shrink: 0;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--accent-tint); color: var(--accent);
+  font-size: 10px; font-weight: 600;
+}
+.tutorial-chevron { width: 14px; height: 14px; flex-shrink: 0; margin-left: auto; color: var(--text-tertiary); }
+.tutorial-section[data-open="true"] .tutorial-chevron { transform: rotate(180deg); }
+.tutorial-section-body { display: none; padding: 0 8px 10px 34px; }
+.tutorial-section[data-open="true"] .tutorial-section-body { display: block; }
+.tutorial-section-body p, .tutorial-section-body li { font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
+.tutorial-section-body p + p, .tutorial-section-body p + ul, .tutorial-section-body p + ol { margin-top: 6px; }
+.tutorial-section-body ul, .tutorial-section-body ol { margin: 4px 0 0 14px; padding: 0; display: grid; gap: 4px; }
+.tutorial-section-body li strong { color: var(--text-primary); font-weight: 600; }
+.tutorial-section-body code { font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--layer-alt); color: var(--text-primary); }
+.tutorial-foot { margin: 0; padding: 8px 12px 10px; border-top: 1px solid var(--divider); color: var(--text-tertiary); font-size: 11px; line-height: 1.6; }
+
 .section-title {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   margin: 28px 0 12px;
