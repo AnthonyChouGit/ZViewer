@@ -18,6 +18,7 @@ import { useRoomStore } from '@/store/roomStore'
 import type { WatchTogetherState } from '@/modules/sync-playback/types'
 import { SOCKET_EVENT } from '@/modules/sync-playback/constants'
 import { safePlay } from '@/modules/sync-playback/safePlay'
+import { restoreStateSnapshot } from '@/modules/sync-playback/services/state-merge'
 import type { RequestStateAckData } from '../types'
 import {
   fetchBlobsForBufferMode,
@@ -91,7 +92,10 @@ export function usePlaybackStateRequest({
 
           retryCountRef.current = 10 // 拿到状态后停止重试
 
-          const state = response.data.state
+          const state = restoreStateSnapshot(
+            useRoomStore.getState().watchTogether,
+            response.data.state
+          )
 
           // hostOnline=false：观众在房主离线后才加入/刷新页面，直接进入
           // 自主控制模式（roomStore.hostOffline → canControl）。否则观众
