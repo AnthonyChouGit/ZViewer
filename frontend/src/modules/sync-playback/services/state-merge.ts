@@ -9,6 +9,33 @@
 import type { WatchTogetherState } from '../types'
 
 /**
+ * Restore a complete wire snapshot without retaining the previous film's fields.
+ * JSON/Socket.IO omit undefined properties, including fields cleared in a diff
+ * (e.g. Bilibili audioUrl when switching to Kazumi HLS). The accompanying state
+ * is authoritative. Materialize missing keys as undefined because roomStore's
+ * setter also accepts partial progress updates and therefore shallow-merges.
+ */
+export function restoreStateSnapshot(
+  current: WatchTogetherState,
+  snapshot: WatchTogetherState
+): WatchTogetherState {
+  const cleared = Object.fromEntries(
+    Object.keys(current).map((key) => [key, undefined])
+  )
+  const sameSource = current.sourceUrl === snapshot.sourceUrl &&
+    current.sourceType === snapshot.sourceType
+  return {
+    ...cleared,
+    ...snapshot,
+    duration: snapshot.duration ?? 0,
+    // Older hosts omit these policies in buildStateFromVideo. Keep them only
+    // for the same source; a different film must never inherit its policies.
+    playsvideoEnabled: snapshot.playsvideoEnabled ?? (sameSource ? current.playsvideoEnabled : undefined),
+    noProxyFallback: snapshot.noProxyFallback ?? (sameSource ? current.noProxyFallback : undefined),
+  }
+}
+
+/**
  * 从 video 元素与 store 状态构建完整的 WatchTogetherState。
  *
  * 优先从 video 元素读取实时播放字段（isPlaying/currentTime/playbackRate），
@@ -57,6 +84,8 @@ export function buildStateFromVideo(
     // 透传缓冲模式标记：房主 forceSync / 响应观众 REQUEST_STATE 时必须保留，
     // 否则观众端收到无 bufferMode 的 state 会回退到 URL 播放，破坏缓冲模式一致性
     bufferMode: storeState.bufferMode,
+    playsvideoEnabled: storeState.playsvideoEnabled,
+    noProxyFallback: storeState.noProxyFallback,
   }
 }
 

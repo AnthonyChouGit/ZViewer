@@ -19,6 +19,7 @@
  * - 检测 URL 过期后暂停并提示
  */
 import { useEffect, useRef, useCallback } from 'react'
+import { restoreStateSnapshot } from '@/modules/sync-playback/services/state-merge'
 import type { RefObject, MutableRefObject } from 'react'
 import { useSocket } from '@/hooks/useSocket'
 import { message } from '@/components/ui/message'
@@ -151,7 +152,10 @@ export function useServerHeartbeat({
       // URL 过期检测由 video error 事件兜底。
       if (hostOfflineRef.current) return
 
-      const state = payload.state
+      const state = restoreStateSnapshot(
+        useRoomStore.getState().watchTogether,
+        payload.state
+      )
       const video = videoRef.current
 
       // P3-Opt#15：房主重连过渡——对比差异决定是否平滑同步

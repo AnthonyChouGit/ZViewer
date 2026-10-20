@@ -62,6 +62,75 @@ function loadLocalTs(file, requireFn = () => { throw new Error('Unexpected impor
   new Function('exports','require',code)(exports,requireFn);
   return exports;
 }
+
+const syncState = loadLocalTs('frontend/src/modules/sync-playback/services/state-merge.ts');
+const biliState = {
+  sourceUrl: 'https://media.example/video.m4s', sourceType: 'bilibili',
+  audioUrl: 'https://media.example/audio.m4s', format: 'dash',
+  videoCodec: 'avc1.640028', audioCodec: 'mp4a.40.2', cid: 123,
+  currentQn: 80, acceptQuality: [{ id: 80, label: '1080P' }],
+  isPlaying: true, currentTime: 30, playbackRate: 1, duration: 91,
+  hostCliEnabled: true, bufferMode: true, isPreview: true, previewTitle: 'old preview',
+};
+const hlsState = {
+  sourceUrl: 'https://media.example/episode.m3u8', sourceType: 'kazumi', format: 'hls',
+  audioUrl: undefined, videoCodec: undefined, audioCodec: undefined, cid: undefined,
+  currentQn: undefined, acceptQuality: undefined, duration: undefined,
+  isPlaying: true, currentTime: 0, playbackRate: 1,
+  headers: { Referer: 'https://source.example/' },
+};
+const wire = value => JSON.parse(JSON.stringify(value));
+
+test('Bilibili to Kazumi clears omitted audio and source metadata after a real JSON round trip', () => {
+  const payload = wire({ state: hlsState, diff: syncState.computeStateDiff(biliState, hlsState) });
+  assert.equal(Object.hasOwn(payload.diff, 'audioUrl'), false);
+  // Reproduce the old receiver: a diff cannot clear a JSON-omitted field.
+  assert.equal(syncState.mergeStateDiff(biliState, payload.diff).audioUrl, biliState.audioUrl);
+  const restored = syncState.restoreStateSnapshot(biliState, payload.state);
+  // roomStore intentionally shallow-merges partial progress updates.
+  const stored = { ...biliState, ...restored };
+  for (const key of ['audioUrl', 'videoCodec', 'audioCodec', 'cid', 'currentQn', 'acceptQuality', 'hostCliEnabled', 'bufferMode', 'isPreview', 'previewTitle']) {
+    assert.equal(stored[key], undefined, key);
+  }
+  assert.equal(stored.format, 'hls');
+  assert.equal(stored.duration, 0);
+  assert.deepEqual(stored.headers, hlsState.headers);
+  assert.equal(biliState.audioUrl, 'https://media.example/audio.m4s');
+});
+
+test('full state restores after a missed diff and clears old headers on HLS to DASH switching', () => {
+  const stale = { ...hlsState, headers: { Referer: 'https://old.example/', Cookie: 'synthetic-test-cookie' } };
+  const payload = wire({ state: biliState, diff: { currentTime: 30 }, seq: 9 });
+  const restored = syncState.restoreStateSnapshot(stale, payload.state);
+  assert.equal(restored.sourceUrl, biliState.sourceUrl);
+  assert.equal(restored.audioUrl, biliState.audioUrl);
+  assert.equal(restored.format, 'dash');
+  assert.equal(restored.headers, undefined);
+});
+
+test('full request/heartbeat snapshots clear optional fields even when the video URL is unchanged', () => {
+  const snapshot = wire({ ...hlsState, sourceUrl: biliState.sourceUrl, format: 'mp4' });
+  const restored = syncState.restoreStateSnapshot(biliState, snapshot);
+  assert.equal(restored.sourceUrl, biliState.sourceUrl);
+  assert.equal(restored.audioUrl, undefined);
+  assert.equal(restored.format, 'mp4');
+  assert.equal(restored.cid, undefined);
+  assert.deepEqual(restored.headers, hlsState.headers);
+});
+
+test('same-source snapshots from legacy hosts preserve media policies without leaking them across films', () => {
+  const current = { ...hlsState, playsvideoEnabled: false, noProxyFallback: true };
+  const legacy = wire(hlsState);
+  const restored = syncState.restoreStateSnapshot(current, legacy);
+  assert.equal(restored.playsvideoEnabled, false);
+  assert.equal(restored.noProxyFallback, true);
+  const changed = syncState.restoreStateSnapshot(current, wire(biliState));
+  assert.equal(changed.playsvideoEnabled, undefined);
+  assert.equal(changed.noProxyFallback, undefined);
+  const emitted = wire(syncState.buildStateFromVideo(null, current));
+  assert.equal(emitted.playsvideoEnabled, false);
+  assert.equal(emitted.noProxyFallback, true);
+});
 test('MKV compression metadata uses real EBML IDs and distinguishes none/zlib/header stripping', () => {
   const ebml = loadLocalTs('frontend/src/lib/mkv/ebml.ts');
   const { MatroskaDemuxer } = loadLocalTs('frontend/src/lib/mkv/matroska-demuxer.ts', () => ebml);
