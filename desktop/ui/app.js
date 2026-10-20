@@ -58,11 +58,11 @@
   const tutorials = {
     frp: {
       title: 'FRP 使用教程',
-      caption: 'frps + frpc · Token 认证',
+      caption: 'frps + frpc',
       sections: [
         {
           title: 'frp 是什么',
-          body: '<p>frp 是反向代理工具，用于把没有公网 IP 的本机服务，经一台公网 VPS 转发到互联网。</p><p>VPS 上运行服务端 <code>frps</code>，本机运行客户端 <code>frpc</code>；两者用同一个 Token 认证，并用 TLS 保护这条隧道本身。</p>'
+          body: '<p>frp 是反向代理工具，用于把没有公网 IP 的本机服务，经一台公网 VPS 转发到互联网。</p><p>VPS 上运行服务端 <code>frps</code>，本机运行客户端 <code>frpc</code>。</p>'
         },
         {
           title: '使用前需要什么',
@@ -71,9 +71,12 @@
         {
           title: '怎么配置',
           body: '<ol><li>在 VPS 写 <code>frps.toml</code>：<code>bindPort</code> 填控制端口，<code>auth.token</code> 从环境变量读取，<code>transport.tls.force = true</code>。</li><li>放行端口：控制端口 TCP、网页 TCP、UDP 语音对应 UDP、RTMP TCP；改用 TCP 语音时再放行对应 TCP 端口。</li><li>在本页填写 VPS 地址与控制端口，勾选需要的映射，核对本地端口。</li><li>导出 <code>frpc.toml</code> 放到本机，设置环境变量 <code>FRP_TOKEN</code> 后启动 frpc。</li><li>状态变为“代理已注册”后，外网用 <code>VPS_IP:远端端口</code> 访问。</li></ol>'
+        },
+        {
+          title: '官方资料',
+          body: '<p>GitHub 仓库：<a href="https://github.com/fatedier/frp" data-external="https://github.com/fatedier/frp">github.com/fatedier/frp</a></p><p>官方文档：<a href="https://gofrp.org/zh-cn/docs/" data-external="https://gofrp.org/zh-cn/docs/">gofrp.org/zh-cn/docs</a></p>'
         }
-      ],
-      foot: '传输层 TLS 只保护 frp 隧道，不等于浏览器 HTTPS；外网访问仍需按证书页配置证书。'
+      ]
     },
     cert: {
       title: '证书配置教程',
@@ -123,7 +126,7 @@
       const open = index === 0;
       return `<section class="tutorial-section" data-open="${open}"><button type="button" class="tutorial-section-head" data-tutorial-section aria-expanded="${open}"><span class="tutorial-index">${index + 1}</span><span>${section.title}</span>${chevron}</button><div class="tutorial-section-body">${section.body}</div></section>`;
     }).join('');
-    return `<div class="tutorial"><button type="button" class="tutorial-toggle" data-tutorial-toggle aria-expanded="false" aria-haspopup="true" aria-controls="tutorial-${key}">${icon('book')}教程<svg class="tutorial-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="tutorial-menu" id="tutorial-${key}" role="dialog" aria-label="${data.title}" hidden><div class="tutorial-head"><div><strong>${data.title}</strong><small>${data.caption}</small></div><button type="button" class="tutorial-close" data-tutorial-close aria-label="关闭教程"><span class="icon-glyph">&#xE8BB;</span></button></div><div class="tutorial-sections">${sections}</div><p class="tutorial-foot">${data.foot}</p></div></div>`;
+    return `<div class="tutorial"><button type="button" class="tutorial-toggle" data-tutorial-toggle aria-expanded="false" aria-haspopup="true" aria-controls="tutorial-${key}">${icon('book')}教程<svg class="tutorial-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="tutorial-menu" id="tutorial-${key}" role="dialog" aria-label="${data.title}" hidden><div class="tutorial-head"><div><strong>${data.title}</strong><small>${data.caption}</small></div><button type="button" class="tutorial-close" data-tutorial-close aria-label="关闭教程"><span class="icon-glyph">&#xE8BB;</span></button></div><div class="tutorial-sections">${sections}</div>${data.foot ? `<p class="tutorial-foot">${data.foot}</p>` : ''}</div></div>`;
   }
 
   function closeTutorials() {
@@ -331,6 +334,15 @@
       return;
     }
     if (event.target.closest('[data-tutorial-close]')) { closeTutorials(); return; }
+    const external = event.target.closest('[data-external]');
+    if (external) {
+      event.preventDefault();
+      const url = external.dataset.external;
+      // 桌面端走 Wails 运行时用系统浏览器打开；浏览器预览退化为新标签页。
+      if (window.runtime?.BrowserOpenURL) window.runtime.BrowserOpenURL(url);
+      else window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const tutorialSection = event.target.closest('[data-tutorial-section]');
     if (tutorialSection) {
       const open = tutorialSection.closest('.tutorial-section').dataset.open === 'true';

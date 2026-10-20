@@ -320,6 +320,8 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .tutorial-section-body p + p, .tutorial-section-body p + ul, .tutorial-section-body p + ol { margin-top: 6px; }
 .tutorial-section-body ul, .tutorial-section-body ol { margin: 4px 0 0 14px; padding: 0; display: grid; gap: 4px; }
 .tutorial-section-body li strong { color: var(--text-primary); font-weight: 600; }
+.tutorial-section-body a { color: var(--accent); text-decoration: none; }
+.tutorial-section-body a:hover { text-decoration: underline; }
 .tutorial-section-body code { font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--layer-alt); color: var(--text-primary); }
 .tutorial-foot { margin: 0; padding: 8px 12px 10px; border-top: 1px solid var(--divider); color: var(--text-tertiary); font-size: 11px; line-height: 1.6; }
 
