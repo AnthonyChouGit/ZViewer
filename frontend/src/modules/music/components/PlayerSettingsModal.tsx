@@ -401,6 +401,7 @@ export function PlayerSettingsModal({ onDismiss }: { onDismiss: () => void }) {
                       <option value={0}>自动（跟随账号）</option>
                       {(biliVip
                         ? [
+                            [125, 'HDR 真彩'],
                             [120, '4K 超清'],
                             [116, '1080P 60帧'],
                             [112, '1080P 高码率'],

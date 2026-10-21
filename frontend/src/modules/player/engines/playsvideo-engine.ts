@@ -61,6 +61,7 @@ import {
   isRelativeUrl,
 } from '../services/url-proxy'
 import { assertDirectLinkReachable } from './direct-route'
+import { canDecodeCodecs } from '../hdr-capability'
 
 /**
  * 引擎准备超时模型（活动超时制，替代旧 60s 绝对超时）。
@@ -618,6 +619,13 @@ export const playsVideoEngine: PlayerEngine = {
     video: HTMLVideoElement,
     source: PlayerSource
   ): Promise<EngineAttachResult> {
+    // 重封装只切容器、不解码视频，因此源编码必须由 MSE 直接支持。
+    // HDR（HEVC Main10）在无硬解的设备上会 append 失败，这里提前给出人话。
+    if (!canDecodeCodecs(source.videoCodec)) {
+      throw new Error(
+        `当前设备无法解码该视频编码（${source.videoCodec}），请更换播放设备或转码后再试`
+      )
+    }
     const controller = new PlaysVideoController(video, source)
     try {
       await controller.attach(source.startTime ?? 0)

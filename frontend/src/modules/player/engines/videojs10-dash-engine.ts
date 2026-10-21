@@ -38,6 +38,7 @@ import { videoFeatures } from '@videojs/core/dom'
 import { combine, createStore } from '@videojs/store'
 import { waitForMetadata } from '../utils'
 import { resolveProxyUrl, isCliProxyUrl } from '../services/url-proxy'
+import { canDecodeCodecs } from '../hdr-capability'
 import {
   generateMpd,
   parseInitFromBlob,
@@ -240,6 +241,14 @@ export const videojs10DashEngine: PlayerEngine = {
     // 双轨合并必须有 audioUrl
     if (!audioUrl) {
       throw new Error('DASH 源缺少 audioUrl，无法播放')
+    }
+
+    // 起播前做解码能力校验：HDR（HEVC Main10）/ AV1 在部分设备上 MSE 直接
+    // 不支持，若放任 dash.js 起播只会得到黑屏 + 难以理解的 MSE 错误。
+    if (!canDecodeCodecs(source.videoCodec)) {
+      throw new Error(
+        `当前设备无法解码该视频编码（${source.videoCodec}），请切换更低清晰度或更换支持硬解的设备`
+      )
     }
 
     const isBufferMode = !!(source.videoBlob && source.audioBlob)

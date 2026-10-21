@@ -46,6 +46,12 @@ interface ResolveProgressMessage {
   vipStatus?: number;
   currentQn?: number;
   acceptQuality?: { id: number; label: string; resolution?: string }[];
+  /** 当前视频轨是否 HDR（HDR 真彩 / 杜比视界）。 */
+  isHdr?: boolean;
+  /** HDR 类型：hlg / dolby-vision。 */
+  hdrType?: 'hlg' | 'dolby-vision';
+  /** 当前视频轨编码 id：7=AVC / 12=HEVC / 13=AV1。 */
+  videoCodecid?: number;
   /** 多 P 视频的分集列表（单 P 视频为 undefined） */
   pages?: ResolvePageInfo[];
   /** 当前播放的分集序号（从 1 开始） */
@@ -221,6 +227,9 @@ router.get('/resolve-bilibili', async (req: AuthenticatedRequest, res) => {
       vipStatus: result.vipStatus,
       currentQn: result.currentQn,
       acceptQuality: result.acceptQuality,
+      isHdr: result.isHdr,
+      hdrType: result.hdrType,
+      videoCodecid: result.videoCodecid,
       pages: result.pages,
       currentPage: result.currentPage,
       resolvedUrl: result.resolvedUrl,

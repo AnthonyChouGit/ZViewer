@@ -155,6 +155,12 @@ export interface ResolveResult {
   vipStatus: number;
   currentQn?: number;
   acceptQuality?: { id: number; label: string; resolution?: string }[];
+  /** 当前视频轨是否 HDR（B站 HDR 真彩 / 杜比视界）。 */
+  isHdr?: boolean;
+  /** HDR 类型：hlg=HDR 真彩；dolby-vision=杜比视界（浏览器基本无法解码）。 */
+  hdrType?: 'hlg' | 'dolby-vision';
+  /** 当前视频轨编码 id：7=AVC / 12=HEVC / 13=AV1，供前端解码能力探测。 */
+  videoCodecid?: number;
   /**
    * 视频所有分集列表（多 P 视频才有，单 P 视频为单元素数组）。
    * 前端用于在影片列表中显示分P选择器，切换分P时使用对应 cid 重新解析。
@@ -595,6 +601,9 @@ async function resolvePgcVideo(
     vipStatus: isVip ? 1 : 0,
     currentQn: playUrl.currentQn,
     acceptQuality,
+    isHdr: playUrl.isHdr || undefined,
+    hdrType: playUrl.hdrType,
+    videoCodecid: playUrl.videoCodecid,
     pages: pagesInfo,
     currentPage,
     resolvedUrl,
@@ -664,7 +673,7 @@ async function resolvePgcVideo(
       cid: target.cid,
       cookie,
       qn: requestedQn,
-      fnval: computeFnval(isVip, requestedQn),
+      fnval: computeFnval(isVip, requestedQn, { codec }),
       codec,
     });
   } catch (err) {
@@ -682,7 +691,7 @@ async function resolvePgcVideo(
             cid: target.cid,
             cookie,
             qn: fallbackQn,
-            fnval: computeFnval(isVip, fallbackQn),
+            fnval: computeFnval(isVip, fallbackQn, { codec }),
             codec,
           });
         } catch (err2) {
@@ -716,7 +725,7 @@ async function resolvePgcVideo(
         cid: target.cid,
         cookie,
         qn: effectiveQn,
-        fnval: computeFnval(isVip, effectiveQn),
+        fnval: computeFnval(isVip, effectiveQn, { codec }),
         codec,
       });
       if (refetched) {
@@ -1052,6 +1061,9 @@ export async function resolveBilibiliVideo(
       vipStatus: isVip ? 1 : 0,
       currentQn: playUrl.currentQn,
       acceptQuality,
+      isHdr: playUrl.isHdr || undefined,
+      hdrType: playUrl.hdrType,
+      videoCodecid: playUrl.videoCodecid,
       pages: pagesInfo,
       currentPage,
       resolvedUrl: url,

@@ -10,8 +10,38 @@ import { getCachedVipStatus, setCachedVipStatus } from './cache';
 export const DEFAULT_QN = 80;
 /** 会员默认清晰度：4K 超清 */
 export const VIP_DEFAULT_QN = 120;
+/** HDR 真彩（HEVC Main10 / HLG） */
+export const QN_HDR = 125;
+/** 杜比视界（浏览器无法解码，仅识别不暴露） */
+export const QN_DOLBY_VISION = 126;
 /** 8K 清晰度 qn */
-const QN_8K = 127;
+export const QN_8K = 127;
+
+/**
+ * playurl 的 fnval 位标志（依据 B站公开接口语义）。
+ *
+ * 注意：实测（2026-10）B站 对大会员账号会一次性返回所有可用轨道，
+ * 这些 bit 更像「能力声明」而非硬门槛；但语义必须写对，否则 8K / 杜比
+ * 这类冷门档位在部分稿件上会拿不到。
+ */
+export const FNVAL_BITS = {
+  /** 单流 MP4（durl） */
+  MP4: 1,
+  /** DASH 分离流 */
+  DASH: 16,
+  /** HDR（qn=125） */
+  HDR: 64,
+  /** 4K（qn=120） */
+  FOUR_K: 128,
+  /** 杜比音频（dash.dolby） */
+  DOLBY_AUDIO: 256,
+  /** 杜比视界（qn=126，浏览器基本无法解码） */
+  DOLBY_VISION: 512,
+  /** 8K（qn=127） */
+  EIGHT_K: 1024,
+  /** AV1 编码轨道 */
+  AV1: 2048,
+} as const;
 
 /** VIP 专属清晰度列表（非会员不可用） */
 export const VIP_ONLY_QNS = [112, 116, 120, 125, 126, 127];
@@ -109,22 +139,35 @@ export function filterQualitiesByVip(
 
 /**
  * 根据 VIP 状态和请求的 qn 计算 fnval 位标志。
- * - 非会员：仅 DASH（16），不启用 4K
- * - 会员：DASH + 4K（80）
- * - 8K 请求：额外启用 8K 位（80 | 2048 = 2128）
+ *
+ * - 非会员：仅 DASH（16）
+ * - 会员：DASH + HDR + 4K（208）
+ * - qn=127：额外启用 8K 位（1024）
+ * - qn=126：额外启用杜比视界位（512），仅当调用方显式允许（默认关闭，
+ *   因为 Chromium/WebView2 无法解码 DoVi，暴露即黑屏）
+ * - 编码偏好 av1：额外启用 AV1 位（2048）
+ *
+ * 杜比音频位（256）不单独请求：Android/iOS 端才常用，且 dash.dolby 会随
+ * 上述位一起返回。
  */
-export function computeFnval(isVip: boolean, qn?: number): number {
-  const dash = 16;        // DASH 格式
-  const fourK = 64;       // 4K
-  const eightK = 2048;    // 8K
-
+export function computeFnval(
+  isVip: boolean,
+  qn?: number,
+  opts?: { codec?: string; allowDolbyVision?: boolean },
+): number {
   if (!isVip) {
-    return dash;  // 非会员仅 DASH
+    return FNVAL_BITS.DASH;
   }
 
-  let fnval = dash | fourK;  // 会员默认 DASH + 4K
+  let fnval = FNVAL_BITS.DASH | FNVAL_BITS.HDR | FNVAL_BITS.FOUR_K;
   if (qn === QN_8K) {
-    fnval |= eightK;  // 8K 请求加 8K 位
+    fnval |= FNVAL_BITS.EIGHT_K;
+  }
+  if (qn === QN_DOLBY_VISION && opts?.allowDolbyVision) {
+    fnval |= FNVAL_BITS.DOLBY_VISION;
+  }
+  if (opts?.codec === 'av1') {
+    fnval |= FNVAL_BITS.AV1;
   }
   return fnval;
 }

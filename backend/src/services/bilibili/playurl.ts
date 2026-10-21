@@ -4,6 +4,8 @@ import {
   computeFnval,
   QN_QUALITY_MAP,
   DEFAULT_QN,
+  QN_HDR,
+  QN_DOLBY_VISION,
 } from './permission';
 
 export interface DashMediaTrack {
@@ -13,6 +15,14 @@ export interface DashMediaTrack {
   bandwidth: number;
   codecs: string;
   id: number;
+  /** B站 编码 id：7=AVC / 12=HEVC / 13=AV1 / 0=音频。 */
+  codecid?: number;
+  /** 轨道宽度（像素）。 */
+  width?: number;
+  /** 轨道高度（像素）。 */
+  height?: number;
+  /** 帧率字符串（如 '60.000'）。 */
+  frameRate?: string;
 }
 
 export interface DurlSegment {
@@ -20,6 +30,9 @@ export interface DurlSegment {
   size: number;
   length: number;
 }
+
+/** HDR 类型：HLG（B站 HDR 真彩）/ 杜比视界。 */
+export type HdrType = 'hlg' | 'dolby-vision';
 
 export interface BilibiliPlayUrlResult {
   /** 返回格式：dash 或 mp4。 */
@@ -38,6 +51,14 @@ export interface BilibiliPlayUrlResult {
   currentQn?: number;
   /** 视频可用清晰度列表。 */
   acceptQuality?: { id: number; label: string; resolution?: string }[];
+  /** 当前视频轨是否 HDR（qn=125 或 support_formats 标注为 HDR）。 */
+  isHdr?: boolean;
+  /** HDR 类型；`dolby-vision` 时浏览器基本无法解码，前端不暴露。 */
+  hdrType?: HdrType;
+  /** 当前视频轨编码 id（7=AVC / 12=HEVC / 13=AV1），供前端做解码能力探测。 */
+  videoCodecid?: number;
+  /** 杜比全景声音轨（dash.dolby.audio，可能不存在）。 */
+  dolbyAudio?: DashMediaTrack;
 }
 
 interface RawDashMedia {
@@ -49,6 +70,19 @@ interface RawDashMedia {
   id: number;
   codecs: string;
   bandwidth: number;
+  codecid?: number;
+  width?: number;
+  height?: number;
+  frameRate?: string;
+  frame_rate?: string;
+}
+
+/** playurl 响应里的 support_formats 条目（HDR/8K 的权威展示信息）。 */
+interface RawSupportFormat {
+  quality: number;
+  display_desc?: string;
+  superscript?: string;
+  codecs?: string[];
 }
 
 interface RawAcceptDescription {
@@ -61,11 +95,16 @@ interface RawPlayUrlData {
   dash?: {
     video?: RawDashMedia[];
     audio?: RawDashMedia[];
+    /** 杜比全景声音轨（仅有对应版权/设备时返回）。 */
+    dolby?: { type?: number; audio?: RawDashMedia[] | null };
+    /** Hi-Res 无损音轨。 */
+    flac?: { display?: boolean; audio?: RawDashMedia[] | null };
   };
   /** B站服务端实际返回的清晰度（可能因账号权限降级，与请求的 qn 不同） */
   quality?: number;
   accept_quality?: number[];
   accept_description?: RawAcceptDescription[];
+  support_formats?: RawSupportFormat[];
 }
 
 export interface GetPlayUrlOptions {
@@ -184,7 +223,36 @@ function normalizeDashMedia(track: RawDashMedia): DashMediaTrack {
     bandwidth: track.bandwidth,
     codecs: track.codecs,
     id: track.id,
+    codecid: track.codecid,
+    width: track.width,
+    height: track.height,
+    frameRate: track.frameRate ?? track.frame_rate,
   };
+}
+
+/**
+ * 推断视频轨的 HDR 类型。
+ *
+ * 依据优先级：
+ * 1. codec 串是 Dolby Vision（dvh1/dav1）或 qn=126 → dolby-vision；
+ * 2. qn=125 → HLG（B站 HDR 真彩统一使用 HLG）；
+ * 3. support_formats 中该档位的 display_desc 含 "HDR" → HLG（B站偶尔
+ *    用非 125 档位下发 HDR，属边缘情况）。
+ */
+function detectHdrType(
+  track: DashMediaTrack | undefined,
+  qn: number,
+  supportFormats?: RawSupportFormat[],
+): HdrType | undefined {
+  if (!track) return undefined;
+  const codecs = track.codecs?.trim() ?? '';
+  if (qn === QN_DOLBY_VISION || /^dv[ah]\d/i.test(codecs)) {
+    return 'dolby-vision';
+  }
+  if (qn === QN_HDR) return 'hlg';
+  const desc = supportFormats?.find((f) => f.quality === qn)?.display_desc;
+  if (desc && /hdr/i.test(desc)) return 'hlg';
+  return undefined;
 }
 
 function buildAcceptQuality(
@@ -271,22 +339,32 @@ export function normalizePlayUrlData(
     // 会导致前端显示 720P 而实际播放 480P。
     const effectiveQn =
       matchedQnTracks.length > 0 ? qn : video[0]?.id ?? qn;
+    const bestVideo = video[0];
+    const hdrType = detectHdrType(bestVideo, effectiveQn, data.support_formats);
+    const dolbyAudio = data.dash.dolby?.audio?.length
+      ? normalizeDashMedia(data.dash.dolby.audio[0])
+      : undefined;
     console.log(
-      '[bilibili-playurl] 选定 bestVideo: id=%d bandwidth=%d codecs=%s (实际 qn=%d, 过滤后 %d 条匹配轨道)',
-      video[0]?.id,
-      video[0]?.bandwidth,
-      video[0]?.codecs,
+      '[bilibili-playurl] 选定 bestVideo: id=%d bandwidth=%d codecs=%s (实际 qn=%d, 过滤后 %d 条匹配轨道) hdr=%s',
+      bestVideo?.id,
+      bestVideo?.bandwidth,
+      bestVideo?.codecs,
       effectiveQn,
       matchedQnTracks.length,
+      hdrType ?? 'none',
     );
     return {
       format: 'dash',
       video,
       audio,
-      bestVideo: video[0],
+      bestVideo,
       bestAudio: audio[0],
       currentQn: effectiveQn,
       acceptQuality,
+      isHdr: !!hdrType,
+      hdrType,
+      videoCodecid: bestVideo?.codecid,
+      dolbyAudio,
     };
   }
 
@@ -326,7 +404,7 @@ async function getPlayUrlWbi(
 ): Promise<BilibiliPlayUrlResult | null> {
   const isVip = options?.isVip ?? false;
   const effectiveQn = options?.qn ?? DEFAULT_QN;
-  const effectiveFnval = options?.fnval ?? computeFnval(isVip, effectiveQn);
+  const effectiveFnval = options?.fnval ?? computeFnval(isVip, effectiveQn, { codec: options?.codec });
   const { imgKey, subKey } = await getWbiKeys(cookie);
   const signBase: Record<string, string> = {
     bvid,
@@ -371,7 +449,7 @@ async function getPlayUrlLegacy(
 ): Promise<BilibiliPlayUrlResult | null> {
   const isVip = options?.isVip ?? false;
   const effectiveQn = options?.qn ?? DEFAULT_QN;
-  const effectiveFnval = options?.fnval ?? computeFnval(isVip, effectiveQn);
+  const effectiveFnval = options?.fnval ?? computeFnval(isVip, effectiveQn, { codec: options?.codec });
   const params = new URLSearchParams({
     bvid,
     cid: String(cid),

@@ -37,6 +37,7 @@ import {
   getBilibiliParseOptions,
 } from '@/modules/bilibili/parseOptions'
 import { useCliAgentStore } from '@/store/cliAgentStore'
+import { getHdrSupport, isHdrQn } from '@/modules/player/hdr-capability'
 import { getEmbyApiMovieSource, resolveEmby } from '@/modules/emby/embyApi'
 import { resolveJellyfin } from '@/modules/jellyfin/jellyfinApi'
 import type { EmbyVersionInfo } from '@/modules/emby/types'
@@ -268,6 +269,15 @@ export function MovieListPanel({
     if (movie.cliOnly === true && !getActiveCliProxyUrl()) {
       message.error(
         '该影片已开启「仅允许CLI模式」：请安装并连接 ZViewer CLI 后操作'
+      )
+      return
+    }
+
+    // HDR 档位需要 HEVC Main10 解码能力。本机 MSE 明确不支持时直接拦截，
+    // 避免切过去黑屏（保持当前档位即等价于回退）。
+    if (isHdrQn(qn) && getHdrSupport() === 'none') {
+      message.warning(
+        '本机无法解码 HDR（需要 HEVC 10bit 硬件解码），已保持当前清晰度'
       )
       return
     }
@@ -979,25 +989,39 @@ function BilibiliQualitySelect({
   const canChangeQuality =
     isHost || (parsePrefs.cliEnabled && cliAgentAvailable)
 
+  // HDR 档位在本机无法解码时给出后缀标注（仍可展开查看，选中时拦截并提示）
+  const hdrUnsupported = getHdrSupport() === 'none'
+
   return (
-    <Select
-      className="mt-1.5"
-      size="sm"
-      value={String(
-        selectedQn ?? movie.currentQn ?? movie.acceptQuality[0]?.id
+    <>
+      <Select
+        className="mt-1.5"
+        size="sm"
+        value={String(
+          selectedQn ?? movie.currentQn ?? movie.acceptQuality[0]?.id
+        )}
+        options={movie.acceptQuality.map((q) => {
+          const base = q.resolution ? `${q.label} · ${q.resolution}` : q.label
+          return {
+            label:
+              hdrUnsupported && isHdrQn(q.id) ? `${base}（本机不支持）` : base,
+            value: String(q.id),
+          }
+        })}
+        disabled={
+          !canChangeQuality ||
+          isScreenShare ||
+          qualityLoadingId === movie.id ||
+          effectivePreferMp4
+        }
+        onChange={onChange}
+      />
+      {effectivePreferMp4 && (
+        <Paragraph className="m-0 mt-1 text-[10px] leading-tight opacity-60">
+          MP4 模式最高 720P，切换 DASH 模式可选 4K / HDR
+        </Paragraph>
       )}
-      options={movie.acceptQuality.map((q) => ({
-        label: q.resolution ? `${q.label} · ${q.resolution}` : q.label,
-        value: String(q.id),
-      }))}
-      disabled={
-        !canChangeQuality ||
-        isScreenShare ||
-        qualityLoadingId === movie.id ||
-        effectivePreferMp4
-      }
-      onChange={onChange}
-    />
+    </>
   )
 }
 

@@ -53,6 +53,12 @@ export interface ResolvedSource {
   cid?: number
   currentQn?: number
   acceptQuality?: QualityOption[]
+  /** 当前视频轨是否 HDR（B站 HDR 真彩 / 杜比视界）。 */
+  isHdr?: boolean
+  /** HDR 类型：hlg=HDR 真彩；dolby-vision=杜比视界（浏览器基本无法解码）。 */
+  hdrType?: 'hlg' | 'dolby-vision'
+  /** 当前视频轨编码 id：7=AVC / 12=HEVC / 13=AV1，供解码能力探测。 */
+  videoCodecid?: number
   /** 大会员状态：0=非大会员，1=大会员。用于统一会员感知逻辑。 */
   vipStatus?: number
   /** 多 P 视频的分集列表（单 P 视频为 undefined） */
@@ -105,6 +111,12 @@ export interface ResolveProgressLine {
   cid?: number
   currentQn?: number
   acceptQuality?: QualityOption[]
+  /** 当前视频轨是否 HDR（B站 HDR 真彩 / 杜比视界）。 */
+  isHdr?: boolean
+  /** HDR 类型：hlg=HDR 真彩；dolby-vision=杜比视界（浏览器基本无法解码）。 */
+  hdrType?: 'hlg' | 'dolby-vision'
+  /** 当前视频轨编码 id：7=AVC / 12=HEVC / 13=AV1，供解码能力探测。 */
+  videoCodecid?: number
   /** 大会员状态：0=非大会员，1=大会员。后端在解析时会回传该字段。 */
   vipStatus?: number
   /** 多 P 视频的分集列表（单 P 视频为 undefined） */

@@ -84,6 +84,9 @@ router.get('/resolve', async (req, res) => {
       vipStatus: result.vipStatus,
       currentQn: result.currentQn,
       acceptQuality: result.acceptQuality,
+      isHdr: result.isHdr,
+      hdrType: result.hdrType,
+      videoCodecid: result.videoCodecid,
       pages: result.pages,
       currentPage: result.currentPage,
     })
