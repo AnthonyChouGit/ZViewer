@@ -211,18 +211,18 @@ services:
 | `HTTP_FLV_PORT`          | FLV 拉流端口（内部）                          | `3335`                  |
 | `LIVEKIT_EXTERNAL`       | `1` 时使用外置 LiveKit，跳过内嵌               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE 广播地址；NAT 复杂或无出网环境可手动指定公网 IP       | 空（自动 STUN）             |
-| `LIVEKIT_RTC_TCP_PORT`   | TCP 兜底端口（未配 TURN 时＝ICE/TCP 直连端口）      | `3337`                  |
-| `LIVEKIT_TURN_TLS_PORT`  | TCP 兜底端口（配 TURN 时＝TURN/TLS 中继端口，与上一项同号互斥） | `3337`                  |
+| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 直连端口（语音传输模式 = TCP 时启用）        | `3337`                  |
+| `LIVEKIT_TURN_TLS_PORT`  | TURN/TLS 中继端口（与 3337 分开，可同时开启）       | `3338`                  |
 | `LIVEKIT_TURN_DOMAIN`    | TURN/TLS 域名                           | —                       |
 | `LIVEKIT_TURN_CERT`      | TURN TLS 证书路径                         | —                       |
 | `LIVEKIT_TURN_KEY`       | TURN TLS 私钥路径                         | —                       |
 
 ### 语音传输
 
-- 默认音频走 3333/udp，防火墙需放行；可在管理端切换为 TCP，此时 TCP 兜底通道占用 3337/tcp
-- 3337/tcp 同一时刻只跑一种通道：配齐 `LIVEKIT_TURN_*` 三项时是 TURN/TLS 中继（需正式证书，穿透 NAT/代理能力最强），未配时是 ICE/TCP 直连（零证书即可用）。两者都是 TCP 监听，无法共用端口，后端按配置自动切换
+- 默认音频走 3333/udp，防火墙需放行；可在管理端切换为 TCP，此时额外开启 3337/tcp 直连
+- 配齐 `LIVEKIT_TURN_*` 三项时，还会在 3338/tcp 开启 TURN/TLS 中继（需正式证书，穿透代理/多层 NAT 能力最强）。3337 与 3338 是两条独立通道，可并存，客户端自动择优：UDP 直连 > TCP 直连 > TURN 中继
 - 纯内网 / 特殊 NAT 环境 STUN 探测失败时，用 `LIVEKIT_NODE_IP` 指定服务器公网 IP
-- 需要 TURN/TLS 中继时，配置 `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` 三项即可（compose 已含 `3337:3337` 映射，无需再开 5349）
+- 需要 TURN/TLS 中继时，配置 `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` 三项即可（compose 已含 `3338:3338` 映射，需放行 3338/tcp）
 
 ## Windows 桌面控制台（可选）
 

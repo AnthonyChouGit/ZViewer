@@ -229,7 +229,8 @@ The `start-prod` scripts in the project root automatically detect dependencies, 
 | LiveKit media (voice) | 3333/udp | WebRTC media transport (same port number as the page, different protocol) |
 | RTMP Push | 3334 | OBS push port (standalone; RTMP is a TCP binary protocol, cannot share with HTTP) |
 | HTTP-FLV Pull | 3335 | Internal port (Node Media Server), container-only, not exposed externally |
-| Voice TCP fallback | 3337/tcp | One port, one channel at a time: TURN/TLS relay when `LIVEKIT_TURN_*` is fully configured, otherwise ICE/TCP direct (admin "Voice Transport Mode = TCP") |
+| ICE/TCP direct | 3337/tcp | Direct-connect fallback for blocked UDP (admin "Voice Transport Mode = TCP") |
+| TURN/TLS relay | 3338/tcp | Relay fallback, enabled when `LIVEKIT_TURN_*` is fully configured. Independent from 3337 — both can run at the same time |
 
 In production mode, **only ports 3333 (tcp+udp) and 3334 are exposed externally**. Voice signaling goes through the `/rtc` reverse proxy on 3333 — no extra port needed. The backend handles API requests, frontend static resources, WebSocket, and reverse-proxies `/live` to the internal HTTP-FLV service.
 
@@ -449,20 +450,20 @@ The admin panel "Basic Settings → Voice Transport Mode" switches the voice med
 
 TCP mode adds LiveKit's native ICE/TCP **direct connection**: the server advertises both UDP and TCP candidates, and the browser's ICE picks automatically — UDP direct connection when reachable, automatic fallback over 3337/tcp when UDP is blocked by ISP/corporate firewalls. The UDP channel stays on (LiveKit cannot disable UDP candidates); TCP mode adds a fallback rather than replacing UDP. The port can be overridden with `LIVEKIT_RTC_TCP_PORT`.
 
-TURN/TLS relay and ICE/TCP direct **share the same 3337/tcp port** and cannot run at the same time (both are TCP listeners). With `LIVEKIT_TURN_*` configured the backend gives the port to TURN (a relay: needs a domain + CA-issued certificate, but penetrates stricter networks and NAT) and turns the ICE/TCP listener off; without it the port goes to ICE/TCP direct (no certificate needed). Either way the firewall only needs one TCP port.
+TURN/TLS relay (3338/tcp) and ICE/TCP direct (3337/tcp) use **separate ports and can run at the same time**. With `LIVEKIT_TURN_*` configured, the browser gets three candidates and ICE picks automatically: UDP direct > TCP direct > TURN relay (the relay adds one hop, so it is slightly slower but penetrates the hardest networks — proxy TUN, multi-layer NAT, unreachable server IP). Firewalls must allow both TCP ports if you want both fallbacks.
 
 ### TURN/TLS Fallback Relay
 
 Use case: the server or clients sit behind networks that **block UDP** (corporate firewalls, some campus networks), making STUN direct connections impossible.
 
-How it works: the browser connects to the server's TURN relay over **TCP 3337**, and media is forwarded through the relay. The address is a domain name (resolved via DNS), so no public IP is needed. UDP direct connections are still attempted in parallel — TURN is only a fallback and does not affect low-latency direct connections.
+How it works: the browser connects to the server's TURN relay over **TCP 3338**, and media is forwarded through the relay. The address is a domain name (resolved via DNS), so no public IP is needed. UDP direct connections are still attempted in parallel — TURN is only a fallback and does not affect low-latency direct connections.
 
 The relay is enabled automatically when all three variables are set:
 
 ```yaml
 # Append to docker-compose.linux-single.yml
     ports:
-      - "3337:3337"      # Voice TCP fallback: TURN relay or ICE/TCP direct (one at a time)
+      - "3338:3338"      # TURN/TLS relay (TCP), coexists with 3337 ICE/TCP direct
     environment:
       - LIVEKIT_TURN_DOMAIN=zviewer.example.com
       - LIVEKIT_TURN_CERT=/app/cert/live/zviewer.example.com/fullchain.pem
@@ -474,7 +475,7 @@ The relay is enabled automatically when all three variables are set:
 - The domain must match the certificate and resolve to this server
 - A **CA-issued certificate is required** (Let's Encrypt etc.) — self-signed certificates are not trusted by browser WebRTC
 - Set `LIVEKIT_TURN_EXTERNAL_TLS=true` when TLS is terminated by an external reverse proxy
-- The relay port is 3337 by default and can be changed with `LIVEKIT_TURN_TLS_PORT` (e.g. the upstream default `5349`); it must then be mapped in compose as well
+- The relay port is 3338 by default and can be changed with `LIVEKIT_TURN_TLS_PORT` (e.g. the upstream default `5349`); it must then be mapped in compose and must differ from `LIVEKIT_RTC_TCP_PORT` (same port cannot be bound twice)
 
 ### Manual ICE Address (`LIVEKIT_NODE_IP`)
 
@@ -508,9 +509,9 @@ An explicit value takes the highest priority (STUN auto-discovery is skipped whe
 | `LIVEKIT_EXTERNAL` | `1` skips the bundled LiveKit and uses an external service | `0` |
 | `LIVEKIT_BIND` | Bundled LiveKit listen address | `::` (dual-stack) |
 | `LIVEKIT_NODE_IP` | ICE advertised address; leave empty to enable LiveKit's native STUN external IP discovery (requires outbound internet), set manually for complex NAT | (auto) |
-| `LIVEKIT_RTC_TCP_PORT` | TCP fallback port (ICE/TCP direct listener, opened when admin "Voice Transport Mode = TCP" and no TURN is configured) | `3337` |
-| `LIVEKIT_TURN_TLS_PORT` | TCP fallback port (TURN/TLS relay listener; shares the port number with the item above — the two are mutually exclusive) | `3337` |
-| `LIVEKIT_TURN_DOMAIN` | TURN/TLS domain (enables the TCP 3337 relay when set together with CERT/KEY; domain-based addressing needs no public IP) | — |
+| `LIVEKIT_RTC_TCP_PORT` | ICE/TCP direct port (opened when admin "Voice Transport Mode = TCP") | `3337` |
+| `LIVEKIT_TURN_TLS_PORT` | TURN/TLS relay port (independent from the item above — both can run at the same time) | `3338` |
+| `LIVEKIT_TURN_DOMAIN` | TURN/TLS domain (enables the TCP 3338 relay when set together with CERT/KEY; domain-based addressing needs no public IP) | — |
 | `LIVEKIT_TURN_CERT` | TURN TLS certificate path (CA-issued required; self-signed is not trusted by browser WebRTC) | — |
 | `LIVEKIT_TURN_KEY` | TURN TLS private key path | — |
 

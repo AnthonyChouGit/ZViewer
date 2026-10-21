@@ -226,10 +226,10 @@ export function SettingsTab({
             />
             <p className="mt-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
               切换并保存后语音服务自动重启（进行中的语音短暂中断后重连）。TCP
-              模式开启 3337/TCP 兜底通道：UDP 被运营商或企业防火墙拦截时，客户端
-              自动改走该端口，UDP 可用时仍优先。该端口由 TURN/TLS 中继与 ICE/TCP
-              直连共用（同一时刻只运行一种：配齐 TURN 三项变量即为中继，
-              否则为直连）。需在防火墙放行 3337/tcp。
+              模式开启 3337/TCP 直连：UDP 被运营商或企业防火墙拦截时，客户端
+              自动改走该端口，UDP 可用时仍优先。若另配了 TURN 三项变量，还会在
+              3338/TCP 开启中继兜底，两条通道并存、客户端择优。需在防火墙放行
+              3337/tcp（配 TURN 时再加 3338/tcp）。
             </p>
           </div>
 
