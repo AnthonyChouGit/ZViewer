@@ -4,8 +4,10 @@
 //
 // 用法：
 //   node scripts/build-dist.mjs               准备工具并完整打包
-//   node scripts/build-dist.mjs --skip-cli    跳过 CLI 构建（离线或仅验证壳层）
+//   node scripts/build-dist.mjs --skip-cli    跳过 CLI 构建，直接用本机已有副本
 //   node scripts/build-dist.mjs --skip-tools  跳过 FRP 下载（缓存已就绪时）
+//   node scripts/build-dist.mjs --allow-missing-cli  允许打出不含 CLI 的包（默认报错）
+// CLI 一律落在 runtime/；缺失时可用 ZVIEWER_CLI_EXE 指定已有二进制。
 import { execFileSync } from 'node:child_process';
 import { cpSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -22,6 +24,16 @@ const frpDir = join(tools, 'frp_0.71.1_windows_amd64');
 const cliDir = join(tools, 'zviewer-cli');
 const cliExe = join(cliDir, 'zviewer-cli-windows-amd64.exe');
 const runtimeSource = process.env.ZVIEWER_RUNTIME_ROOT || join(repo, 'dist', 'win');
+// CLI 属于运行包的一部分：壳按 runtime/<名字> 拉起高画质代理。
+// 优先用 prepare-cli 校验过的受管构建；缺失时接受本机已有的同名副本，
+// 但清单里标 verified:false，避免把来源不明的二进制当成受管产物。
+const cliFallbacks = [
+  process.env.ZVIEWER_CLI_EXE,
+  join(runtimeSource, 'zviewer-cli-windows-amd64.exe'),
+  join(runtimeSource, 'frontend', 'dist', 'zviewer-cli-windows-amd64.exe'),
+  join(repo, '..', 'ZViewerCLI', 'zviewer-cli-windows-amd64.exe'),
+  join(repo, '..', 'ZViewerCLI', 'dist', 'zviewer-cli-windows-amd64.exe')
+].filter(Boolean);
 const outRoot = process.env.ZVIEWER_OUT_DIR || join(desktop, 'dist-gui');
 const distribution = join(outRoot, 'zviewer-windows-x64-GUI');
 
@@ -39,8 +51,15 @@ if (!flags.has('--skip-tools')) {
 if (!flags.has('--skip-cli')) {
   execFileSync(process.execPath, [join(desktop, 'scripts', 'prepare-cli.mjs')], { stdio: 'inherit', windowsHide: true });
 }
-const hasCli = existsSync(cliExe);
-if (!hasCli) console.warn('CLI: 未找到已构建的 zviewer-cli，分发包将不含高画质代理');
+const cliSource = [cliExe, ...cliFallbacks].find((file) => existsSync(file));
+if (!cliSource && !flags.has('--allow-missing-cli')) {
+  throw new Error(
+    '缺少 zviewer-cli-windows-amd64.exe：先运行 node scripts/prepare-cli.mjs，' +
+    '或用 ZVIEWER_CLI_EXE 指定已有二进制；确实要打不含 CLI 的包时加 --allow-missing-cli'
+  );
+}
+if (!cliSource) console.warn('CLI: 未找到 zviewer-cli，分发包将不含高画质代理（--allow-missing-cli）');
+else if (cliSource !== cliExe) console.warn(`CLI: 使用未校验的本地副本 ${cliSource}（清单标记 verified:false）`);
 
 if (existsSync(distribution)) throw new Error(`拒绝覆盖已存在的分发包：${distribution}`);
 mkdirSync(distribution, { recursive: true });
@@ -64,13 +83,16 @@ for (const name of ['frpc.exe', 'frps.exe']) {
 }
 copyFileSync(join(desktop, 'assets', 'ZViewer.ProcessHost.exe'), join(distribution, 'assets', 'ZViewer.ProcessHost.exe'));
 
-// 网页里可能带 CLI 下载副本，统一替换成同一次构建的受管 CLI，避免版本分叉。
-if (hasCli) {
-  copyFileSync(cliExe, join(runtime, 'zviewer-cli-windows-amd64.exe'));
+// CLI 固定放进 runtime/：壳只从运行包里找它，缺了就等于没有高画质代理。
+// 网页同时留一份下载副本，两者必须同源，避免版本分叉。
+if (cliSource) {
+  copyFileSync(cliSource, join(runtime, 'zviewer-cli-windows-amd64.exe'));
   const webCli = join(runtime, 'frontend', 'dist', 'zviewer-cli-windows-amd64.exe');
-  if (existsSync(webCli)) copyFileSync(cliExe, webCli);
+  if (existsSync(webCli)) copyFileSync(cliSource, webCli);
+  // 复用本地副本时 cliDir 可能不存在，许可证回落到 CLI 源码仓库。
+  const cliLicense = [join(cliDir, 'LICENSE'), join(repo, '..', 'ZViewerCLI', 'LICENSE')].find((file) => existsSync(file));
+  if (cliLicense) copyFileSync(cliLicense, join(distribution, 'LICENSE-ZViewerCLI.txt'));
   for (const [source, target] of [
-    ['LICENSE', 'LICENSE-ZViewerCLI.txt'],
     ['THIRD-PARTY-NOTICES.txt', 'LICENSE-ZViewerCLI-Third-Party.txt'],
     ['provenance.json', 'ZViewerCLI-PROVENANCE.json']
   ]) {
@@ -91,6 +113,13 @@ writeFileSync(join(runtime, '.env.example'), '# 不含任何真实凭据。桌�
 function sha256(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
+// 受管构建用 prepare-cli 产出的 provenance；本地兜底副本只记来源与哈希。
+function cliMeta(source) {
+  if (!source) return null;
+  const provenance = join(cliDir, 'provenance.json');
+  if (source === cliExe && existsSync(provenance)) return JSON.parse(readFileSync(provenance, 'utf8'));
+  return { source: relative(repo, source), sha256: sha256(source), verified: false };
+}
 function walk(dir) {
   const out = [];
   for (const item of readdirSync(dir, { withFileTypes: true })) {
@@ -107,7 +136,7 @@ const tracked = [
   'runtime/livekit-server.exe',
   'runtime/frpc.exe',
   'runtime/frps.exe',
-  ...(hasCli ? ['runtime/zviewer-cli-windows-amd64.exe'] : [])
+  ...(cliSource ? ['runtime/zviewer-cli-windows-amd64.exe'] : [])
 ];
 const files = tracked.filter(name => existsSync(join(distribution, name))).map(name => ({
   file: name,
@@ -126,7 +155,7 @@ const manifest = {
   signed: false,
   iconEmbedded: true,
   frp: '0.71.1',
-  cli: hasCli ? JSON.parse(readFileSync(join(cliDir, 'provenance.json'), 'utf8')) : null,
+  cli: cliMeta(cliSource),
   fileCount: walk(distribution).length,
   files
 };

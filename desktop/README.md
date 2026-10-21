@@ -65,10 +65,12 @@ npm --prefix desktop run preview   # http://127.0.0.1:17839
 生成可分发目录与 ZIP：
 
 ```powershell
-npm --prefix desktop run shell:dist -- --skip-cli   # 离线或已有 CLI 缓存时
+npm --prefix desktop run shell:dist -- --skip-cli   # 离线或已有 CLI 副本时，直接复用本机那份
 npm --prefix desktop run shell:dist                 # 首次会构建 CLI，耗时较长
 npm --prefix desktop run package                    # 打包成 ZIP 并输出 SHA256
 ```
+
+CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里找它）。缺少时 `shell:dist` 会直接报错，可用 `ZVIEWER_CLI_EXE=<路径>` 指定已有二进制；确实要打不含高画质代理的包时加 `--allow-missing-cli`，清单里 `cli` 记为 `null`。复用未校验副本时，`BUILD-MANIFEST.json` 会写 `verified: false` 与来源路径。
 
 `.github/workflows/build.yml` 的 `build-gui` job 跑的就是这条链路：取 Windows 运行包 → `npm run shell:dist --skip-cli` → `npm run package`，产物作为 `zviewer-gui-windows-x64` artifact 与单文件版一起进 Release。
 
