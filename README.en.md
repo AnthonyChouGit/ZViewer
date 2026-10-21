@@ -171,6 +171,7 @@ docker run -d \
   -p 3333:3333 \
   -p 3333:3333/udp \
   -p 3334:3334 \
+  -p 3337:3337 \
   -v zviewer-data:/app/config \
   zerowyc0721/zviewer:latest
 ```
@@ -186,6 +187,7 @@ services:
       - "3333:3333/udp"  # LiveKit WebRTC media transport
       - "3334:3334"      # RTMP push (OBS)
       - "3337:3337"      # Voice ICE/TCP fallback (on by default)
+      - "3338:3338"      # Voice TURN/TLS relay (optional, enabled with all three cert vars)
     volumes:
       - zviewer-data:/app/config
     restart: unless-stopped
@@ -214,6 +216,7 @@ services:
 | `HTTP_FLV_PORT`          | FLV pull port (internal)                          | `3335`                  |
 | `LIVEKIT_EXTERNAL`       | `1` uses an external LiveKit and skips the bundled one               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE advertised address; set the public IP manually for complex NAT or no outbound internet       | empty (automatic STUN)             |
+| `LIVEKIT_BIND`           | LiveKit HTTP/signaling listen address (affects 3336 only, not media ports) | empty (dual-stack, all addresses) |
 | `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP fallback port (on by default; set `0` to disable)        | `3337`                  |
 | `LIVEKIT_RTC_ADVERTISE_INTERNAL_IP` | Advertise both external and internal IP candidates (`advertise_internal_ip`); `false` disables | `true` |
 | `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION` | Skip the external IP self-ping check (enable when NAT blocks self-ping) | unset |
@@ -237,9 +240,10 @@ With bridge networking only the mapped address is reachable, and LAN clients oft
 ```yaml
 services:
   zviewer:
-    image: zerowy0721/zviewer:latest
+    image: zerowyc0721/zviewer:latest
     network_mode: host          # drop the ports section: 3333, 3333/udp, 3334, 3337, 3338 listen directly on the host
     environment:
+      LIVEKIT_BIND: "127.0.0.1"                          # signaling bound to localhost only (external access goes through the 3333 proxy)
       LIVEKIT_RTC_USE_EXTERNAL_IP: "true"
       LIVEKIT_RTC_ADVERTISE_INTERNAL_IP: "true"
       LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION: "true"   # add when NAT blocks self-ping
@@ -252,7 +256,9 @@ services:
     restart: unless-stopped
 ```
 
-`interfaces.includes` keeps docker0, veth, tailscale and similar interfaces out of the candidate list, so clients are not handed unreachable addresses.
+`interfaces.includes` keeps docker0, veth, tailscale and similar interfaces out of the candidate list, so clients are not handed unreachable addresses. The name must match the host's real interface (`ip -br addr`; cloud hosts commonly use `eth0` / `ens18` / `enp3s0`) — a wrong name makes LiveKit enumerate no ICE candidates at all and voice stops connecting, so drop this block and let LiveKit enumerate automatically if unsure.
+
+Host networking has no port mapping, so `LIVEKIT_BIND: "127.0.0.1"` keeps LiveKit's own HTTP/signaling port (3336) on localhost while external clients come in through the `/rtc` proxy on 3333. It applies to **signaling only**: the media ports (`3333/udp`, `3337/tcp`, `3338/tcp`) still listen on all interfaces, so LAN and WAN direct connections are unaffected.
 - To use the TURN/TLS relay, configure `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` (the compose file already maps `3338:3338`, and 3338/tcp must be allowed through the firewall)
 
 ## Windows Desktop Console (Optional)

@@ -169,6 +169,7 @@ docker run -d \
   -p 3333:3333 \
   -p 3333:3333/udp \
   -p 3334:3334 \
+  -p 3337:3337 \
   -v zviewer-data:/app/config \
   zerowyc0721/zviewer:latest
 ```
@@ -184,6 +185,7 @@ services:
       - "3333:3333/udp"  # LiveKit WebRTC 媒体传输
       - "3334:3334"      # RTMP 推流（OBS）
       - "3337:3337"      # 语音 ICE/TCP 回退（默认开启）
+      - "3338:3338"      # 语音 TURN/TLS 中继（可选，配齐证书三项即启用）
     volumes:
       - zviewer-data:/app/config
     restart: unless-stopped
@@ -212,6 +214,7 @@ services:
 | `HTTP_FLV_PORT`          | FLV 拉流端口（内部）                          | `3335`                  |
 | `LIVEKIT_EXTERNAL`       | `1` 时使用外置 LiveKit，跳过内嵌               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE 广播地址；NAT 复杂或无出网环境可手动指定公网 IP       | 空（自动 STUN）             |
+| `LIVEKIT_BIND`           | LiveKit HTTP/信令监听地址（仅影响 3336，媒体端口不受影响） | 空（双栈全地址）              |
 | `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 回退端口（默认开启；设 `0` 关闭回退）       | `3337`                  |
 | `LIVEKIT_RTC_ADVERTISE_INTERNAL_IP` | 内外网双 IP 候选（`advertise_internal_ip`），`false` 关闭 | `true`         |
 | `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION` | 跳过外部 IP 自 ping 校验（NAT 不允许自 ping 时开启） | 未设置        |
@@ -235,9 +238,10 @@ bridge 网络下只有映射后的地址可达，局域网用户常因路由器�
 ```yaml
 services:
   zviewer:
-    image: zerowy0721/zviewer:latest
+    image: zerowyc0721/zviewer:latest
     network_mode: host          # 去掉原 ports 段：3333、3333/udp、3334、3337、3338 直接监听宿主
     environment:
+      LIVEKIT_BIND: "127.0.0.1"                          # 信令只绑本机（外部统一走 3333 反代）
       LIVEKIT_RTC_USE_EXTERNAL_IP: "true"
       LIVEKIT_RTC_ADVERTISE_INTERNAL_IP: "true"
       LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION: "true"   # NAT 不允许自 ping 时再加
@@ -250,7 +254,9 @@ services:
     restart: unless-stopped
 ```
 
-`interfaces.includes` 用于排除 docker0、veth、tailscale 等接口，避免广播一批必然不可达的候选。
+host 网络没有端口映射，`LIVEKIT_BIND: "127.0.0.1"` 用来把 LiveKit 自身的 HTTP/信令端口（3336）收回本机，外部只经 3333 的 `/rtc` 反代进入。它**只作用于信令**：媒体端口（`3333/udp`、`3337/tcp`、`3338/tcp`）仍监听全部网卡，不影响内外网直连。
+
+`interfaces.includes` 用于排除 docker0、veth、tailscale 等接口，避免广播一批必然不可达的候选。网卡名必须与宿主机实际一致（`ip -br addr` 查看，云主机常见 `eth0` / `ens18` / `enp3s0`）；写错会枚举不到任何 ICE 候选，语音直接连不上——拿不准就先删掉这段，让 LiveKit 自动枚举。
 - 需要 TURN/TLS 中继时，配置 `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` 三项即可（compose 已含 `3338:3338` 映射，需放行 3338/tcp）
 
 ## Windows 桌面控制台（可选）
