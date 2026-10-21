@@ -19,7 +19,6 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth';
 import { writeAuditLog } from '../services/audit';
-import { applyVoiceTransportMode } from '../services/livekit-server.manager';
 import { roomPermissionService } from '../modules/room/room-permission.service';
 
 const router = Router();
@@ -537,7 +536,6 @@ router.get(
           cdnProxyUrl: settings.cdnProxyUrl,
           playsvideoEnabled: settings.playsvideoEnabled,
           roomMultiInstanceLogin: settings.roomMultiInstanceLogin,
-          voiceTransportMode: settings.voiceTransportMode,
           livekitExternalUrl: settings.livekitExternalUrl,
           roomPermissionMatrix: settings.roomPermissionMatrix,
           announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,
@@ -561,7 +559,7 @@ router.put(
   ): Promise<void> => {
     try {
       const {
-        autoDeleteInactiveRooms, autoDeleteAfterHours, roomDefaultMusicVolume, dataSourceConfig, registrationMode, roomCreationMode, betaFeaturesEnabled, dashDisabled, bilibiliDefaultParseMode, bilibiliPgcDefaultMode, cdnAccelerate, cdnProxyUrl, playsvideoEnabled, roomMultiInstanceLogin, voiceTransportMode, livekitExternalUrl, roomPermissionMatrix, announceAutoPopupOnUpdate,
+        autoDeleteInactiveRooms, autoDeleteAfterHours, roomDefaultMusicVolume, dataSourceConfig, registrationMode, roomCreationMode, betaFeaturesEnabled, dashDisabled, bilibiliDefaultParseMode, bilibiliPgcDefaultMode, cdnAccelerate, cdnProxyUrl, playsvideoEnabled, roomMultiInstanceLogin, livekitExternalUrl, roomPermissionMatrix, announceAutoPopupOnUpdate,
       } = req.body;
       if (roomDefaultMusicVolume !== undefined && (
         !Number.isInteger(roomDefaultMusicVolume) ||
@@ -764,16 +762,6 @@ router.put(
         }
         settings.roomMultiInstanceLogin = roomMultiInstanceLogin;
       }
-      if (voiceTransportMode !== undefined) {
-        if (voiceTransportMode !== 'udp' && voiceTransportMode !== 'tcp') {
-          res.status(400).json({
-            success: false,
-            message: 'voiceTransportMode 必须是 udp / tcp 之一',
-          });
-          return;
-        }
-        settings.voiceTransportMode = voiceTransportMode;
-      }
       if (cdnProxyUrl !== undefined) {
         settings.cdnProxyUrl = cdnProxyUrl.trim();
       }
@@ -796,13 +784,6 @@ router.put(
       }
       await settingsRepo.save(settings);
 
-      // 语音传输模式变更即时生效：热重启 livekit 子进程（模式未变化时无操作）
-      try {
-        await applyVoiceTransportMode(settings.voiceTransportMode);
-      } catch (err) {
-        console.error('applyVoiceTransportMode error:', err);
-      }
-
       res.json({
         success: true,
         settings: {
@@ -820,7 +801,6 @@ router.put(
           cdnProxyUrl: settings.cdnProxyUrl,
           playsvideoEnabled: settings.playsvideoEnabled,
           roomMultiInstanceLogin: settings.roomMultiInstanceLogin,
-          voiceTransportMode: settings.voiceTransportMode,
           livekitExternalUrl: settings.livekitExternalUrl,
           roomPermissionMatrix: settings.roomPermissionMatrix,
           announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,

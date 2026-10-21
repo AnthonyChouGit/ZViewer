@@ -207,35 +207,6 @@ export function SettingsTab({
           </div>
 
           <Title level={5} className="mb-4 mt-6">
-            语音 TCP 回退通道
-          </Title>
-          <div className="mb-6 max-w-md">
-            <Select
-              label="LiveKit 语音媒体传输通道"
-              value={settings.voiceTransportMode}
-              options={[
-                { label: 'UDP + TCP 回退（默认，推荐）', value: 'tcp' },
-                { label: '仅 UDP（不开启 3337/TCP 回退）', value: 'udp' },
-              ]}
-              onChange={(value) =>
-                onSettingsChange((prev) => ({
-                  ...prev,
-                  voiceTransportMode: value as 'udp' | 'tcp',
-                }))
-              }
-            />
-            <p className="mt-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
-              切换并保存后语音服务自动重启（进行中的语音短暂中断后重连）。默认
-              同时开启 3333/UDP 与 3337/TCP：UDP 可用时优先走低延迟
-              UDP，被运营商 或企业防火墙拦截时自动回退 3337/TCP 直连。选「仅
-              UDP」则不广播 TCP 候选，UDP 被拦的网络将无法建立媒体。若另配了
-              TURN 三项变量，还会在 3338/TCP
-              开启中继兜底，多条通道并存、客户端择优。防火墙需放行 3337/tcp（配
-              TURN 时再加 3338/tcp）。
-            </p>
-          </div>
-
-          <Title level={5} className="mb-4 mt-6">
             自定义 LiveKit 服务器地址
           </Title>
           <div className="mb-6 max-w-md">

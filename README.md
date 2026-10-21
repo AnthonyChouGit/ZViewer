@@ -226,7 +226,7 @@ services:
 ### 语音传输
 
 - 默认同时开启两条通道：`3333/udp`（低延迟直连）与 `3337/tcp`（ICE/TCP 回退）。UDP 可用时 ICE 优先走 UDP，被运营商/企业防火墙或代理拦截时自动回退 `3337/tcp`，无需手工切换
-- 关闭回退：管理端「语音 TCP 回退通道」选「仅 UDP」，或设 `LIVEKIT_RTC_TCP_PORT=0`。实现上必须显式写 0——若把该变量留空或删除，LiveKit 会回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选
+- 通道不设开关：服务端同时发布 UDP 与 ICE/TCP 候选，浏览器 ICE 自动择优，无需在管理端切换。要彻底关闭 3337 监听（只想开放 UDP 端口）时设 `LIVEKIT_RTC_TCP_PORT=0`，实现上必须显式写 0——若把该变量留空或删除，LiveKit 会回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选
 - 内外网双通：默认开启 `advertise_internal_ip`，同时广播映射后的外网 IP 与本地网卡 IP，内网与外网用户各自选中可达的那条。bridge 网络下本地 IP 是容器 172.x，对局域网客户端不可达；需要内网直连时改用 host 网络（去掉 compose 的 `ports` 段、加 `network_mode: host`），并用 `LIVEKIT_CONFIG` 的 `rtc.interfaces.includes: [eth0]` 限定网卡。NAT 不允许自 ping 时再加 `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION=true`
 - 配齐 `LIVEKIT_TURN_*` 三项时，还会在 3338/tcp 开启 TURN/TLS 中继（需正式证书，穿透代理/多层 NAT 能力最强）。3337 与 3338 是两条独立通道，可并存，客户端自动择优：UDP 直连 > TCP 直连 > TURN 中继
 - 纯内网 / 特殊 NAT 环境 STUN 探测失败时，用 `LIVEKIT_NODE_IP` 指定服务器公网 IP

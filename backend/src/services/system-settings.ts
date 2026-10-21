@@ -23,7 +23,6 @@ const DEFAULT_SETTINGS: Partial<SystemSettings> = {
   embeddedSubtitleEnabled: true,
   playsvideoEnabled: true,
   roomMultiInstanceLogin: false,
-  voiceTransportMode: 'tcp',
   announceAutoPopupOnUpdate: true,
 };
 

@@ -17,11 +17,7 @@ import {
 } from './services/paths';
 import { ensureDatabaseFile } from './services/db-persistence';
 import { ensureUploadsRoot } from './services/server-files/pathResolver';
-import { getSystemSettings } from './services/system-settings';
-import {
-  applyVoiceTransportMode,
-  startEmbeddedLivekit,
-} from './services/livekit-server.manager';
+import { startEmbeddedLivekit } from './services/livekit-server.manager';
 import { seedRootAdmin } from './services/seed.service';
 import { startRoomCleanupScheduler } from './modules/room/room-cleanup.service';
 import { attachLivekitWsTunnel } from './services/livekit-tunnel';
@@ -80,13 +76,7 @@ async function bootstrap() {
   // 语音聊天：自动拉起 livekit-server 伴生进程（含环境变量缺省值注入；
   // 开发模式二进制缺失时自动下载到 backend/dev-bin。fire-and-forget，
   // 下载期间 /api/voice/token 会 503，前端有「语音未就绪」提示兜底）。
-  // 放在 DB 初始化之后：启动参数需先从系统设置读取语音传输模式（udp/tcp）。
-  try {
-    const bootSettings = await getSystemSettings();
-    await applyVoiceTransportMode(bootSettings.voiceTransportMode);
-  } catch {
-    /* 设置读取失败时按默认 udp 模式启动 */
-  }
+  // 通道不设开关：UDP 3333 与 ICE/TCP 3337 一并发布，客户端 ICE 自动择优。
   void startEmbeddedLivekit();
 
   // P3-Opt#13：从 DB 恢复所有活跃房间的运行时状态（movies、currentMovieId、播放记忆）

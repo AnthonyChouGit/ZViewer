@@ -127,15 +127,13 @@ export class SystemSettings {
   roomMultiInstanceLogin!: boolean;
 
   /**
-   * 语音（LiveKit）TCP 兜底通道开关。
-   * - 'tcp'（默认）：UDP 3333 + ICE/TCP 3337 同时开启；UDP 可用时 ICE 仍
-   *   优先走 UDP，被运营商/企业防火墙或代理拦截时自动回退 3337 直连。
-   *   部署侧需放行 3337/tcp（Docker 需含端口映射）。
-   * - 'udp'：只开 UDP 3333，不广告 TCP 候选（UDP 被拦的网络无法建立媒体）。
-   * 注意底层实现必须显式写 rtc.tcp_port=0 来关闭，不能删除环境变量——
-   * 删除会让 LiveKit 回落到默认 7881，而 7881 未做端口映射，客户端只会拿到
-   * 必然连不上的候选。
-   * 切换后 livekit-server 子进程自动重启，进行中的语音会短暂中断重连。
+   * @deprecated 历史字段，运行时已不再读取（保留列只为兼容旧库，避免升级时
+   * 做数据迁移）。原先的「UDP / TCP 切换开关」已移除：LiveKit 无法禁用 UDP
+   * 候选，服务端始终同时发布 UDP 3333 与 ICE/TCP 3337，由客户端 ICE 自动择优
+   * （UDP 直连 > TCP 直连 > TURN 中继），无需人工切换。
+   * 需要彻底关闭 3337 监听（如只想开放 UDP 端口）时，用环境变量
+   * LIVEKIT_RTC_TCP_PORT=0 —— 必须显式写 0，不能删除变量：删除会让 LiveKit
+   * 回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选。
    */
   @Column({ type: 'text', default: 'tcp' })
   voiceTransportMode!: string;

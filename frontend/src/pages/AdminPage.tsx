@@ -61,7 +61,6 @@ export default function AdminPage() {
     roomMultiInstanceLogin: false,
     livekitExternalUrl: '',
     announceAutoPopupOnUpdate: true,
-    voiceTransportMode: 'udp',
   })
   const [loading, setLoading] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
@@ -500,7 +499,6 @@ export default function AdminPage() {
         cdnProxyUrl: settings.cdnProxyUrl,
         roomMultiInstanceLogin: settings.roomMultiInstanceLogin,
         livekitExternalUrl: settings.livekitExternalUrl,
-        voiceTransportMode: settings.voiceTransportMode,
         announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,
       }
       if (settings.dataSourceConfig) {
