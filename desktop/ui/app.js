@@ -48,9 +48,9 @@
   };
   function clock() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
   function addEvent(message, source = 'console', level = 'INFO') { state.events.unshift({ time: clock(), source, level, message }); state.events.length = Math.min(state.events.length, 100); }
-  addEvent('控制台已就绪，未改动后端与网络配置。');
-  addEvent('本机 HTTPS 默认使用 localhost。', 'cert');
-  addEvent('FRP 模板已生成，未连接服务器。', 'frp');
+  addEvent('控制台已就绪。');
+  addEvent('HTTPS 使用 localhost。', 'cert');
+  addEvent('FRP 模板已生成。', 'frp');
   function icons() { document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); }); }
   function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toast.timer); toast.timer = setTimeout(() => $('#toast').classList.remove('visible'), 4000); }
   function heading(title, subtitle, right = '') { return `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div>${right ? `<div class="heading-actions">${right}</div>` : ''}</div>`; }
@@ -187,14 +187,14 @@
   }
   function updateBody(report) {
     const name = report?.state || 'idle';
-    if (!state.live) return '检查更新、下载与安装只在 Windows 桌面版中执行；浏览器预览不会访问 GitHub。';
-    if (name === 'checking') return '正在查询 GitHub 上的最新正式版本。';
-    if (name === 'latest') return '当前已是最新正式版本。';
-    if (name === 'available') return `发现新版本 v${esc(report.latest)}，安装包 ${sizeText(report.size)}。下载完成后才会重启安装。`;
-    if (name === 'downloading') return `正在下载 v${esc(report.latest)}，已完成 ${report.progress}%。下载期间控制台可以继续使用。`;
-    if (name === 'ready') return `v${esc(report.latest)} 已下载并校验完成。点击重启后退出控制台，覆盖运行包并自动重新启动。`;
+    if (!state.live) return '仅桌面版可用。';
+    if (name === 'checking') return '正在检查…';
+    if (name === 'latest') return '已是最新版本。';
+    if (name === 'available') return `发现新版本 v${esc(report.latest)}（${sizeText(report.size)}）。`;
+    if (name === 'downloading') return `正在下载 v${esc(report.latest)} · ${report.progress}%`;
+    if (name === 'ready') return `v${esc(report.latest)} 已下载完成，重启后安装。`;
     if (name === 'error') return esc(report?.error || '检查失败。');
-    return '尚未检查更新。';
+    return '尚未检查。';
   }
   function updateActions(report) {
     const name = state.live ? report?.state || 'idle' : 'preview';
@@ -214,19 +214,14 @@
     const auto = state.live ? Boolean(state.config?.autoCheckUpdate ?? report?.autoCheck) : true;
     const proxy = state.live ? Boolean(state.config?.updateProxy ?? report?.proxy) : true;
     const proxyURL = state.config?.updateProxyUrl || report?.proxyUrl || 'https://gh-proxy.com';
-    const proxyNote = !state.live
-      ? '桌面版中检查更新时会先经该前缀转发；浏览器预览不联网。'
-      : report?.proxy
-        ? `本次检查已由 ${esc(report.proxyUrl || proxyURL)} 转发。`
-        : '当前为直连；GitHub 附件下载较慢时再开启。';
-    return `<div class="update-head"><div><h2>软件更新</h2><p>发布来源 github.com/Zero-wyc/ZViewer${report?.notes ? ` · ${esc(report.notes)}` : ''}</p></div><span class="pill ${tone}"><i></i>${updateLabels[name] || '未检查'}</span></div>
+    return `<div class="update-head"><div><h2>软件更新</h2><p>github.com/Zero-wyc/ZViewer${report?.notes ? ` · ${esc(report.notes)}` : ''}</p></div><span class="pill ${tone}"><i></i>${updateLabels[name] || '未检查'}</span></div>
       <div class="update-grid"><div><span>当前版本</span><strong>v${esc(current)}</strong></div><div><span>最新版本</span><strong>${latest}</strong></div></div>
       <p class="update-state">${updateBody(report)}</p>${progress}
       <div class="modal-actions">${updateActions(report)}</div>
-      <div class="switch-row update-auto"><div><strong>自动检查更新</strong><p>启动后检查一次，此后每 6 小时检查；只检查，不自动下载。</p></div><button class="switch" role="switch" aria-label="自动检查更新" aria-checked="${auto}" data-action="update-auto" ${state.live ? '' : 'disabled'}></button></div>
-      <div class="switch-row update-proxy"><div><strong>使用前置反代</strong><p>检查和下载都先交给前缀式反代，默认 gh-proxy，可换成其它服务商。${proxyNote}</p></div><button class="switch" role="switch" aria-label="使用前置反代" aria-checked="${proxy}" data-action="update-proxy" ${state.live ? '' : 'disabled'}></button></div>
+      <div class="switch-row update-auto"><div><strong>自动检查更新</strong><p>启动后检查一次，此后每 6 小时一次。</p></div><button class="switch" role="switch" aria-label="自动检查更新" aria-checked="${auto}" data-action="update-auto" ${state.live ? '' : 'disabled'}></button></div>
+      <div class="switch-row update-proxy"><div><strong>使用前置反代</strong><p>通过反代访问 GitHub，默认 gh-proxy，可换成其它服务商。</p></div><button class="switch" role="switch" aria-label="使用前置反代" aria-checked="${proxy}" data-action="update-proxy" ${state.live ? '' : 'disabled'}></button></div>
       <div class="update-proxy-field"><input class="search-input" id="update-proxy-url" aria-label="反代前缀地址" value="${esc(proxyURL)}" placeholder="https://gh-proxy.com" spellcheck="false" ${state.live && proxy ? '' : 'disabled'}></div>
-      <p class="update-note">${icon('info')}<span>${meta}。安装包来自 GitHub Release，下载完成后校验 SHA256 与压缩包结构，通过后才允许安装。</span></p>`;
+      <p class="update-note">${icon('info')}<span>${meta}</span></p>`;
   }
   function openUpdate() {
     state.updateOpen = true; state.updateKey = '';
@@ -245,7 +240,7 @@
     }
   }
   async function updateCommand(name, payload) {
-    if (!window.zviewerDesktop?.command) { toast('更新在 Windows 桌面版中可用'); return null; }
+    if (!window.zviewerDesktop?.command) { toast('仅桌面版可用'); return null; }
     try { return await window.zviewerDesktop.command(name, payload || {}); }
     catch (error) { toast(String(error?.message || error).replace(/^.*Error: /, '')); return null; }
   }
@@ -262,7 +257,7 @@
     const url = input.value.trim();
     if (!url) { toast('反代地址不能为空'); input.value = fallback; return; }
     if (url === state.config?.updateProxyUrl) return;
-    toast('正在按该反代重新检查更新…');
+    toast('正在重新检查…');
     const next = await updateCommand('update-proxy', { enabled: true, url });
     if (!next) { input.value = fallback; return; }
     state.config = { ...state.config, updateProxy: true, updateProxyUrl: url };
@@ -275,15 +270,15 @@
     if (notify) window.zviewerDesktop?.demoState(state.running).catch(() => toast('托盘状态同步失败，请重新打开窗口。'));
     addEvent(state.running ? '演示状态已开启，未运行实际后端。' : '演示状态已停止。', 'backend');
     render();
-    toast(state.running ? '演示状态：未启动后端' : '演示已停止');
+    toast(state.running ? '已开启演示' : '演示已停止');
   }
   function activity() { return state.events.slice(0, 3).map(e => `<div class="activity"><span class="activity-dot"></span><div><strong>${esc(e.source === 'frp' ? '穿透配置' : e.source === 'cert' ? '本机 HTTPS' : e.source === 'backend' ? '演示状态' : e.source === 'tunnel' ? 'Cloudflare 隧道' : e.source === 'update' ? '软件更新' : '控制台')}</strong><p>${esc(e.message)}</p></div><time>${esc(e.time)}</time></div>`).join(''); }
   function overview() {
     const service = (name, subtitle, ico, color, status, left, right) => `<article class="service-card"><div class="service-top"><span class="icon-box ${color}">${icon(ico)}</span><span class="pill ${status.includes('演示') ? 'green' : ''}"><i></i>${status}</span></div><div><h3>${name}</h3><p>${subtitle}</p></div><div class="service-meta"><span>${left}</span><code>${right}</code></div></article>`;
-    return heading('服务总览', '本机服务、证书与穿透的运行状态。') +
-      `<section class="hero"><div class="hero-copy"><h2>${state.running ? '演示运行中' : '服务未启动'}</h2><p>${state.running ? '界面演示，未连接真实后端。' : '启动本机服务后，可访问网页端与管理页面。'}</p><div class="hero-actions">${button(state.running ? '停止演示' : '启动演示', 'toggle-run', state.running ? 'stop' : 'play', 'primary')}<button class="text-button" data-action="open-manager">打开管理页面 ${icon('external')}</button></div></div></section>` +
+    return heading('服务总览', '本机服务的运行状态。') +
+      `<section class="hero"><div class="hero-copy"><h2>${state.running ? '演示运行中' : '服务未启动'}</h2><p>${state.running ? '界面演示，未连接真实后端。' : '启动后可访问网页端与管理页面。'}</p><div class="hero-actions">${button(state.running ? '停止演示' : '启动演示', 'toggle-run', state.running ? 'stop' : 'play', 'primary')}<button class="text-button" data-action="open-manager">打开管理页面 ${icon('external')}</button></div></div></section>` +
       `<div class="section-title"><h2>服务状态</h2><small>演示数据</small></div><div class="service-grid">${service('ZViewer 主服务', '网页与 API', 'server', 'orange', state.running ? '演示运行' : '未启动', '默认监听端口', ':3333 / TCP')}${service('语音与推流', '语音与 RTMP 推流', 'mic', 'green', state.running ? '演示待就绪' : '未启动', '默认语音 / 推流', ':3333 / :3334')}${service('FRP 穿透', '经 VPS 转发', 'network', '', '待配置', '穿透客户端', 'frpc → frps')}</div>` +
-      `<div class="bottom-grid"><section><div class="section-title"><h2>常用操作</h2><small>快捷入口</small></div><div class="setup-list"><button class="setup-row" data-nav="cert"><span class="step">${icon('lock')}</span><div><strong>签发本机 HTTPS 证书</strong><p>为 localhost 签发证书并启用 HTTPS</p></div>${icon('arrow')}</button><button class="setup-row" data-nav="frp"><span class="step">${icon('network')}</span><div><strong>配置 FRP 服务器</strong><p>填写 VPS 地址与端口映射</p></div>${icon('arrow')}</button><button class="setup-row" data-nav="settings"><span class="step">${icon('tray')}</span><div><strong>关闭到托盘</strong><p>关闭窗口后在通知区域保留图标</p></div>${icon('arrow')}</button></div></section><section><div class="section-title"><h2>最近活动</h2><button class="text-button" data-nav="logs">全部日志 ${icon('arrow')}</button></div><div class="activity-list">${activity()}</div></section></div><div class="footnote">${icon('info')}服务、连接与证书操作均为演示。</div>`;
+      `<div class="bottom-grid"><section><div class="section-title"><h2>常用操作</h2><small>快捷入口</small></div><div class="setup-list"><button class="setup-row" data-nav="cert"><span class="step">${icon('lock')}</span><div><strong>签发本机 HTTPS 证书</strong><p>localhost</p></div>${icon('arrow')}</button><button class="setup-row" data-nav="frp"><span class="step">${icon('network')}</span><div><strong>配置 FRP 服务器</strong><p>填写 VPS 地址与端口映射</p></div>${icon('arrow')}</button><button class="setup-row" data-nav="settings"><span class="step">${icon('tray')}</span><div><strong>关闭到托盘</strong><p>在通知区域保留图标</p></div>${icon('arrow')}</button></div></section><section><div class="section-title"><h2>最近活动</h2><button class="text-button" data-nav="logs">全部日志 ${icon('arrow')}</button></div><div class="activity-list">${activity()}</div></section></div><div class="footnote">${icon('info')}服务、连接与证书操作均为演示。</div>`;
   }
   function validPort(value) { return /^\d+$/.test(String(value)) && Number(value) >= 1 && Number(value) <= 65535; }
   function validHost(value) {
@@ -311,15 +306,15 @@
   function frp() {
     const c = state.frp;
     function row(title, field, type, local, remote, checked, fixed = false) { return `<div class="mapping"><label><input class="checkbox" type="checkbox" data-frp-check="${field}" ${checked ? 'checked' : ''} ${fixed ? 'disabled' : ''}>${title}</label><span class="proto">${type}</span><code>${local}</code><span class="muted">→</span><input aria-label="${title}远端端口" type="number" min="1" max="65535" data-frp-field="${remote}" value="${esc(c[remote])}"></div>`; }
-    return heading('FRP 穿透', '通过服务商节点或自有 VPS 转发本机服务。', `${tutorial('frp')}<span class="pill orange"><i></i>未连接</span>`) +
-      `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证 Token <small>不保存、不导出明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">导出模板从 FRP_TOKEN 环境变量读取凭据。输入内容不会保存。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音需放行对应 UDP 端口；选用 TCP 语音时，管理端语音模式需同步设为 TCP。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('查看文档', 'docs', 'book')}${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据采用环境变量占位，未写入明文</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div><div class="help-card"><strong>部署步骤</strong><p>两台机器使用同一 FRP_TOKEN；部署 frps 并放行端口，再用 frpc verify 校验配置。传输 TLS 与网页 HTTPS 独立配置。</p></div></section></div>`;
+    return heading('FRP 穿透', '把本机端口转发到公网服务器。', `${tutorial('frp')}<span class="pill orange"><i></i>未连接</span>`) +
+      `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证 Token <small>不保存明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">模板从环境变量 FRP_TOKEN 读取，页面不保存输入。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音要单独放行；改用 TCP 语音时管理端也要切换。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
   }
   function certPreview() {
-    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问，无需配置 DNS 或 hosts。<br>本地自签，尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>现有 zviewer-cert.exe · localhost</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>首次使用需要单独安装信任</span></div></div><div class="check-item">${icon('check')}<div><strong>localhost 仅用于本机</strong><br>打开管理页面不需要路由器或公网域名。</div></div><div class="check-item">${icon('lock')}<div><strong>私钥仅保存在本机</strong><br>只导出公开证书，根 CA 私钥不可分享。</div></div>`;
+    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>现有 zviewer-cert.exe · localhost</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>未安装</span></div></div><div class="check-item">${icon('check')}<div><strong>仅本机可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
   }
   function cert() {
-    const content = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">仅本机</span></div><p class="wizard-copy">为 localhost 签发自签证书，启用 HTTPS 后打开管理页面。局域网与公网设备访问需另行准备证书。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong><br>已有有效证书时直接复用。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong><br>安装信任后，浏览器不再提示证书错误。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong><br>由默认浏览器打开。</div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
-    return heading('证书与域名', '签发 localhost 自签证书，并安装当前用户信任。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
+    const content = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">仅本机</span></div><p class="wizard-copy">为 localhost 签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong></div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong></div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong></div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
+    return heading('证书与域名', '签发 localhost 证书并安装信任。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
   function cli() {
     const live = Boolean(state.live), saved = state.config?.cli || { port: 9333, autoStart: false, user: '' };
@@ -329,22 +324,22 @@
     const backend = state.server?.active || state.config || { https: false, port: 3333 };
     const backendUrl = state.server?.webUrl || `${backend.https ? 'https' : 'http'}://localhost:${backend.port || 3333}/`;
     const status = live ? labels[s.state] || '未启动' : '界面预览';
-    return heading('高画质代理', '内置 ZViewerCLI，为本机哔哩哔哩高画质播放提供代理。', tutorial('cli')) +
+    return heading('高画质代理', '内置 ZViewerCLI，为哔哩哔哩高画质播放提供代理。', tutorial('cli')) +
       `<div class="cli-layout"><section class="panel cli-settings"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('watch')}</span><div><h2>ZViewerCLI</h2><p class="cli-caption">哔哩哔哩高画质代理</p></div></div><span class="pill ${s.state === 'running' && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
-        <p class="cli-copy">在右侧完成代理配置、扫码登录与服务器连接，后端地址自动填入。网页账号可选，用于识别代理归属。</p>
+        <p class="cli-copy">右侧扫码登录并连接服务器。</p>
         <div class="cli-address"><span>${icon('monitor')}仅本机访问</span><code>http://127.0.0.1:${esc(activePort)}</code></div>
-        ${live ? `<p class="cli-binding-status">${icon(s.connected ? 'check' : 'info')}${s.connected ? '已关联服务器' : s.state === 'running' ? '未关联；请在代理设置页完成' : '启动后在代理设置页关联服务器'}</p>` : ''}
+        ${live ? `<p class="cli-binding-status">${icon(s.connected ? 'check' : 'info')}${s.connected ? '已关联服务器' : s.state === 'running' ? '未关联服务器' : '启动后关联服务器'}</p>` : ''}
         <div class="cli-actions">${button(running ? '停止代理' : '启动代理', running ? 'cli-stop' : 'cli-start', running ? 'stop' : 'play', 'primary')}</div>
-        <div class="panel-line"></div><div class="settings-subheading"><h3>代理配置</h3><span>端口与自动启动在下次启动时生效</span></div>
-        <label class="field"><span>后端地址 · 自动跟随本地服务</span><input id="cli-backend-url" type="text" value="${esc(backendUrl)}" readonly autocomplete="off" spellcheck="false"><small>运行中使用当前服务地址；尚未启动时使用已保存的协议和端口。</small></label>
-        <label class="field"><span>ZViewer 网页账号（可选）</span><input id="cli-user" type="text" maxlength="120" value="${esc(c.user || '')}" placeholder="可选，与网页端登录账号一致" autocomplete="off"><small>保存后会自动传给右侧设置，用于识别代理归属；留空也可配置。</small></label>
-        <label class="field cli-port-field"><span>代理监听端口</span><input id="cli-port" type="number" min="1" max="65535" value="${esc(c.port)}"><small>默认 9333，需与其他 TCP 服务使用不同端口。</small></label>
-        <div class="switch-row cli-auto-row"><div><strong id="cli-auto-title">随 ZViewer 服务启动</strong><p id="cli-auto-help">启动主服务时一同启动代理；退出控制台时自动停止。</p></div><button type="button" id="cli-auto-start" class="switch" role="switch" aria-labelledby="cli-auto-title" aria-describedby="cli-auto-help" aria-checked="${Boolean(c.autoStart)}"></button></div>
+        <div class="panel-line"></div><div class="settings-subheading"><h3>代理配置</h3><span>下次启动生效</span></div>
+        <label class="field"><span>后端地址 · 自动跟随本地服务</span><input id="cli-backend-url" type="text" value="${esc(backendUrl)}" readonly autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>ZViewer 网页账号（可选）</span><input id="cli-user" type="text" maxlength="120" value="${esc(c.user || '')}" placeholder="可选，与网页端登录账号一致" autocomplete="off"></label>
+        <label class="field cli-port-field"><span>代理监听端口</span><input id="cli-port" type="number" min="1" max="65535" value="${esc(c.port)}"></label>
+        <div class="switch-row cli-auto-row"><div><strong id="cli-auto-title">随 ZViewer 服务启动</strong></div><button type="button" id="cli-auto-start" class="switch" role="switch" aria-labelledby="cli-auto-title" aria-checked="${Boolean(c.autoStart)}"></button></div>
         <div class="form-actions">${button('保存代理配置', 'cli-save', 'check', 'primary')}</div>
-        <p class="cli-config-note">登录由内置 ZViewerCLI 处理，控制台不读取 Cookie。</p>
-      </section><section class="panel cli-embed-panel"><div class="cli-embed-heading"><div><h2>内置代理设置</h2><p>扫码登录后，点击连接服务器</p></div><span class="pill">${icon('lock')}本机</span></div>
-        ${live && state.cliEmbedUrl ? `<iframe id="cli-settings-frame" src="${esc(state.cliEmbedUrl)}" title="ZViewerCLI 设置" sandbox="allow-scripts allow-forms allow-same-origin" referrerpolicy="no-referrer"></iframe>` : `<div class="cli-embed-placeholder"><span class="cli-placeholder-icon">${icon('settings')}</span><h3>${live ? '在控制台内完成配置' : '内置设置预览'}</h3><p>${!live ? '在桌面版中配置代理与扫码登录；预览不连接本机代理。' : !s.available ? '未检测到内置 CLI，请使用包含 ZViewerCLI 的完整运行包。' : s.state === 'running' ? '正在载入内置设置，后端地址会自动填写。' : '点击左侧“启动代理”后，设置显示在此处并自动填入后端地址。'}</p></div>`}
-        <div class="cli-embed-hint">启动代理 → 扫码登录 → 连接服务器，然后回到网页端使用高画质代理。</div>
+        <p class="cli-config-note">Cookie 由内置 ZViewerCLI 管理。</p>
+      </section><section class="panel cli-embed-panel"><div class="cli-embed-heading"><div><h2>内置代理设置</h2></div><span class="pill">${icon('lock')}本机</span></div>
+        ${live && state.cliEmbedUrl ? `<iframe id="cli-settings-frame" src="${esc(state.cliEmbedUrl)}" title="ZViewerCLI 设置" sandbox="allow-scripts allow-forms allow-same-origin" referrerpolicy="no-referrer"></iframe>` : `<div class="cli-embed-placeholder"><span class="cli-placeholder-icon">${icon('settings')}</span><h3>${live ? '在控制台内完成配置' : '内置设置预览'}</h3><p>${!live ? '仅桌面版可用。' : !s.available ? '未检测到内置 CLI，请使用包含 ZViewerCLI 的完整运行包。' : s.state === 'running' ? '正在载入设置…' : '启动代理后在此处配置。'}</p></div>`}
+        <div class="cli-embed-hint">启动代理 → 扫码登录 → 连接服务器</div>
       </section></div>`;
   }
   const connectLinks = {
@@ -382,10 +377,10 @@
     // IPv6：地址只来自外部接口，没有则明确显示“没有”；对外给出带端口的完整 URL，可直接粘贴到浏览器。
     const v6Url = v6?.ok ? `${config.https ? 'https' : 'http'}://[${v6.address}]:${port}/` : '';
     const v6Body = (!v6
-      ? `<p class="connect-value is-empty">未检测</p><p class="connect-note">打开本页时经外部接口检测本机公网 IPv6，不读取本机网卡。</p>`
+      ? `<p class="connect-value is-empty">未检测</p><p class="connect-note">正在通过外部接口检测。</p>`
       : v6.ok
-        ? `<p class="connect-value"><code>${esc(v6Url)}</code></p><p class="connect-note">${esc(v6.source)} · ${esc(v6.checkedAt)} 检测。地址可在公网路由，直接粘贴到浏览器即可访问；路由器与 Windows 防火墙仍需放行 ${esc(port)} 端口。</p>`
-        : `<p class="connect-value is-empty">没有</p><p class="connect-note">${esc(v6.reason || '没有探测到公网 IPv6。')}可改用下面的中转方式。</p>`) +
+        ? `<p class="connect-value"><code>${esc(v6Url)}</code></p><p class="connect-note">${esc(v6.source)} · ${esc(v6.checkedAt)}。需在路由器与防火墙放行 ${esc(port)} 端口。</p>`
+        : `<p class="connect-value is-empty">没有</p><p class="connect-note">${esc(v6.reason || '没有探测到公网 IPv6。')}</p>`) +
       `<p class="connect-hint">如果你有 IPv4 公网地址，那么应该不需要我教你其他的了。</p>`;
     const v6Actions = `${button(v6 ? '重新检测' : '检测 IPv6', 'probe-ipv6', 'refresh')}${v6?.ok ? `<button class="btn" data-copy="${esc(v6Url)}">${icon('copy')}复制地址</button>` : ''}`;
 
@@ -400,19 +395,19 @@
     const tunnelBusy = Boolean(tunnel) && ['connecting', 'running'].includes(tunnel.state);
     let tunnelBody;
     if (!tunnel) {
-      tunnelBody = `<p class="connect-value is-empty">桌面版中可用</p><p class="connect-note">cloudflared 由本机向外建立隧道，不需要公网 IP 与端口映射；临时地址随隧道关闭失效，固定域名需一张外国银行卡。</p>`;
+      tunnelBody = `<p class="connect-value is-empty">桌面版中可用</p><p class="connect-note">不需要公网 IP；地址随隧道关闭失效。固定域名需外国银行卡。</p>`;
     } else if (!tunnel.available) {
-      tunnelBody = `<p class="connect-value is-empty">未找到 cloudflared</p><p class="connect-note">下载 cloudflared.exe 放到运行包目录（或加入 PATH）后重新打开本页。</p>`;
+      tunnelBody = `<p class="connect-value is-empty">未找到 cloudflared</p><p class="connect-note">把 cloudflared.exe 放进运行包目录后重开本页。</p>`;
     } else if (tunnel.url) {
-      tunnelBody = `<p class="connect-value"><code>${esc(tunnel.url)}</code></p><p class="connect-note">本机 127.0.0.1:${esc(port)} 经 Cloudflare 中转到该地址，仅本次会话有效。</p>`;
+      tunnelBody = `<p class="connect-value"><code>${esc(tunnel.url)}</code></p><p class="connect-note">经 Cloudflare 中转，仅本次会话有效。</p>`;
     } else {
-      tunnelBody = `<p class="connect-value is-empty">${tunnelLabels[tunnel.state] || '未运行'}</p><p class="connect-note">${tunnel.state === 'error' ? '隧道已退出，请查看运行日志。' : '启动后由 Cloudflare 分配临时地址，稍候片刻。'}</p>`;
+      tunnelBody = `<p class="connect-value is-empty">${tunnelLabels[tunnel.state] || '未运行'}</p><p class="connect-note">${tunnel.state === 'error' ? '隧道已退出。' : '启动后自动分配地址。'}</p>`;
     }
     const tunnelActions = !tunnel || !tunnel.available
       ? `<a class="btn" href="https://github.com/cloudflare/cloudflared/releases/latest" data-external="https://github.com/cloudflare/cloudflared/releases/latest">${icon('download')}下载 cloudflared</a>`
       : `${button(tunnelBusy ? '停止隧道' : '启动隧道', tunnelBusy ? 'tunnel-stop' : 'tunnel-start', tunnelBusy ? 'stop' : 'cloud', 'primary')}${tunnel.url ? `<button class="btn" data-copy="${esc(tunnel.url)}">${icon('copy')}复制地址</button>` : ''}`;
 
-    return heading('连接方式', '从外网访问本机服务的五种方式，按需选择一种。', tutorial('connect')) +
+    return heading('连接方式', '外网访问本机服务的五种方式。', tutorial('connect')) +
       `<div class="connect-grid">${
         connectCard({
           name: 'globe', color: 'orange', title: 'IPv6 直连', copy: '运营商下发公网 IPv6 时，外网设备直接访问该地址。',
@@ -423,20 +418,20 @@
         connectCard({
           name: 'network', title: '服务商 FRP', copy: '用服务商提供的公网节点做内网穿透，注册即用。',
           status: live ? frpStatus : '需注册', tone: frpState === 'registered' ? 'green' : '',
-          body: `<p class="connect-note">注册服务商后，把它给出的服务器地址、端口与 Token 填进本机 FRP，客户端仍是同一个 frpc。访问地址、端口与带宽由服务商决定，免费节点通常限速；本机同一时间只连接一台服务器，换地址即切换。</p>${linkList(connectLinks.frpProvider)}`
+          body: `<p class="connect-note">注册后把服务商给的地址、端口与 Token 填进本机 FRP。带宽与域名由服务商决定，免费节点通常限速。</p>${linkList(connectLinks.frpProvider)}`
         })
       }${
         connectCard({
           name: 'server', title: '自建 FRP', copy: '在自己的 VPS 上运行 frps，端口与带宽完全自管。',
           status: live ? frpStatus : '需 VPS', tone: frpState === 'registered' ? 'green' : '',
-          body: `<p class="connect-note">自己的 VPS 运行 frps，本机 frpc 连自己的服务器。端口、域名与带宽全自管，需在 VPS 安全组与系统防火墙放行映射端口；控制台可生成两端配置。</p>${linkList(connectLinks.frpSelf)}`,
+          body: `<p class="connect-note">自己的 VPS 运行 frps，端口与带宽自管，需自行放行映射端口。</p>${linkList(connectLinks.frpSelf)}`,
           actions: `<button class="btn primary" data-frp-open="client">${icon('arrow')}配置本机 FRP</button>`
         })
       }${
         connectCard({
           name: 'link', title: '虚拟局域网', copy: '让外网设备与本机加入同一虚拟网络，再用虚拟 IP 访问。',
           status: '需客户端',
-          body: `<p class="connect-note">每台设备都要安装同一款虚拟局域网软件并加入同一网络，用分配的虚拟 IP 访问本机。本机服务需监听局域网或双栈地址。</p>${linkList(connectLinks.lan)}`,
+          body: `<p class="connect-note">每台设备装同一款软件、加入同一网络，用虚拟 IP 访问本机。</p>${linkList(connectLinks.lan)}`,
           actions: `<button class="btn" data-nav="settings">${icon('settings')}调整监听范围</button>`
         })
       }${
@@ -446,17 +441,17 @@
           body: tunnelBody + linkList(connectLinks.tunnel), actions: tunnelActions
         })
       }</div>` +
-      `<div class="footnote">${icon('info')}没有公网 IPv4 时，服务商 FRP、自建 FRP、虚拟局域网与 Cloudflare Tunnel 都能中转；同一时间建议只保留一条入口。</div>`;
+      `<div class="footnote">${icon('info')}没有公网 IPv4 时，后四种方式都能中转；同时只用一条入口。</div>`;
   }
   function filteredEvents() { return state.events.filter(e => (state.logLevel === 'all' || e.level === state.logLevel) && (state.logSource === 'all' || e.source === state.logSource) && `${e.message} ${e.source}`.toLowerCase().includes(state.logSearch.toLowerCase())); }
   function logLines() { return filteredEvents().map(e => `<div class="log-line"><span class="log-time">${esc(e.time)}</span><span class="log-level ${e.level}">${esc(e.level)}</span><span class="log-source">${esc(e.source)}</span><span class="log-message">${esc(e.message)}</span></div>`).join('') || '<div class="empty">没有匹配的日志</div>'; }
   function logs() {
-    return heading('运行日志', '查看控制台操作记录；后端日志在服务接入后显示。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'tunnel', 'cli', 'update'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条 · ${state.paused ? '已暂停显示' : '操作记录'}</span><span class="log-caption">${icon('info')}仅演示事件，未读取服务日志</span></div></section><div class="help-card"><strong>日志保存方式</strong><p>按来源分流，达到 2 MB 后滚动保存；导出前屏蔽 Token、JWT 与私钥。</p></div>`;
+    return heading('运行日志', '控制台与各服务的运行记录。', button('导出日志', 'export-logs', 'download')) + `<section class="panel"><div class="log-toolbar"><input class="search-input" id="log-search" aria-label="搜索日志" placeholder="搜索日志内容…" value="${esc(state.logSearch)}"><select id="log-source" aria-label="服务筛选"><option value="all">全部服务</option>${['console', 'backend', 'voice', 'cert', 'frp', 'tunnel', 'cli', 'update'].map(s => `<option ${s === state.logSource ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="log-level" aria-label="日志级别"><option value="all">全部级别</option><option ${state.logLevel === 'INFO' ? 'selected' : ''}>INFO</option><option ${state.logLevel === 'WARN' ? 'selected' : ''}>WARN</option></select>${button(state.paused ? '继续显示' : '暂停显示', 'pause-logs', state.paused ? 'play' : 'pause')}</div><div class="log-view" id="log-lines">${logLines()}</div><div class="code-footer"><span id="log-count">${filteredEvents().length} 条${state.paused ? ' · 已暂停' : ''}</span><span class="log-caption">${icon('info')}演示数据</span></div></section>`;
   }
   function settings() {
     const info = state.info?.runtime;
-    function toggle(key, title, text) { return `<div class="switch-row"><div><strong>${title}</strong><p>${text}</p></div><button class="switch" role="switch" aria-label="${title}" aria-checked="${state.prefs[key]}" data-pref="${key}"></button></div>`; }
-    return heading('应用设置', '调整窗口、托盘与启动行为。') + `<div class="settings-grid"><section><div class="panel"><div class="panel-heading"><h2>窗口与系统托盘</h2><span class="pill ${state.native ? 'green' : ''}">${state.native ? '原生托盘已启用' : '浏览器预览'}</span></div>${toggle('closeToTray', '关闭窗口时最小化到托盘', '从通知区域恢复窗口。')}${toggle('remember', '记住界面偏好', '在本机保存界面偏好，不保存认证 Token。')}<div class="switch-row"><div><strong>登录 Windows 后启动</strong><p>尚未接入，未修改系统自启。</p></div><span class="pill">后续接入</span></div><div class="switch-row"><div><strong>启动时自动运行服务</strong><p>与登录启动相互独立。</p></div><span class="pill">后续接入</span></div></div><div class="panel section-title"><div><h2>托盘交互</h2><p class="settings-description">${state.native ? '关闭按钮按上方偏好处理。' : '桌面窗口使用系统托盘；浏览器中可预览菜单。'}</p></div>${button('预览菜单', 'tray-preview', 'tray')}</div><div class="help-card"><strong>系统托盘与系统服务</strong><p>桌面程序可隐藏窗口并常驻通知区域，无需安装系统服务。</p></div></section><aside class="panel"><div class="about-mark"><img src="app-icon.png" alt="ZViewer 标志"><div><h2>ZViewer</h2><p>WINDOWS DESKTOP</p></div></div><div class="version">0.1.0 <small>LOCAL BUILD</small></div><p class="settings-description">Windows 桌面控制台<br>网页端与命令行运行包独立部署。</p><div class="panel-line"></div><div class="subheading">本地运行包</div>${[['backend', 'zviewer-backend.exe'], ['cert', 'zviewer-cert.exe'], ['livekit', 'livekit-server.exe'], ['web', 'frontend/dist']].map(([key, label]) => `<div class="file-check"><code>${label}</code><span>${info ? (info[key] ? '已检测到' : '未找到') : '桌面版中检测'}</span></div>`).join('')}<p class="certificate-note">文件存在表示运行包可用，不代表进程已启动。</p></aside></div>`;
+    function toggle(key, title, text) { return `<div class="switch-row"><div><strong>${title}</strong>${text ? `<p>${text}</p>` : ''}</div><button class="switch" role="switch" aria-label="${title}" aria-checked="${state.prefs[key]}" data-pref="${key}"></button></div>`; }
+    return heading('应用设置', '窗口、托盘与启动行为。') + `<div class="settings-grid"><section><div class="panel"><div class="panel-heading"><h2>窗口与系统托盘</h2><span class="pill ${state.native ? 'green' : ''}">${state.native ? '原生托盘已启用' : '浏览器预览'}</span></div>${toggle('closeToTray', '关闭窗口时最小化到托盘', '')}${toggle('remember', '持久化保存设置', '')}<div class="switch-row"><div><strong>登录 Windows 后启动</strong></div><span class="pill">后续接入</span></div><div class="switch-row"><div><strong>启动时自动运行服务</strong></div><span class="pill">后续接入</span></div></div><div class="panel section-title"><div><h2>托盘交互</h2></div>${button('预览菜单', 'tray-preview', 'tray')}</div></section><aside class="panel"><div class="about-mark"><img src="app-icon.png" alt="ZViewer 标志"><div><h2>ZViewer</h2><p>WINDOWS DESKTOP</p></div></div><div class="version">0.1.0 <small>LOCAL BUILD</small></div><p class="settings-description">Windows 桌面控制台</p><div class="panel-line"></div><div class="subheading">本地运行包</div>${[['backend', 'zviewer-backend.exe'], ['cert', 'zviewer-cert.exe'], ['livekit', 'livekit-server.exe'], ['web', 'frontend/dist']].map(([key, label]) => `<div class="file-check"><code>${label}</code><span>${info ? (info[key] ? '已检测到' : '未找到') : '桌面版中检测'}</span></div>`).join('')}</aside></div>`;
   }
   function navigate(page) { if (!titles[page]) page = 'overview'; state.page = page; if (location.hash !== `#${page}`) location.hash = page; else render(); }
   // 左上角状态卡：绿点=主服务运行中，红点=未启动；按钮与服务总览共用 toggle-run。
@@ -511,12 +506,12 @@
   }
   async function action(name) {
     if (name === 'toggle-run') setRunning(!state.running);
-    else if (name.startsWith('cli-')) toast('请在 Windows 桌面版中启动和配置 ZViewerCLI');
+    else if (name.startsWith('cli-')) toast('仅桌面版可用');
     else if (name === 'open-manager') modal(`<h2>打开本机管理页面</h2><div class="dns-example">https://localhost:3333</div><p>服务尚未接入。正式版本会先确认服务与证书就绪，再打开默认浏览器。</p><div class="modal-actions">${button('查看本机 HTTPS', 'go-cert', 'shield')}${button('知道了', 'close-modal', '', 'primary')}</div>`);
     else if (name === 'go-cert') { $('#modal').close(); navigate('cert'); }
     else if (name === 'local-cert') localCertDemo();
-    else if (name === 'probe-ipv6') toast('公网 IPv6 检测在 Windows 桌面版中执行');
-    else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('Cloudflare Tunnel 在 Windows 桌面版中启动');
+    else if (name === 'probe-ipv6') toast('仅桌面版可用');
+    else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('仅桌面版可用');
     else if (name === 'close-modal') $('#modal').close();
     else if (name === 'open-update') openUpdate();
     else if (name === 'update-check') await updateCommand('update-check');
@@ -524,17 +519,17 @@
     else if (name === 'update-apply') { const ok = await updateCommand('update-apply'); if (ok) toast('正在退出并安装更新'); }
     else if (name === 'update-page') await updateCommand('update-page');
     else if (name === 'update-auto') {
-      if (!state.live) { toast('自动检查在 Windows 桌面版中生效'); return; }
+      if (!state.live) { toast('仅桌面版可用'); return; }
       await updateCommand('save', { config: { autoCheckUpdate: !updateReport()?.autoCheck } });
       state.updateKey = '';
       $('#modal-content').innerHTML = updateModal();
     }
     else if (name === 'update-proxy') {
-      if (!state.live) { toast('前置反代在 Windows 桌面版中生效'); return; }
+      if (!state.live) { toast('仅桌面版可用'); return; }
       const report = updateReport();
       const enabled = !Boolean(state.config?.updateProxy ?? report?.proxy);
       const url = $('#update-proxy-url')?.value.trim() || state.config?.updateProxyUrl || 'https://gh-proxy.com';
-      toast(enabled ? '正在按该反代重新检查更新…' : '已关闭前置反代，正在重新检查…');
+      toast('正在重新检查…');
       const next = await updateCommand('update-proxy', { enabled, url });
       if (!next) return;
       state.config = { ...state.config, updateProxy: enabled, updateProxyUrl: url };
@@ -550,13 +545,13 @@
       const server = state.frpTab === 'server';
       download(server ? 'frps.toml' : 'frpc.toml', frpConfig(server));
       addEvent(`已导出 ${server ? 'frps' : 'frpc'}.toml 模板，未包含输入 Token。`, 'frp');
-      toast('已导出当前配置模板；请在运行机器配置 FRP_TOKEN');
+      toast('已导出，请配置 FRP_TOKEN');
     } else if (name === 'copy-frp') {
-      try { await navigator.clipboard.writeText(frpConfig(state.frpTab === 'server')); toast('已复制配置模板，未包含输入的 Token'); }
+      try { await navigator.clipboard.writeText(frpConfig(state.frpTab === 'server')); toast('已复制'); }
       catch { toast('剪贴板不可用，可使用“导出配置模板”'); }
     } else if (name === 'export-logs') {
       download('zviewer-preview-events.log', '# ZViewer GUI prototype events only\n' + filteredEvents().map(e => `${e.time} ${e.level} [${e.source}] ${e.message}`).join('\n'));
-      toast('已导出当前筛选的日志');
+      toast('已导出日志');
     } else if (name === 'pause-logs') { state.paused = !state.paused; render(); }
     else if (name === 'tray-preview') {
       if (window.zviewerDesktop) { await window.zviewerDesktop.window('tray-menu'); return; }
@@ -602,7 +597,7 @@
       return;
     }
     const windowButton = event.target.closest('[data-window]');
-    if (windowButton) { if (window.zviewerDesktop) window.zviewerDesktop.window(windowButton.dataset.window); else toast('窗口控制仅在 Windows 桌面版可用'); return; }
+    if (windowButton) { if (window.zviewerDesktop) window.zviewerDesktop.window(windowButton.dataset.window); else toast('仅桌面版可用'); return; }
     const frpOpen = event.target.closest('[data-frp-open]');
     if (frpOpen) { state.frpTab = frpOpen.dataset.frpOpen === 'server' ? 'server' : 'client'; navigate('frp'); return; }
     const nav = event.target.closest('[data-nav]'); if (nav) { navigate(nav.dataset.nav); return; }
@@ -612,7 +607,7 @@
     if (pref) {
       state.prefs[pref.dataset.pref] = !state.prefs[pref.dataset.pref];
       try { if (state.prefs.remember) localStorage.setItem('zviewer-ui-prefs', JSON.stringify(state.prefs)); else localStorage.removeItem('zviewer-ui-prefs'); }
-      catch { toast('本地存储不可用，偏好仅在本次窗口有效'); }
+      catch { toast('本地存储不可用，设置不会保存'); }
       window.zviewerDesktop?.closeBehavior(state.prefs.closeToTray);
       render();
     }
