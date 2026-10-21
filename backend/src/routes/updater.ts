@@ -10,6 +10,10 @@ import {
   applyUpdateFromFile,
   type UpdateStageEvent,
 } from '../services/updater';
+import {
+  DESKTOP_UPDATE_HINT,
+  isDesktopManaged,
+} from '../services/desktop-runtime';
 
 const router = Router();
 
@@ -26,6 +30,26 @@ function rootOnly(
 }
 
 router.use(authenticateToken, rootOnly);
+
+/**
+ * 桌面 GUI 托管时禁用网页端全部更新入口。
+ *
+ * GUI 分发包自带整包更新链路（含校验与回滚），网页端更新只会替换 runtime/
+ * 内的后端产物，导致后端与 GUI 壳版本不一致。这里统一返回 409，
+ * 前端据此展示「请去 GUI 的更新功能中更新」。
+ */
+router.use((req, res, next) => {
+  if (!isDesktopManaged()) {
+    next();
+    return;
+  }
+  console.warn(`[updater] blocked ${req.method} ${req.originalUrl}: desktop managed`);
+  res.status(409).json({
+    success: false,
+    desktopManaged: true,
+    message: DESKTOP_UPDATE_HINT,
+  });
+});
 
 /**
  * 向 SSE 客户端推送一个事件。

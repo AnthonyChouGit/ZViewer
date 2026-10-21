@@ -45,6 +45,11 @@ export interface SystemSettings {
   announceAutoPopupOnUpdate: boolean
   /** 后端本地版本号（public-settings 下发，用于公告「版本更新自动弹出」判定） */
   appVersion: string
+  /**
+   * 是否由 ZViewer Desktop 桌面端托管（后端 ZVIEWER_DESKTOP=1 时下发）。
+   * 为 true 时管理端「版本更新」整体禁用——整包版本由 GUI 自己的更新链路维护。
+   */
+  desktopManaged: boolean
   dataSourceConfig?: Record<string, unknown> | null
 }
 
@@ -82,6 +87,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   livekitExternalUrl: '',
   announceAutoPopupOnUpdate: true,
   appVersion: '',
+  desktopManaged: false,
   dataSourceConfig: null,
 }
 

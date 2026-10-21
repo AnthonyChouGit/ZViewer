@@ -27,6 +27,7 @@ import {
 import { AVATARS_DIR } from '../services/paths';
 import { writeAuditLog } from '../services/audit';
 import { getLocalVersion } from '../services/updater';
+import { isDesktopManaged } from '../services/desktop-runtime';
 
 const router = Router();
 const userRepository = () => AppDataSource.getRepository(User);
@@ -348,6 +349,8 @@ router.get(
           announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,
           roomDefaultMusicVolume: settings.roomDefaultMusicVolume,
           appVersion: getLocalVersion(),
+          // 桌面 GUI 托管：网页管理端据此禁用「版本更新」，引导去 GUI 更新
+          desktopManaged: isDesktopManaged(),
         },
       });
     } catch (err) {

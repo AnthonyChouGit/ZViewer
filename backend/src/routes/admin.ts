@@ -7,6 +7,7 @@ import { Room } from '../entities/Room';
 import { Session } from '../entities/Session';
 import { SystemSettings } from '../entities/SystemSettings';
 import { getSystemSettings } from '../services/system-settings';
+import { isDesktopManaged } from '../services/desktop-runtime';
 import { deleteRoomAndRelations } from '../modules/room';
 import { clearAnimeProvidersCache } from '../services/anime';
 import { clearCache as clearKazumiCache } from '../services/kazumi';
@@ -540,6 +541,8 @@ router.get(
           livekitExternalUrl: settings.livekitExternalUrl,
           roomPermissionMatrix: settings.roomPermissionMatrix,
           announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,
+          // 桌面 GUI 托管标识（运行时环境，非数据库设置）：前端禁用网页端更新入口
+          desktopManaged: isDesktopManaged(),
         },
       });
     } catch (err) {
@@ -821,6 +824,8 @@ router.put(
           livekitExternalUrl: settings.livekitExternalUrl,
           roomPermissionMatrix: settings.roomPermissionMatrix,
           announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,
+          // 桌面 GUI 托管标识（运行时环境，非数据库设置）：前端禁用网页端更新入口
+          desktopManaged: isDesktopManaged(),
         },
       });
     } catch (err) {

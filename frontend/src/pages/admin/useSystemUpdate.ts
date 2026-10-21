@@ -2,11 +2,21 @@ import { useRef, useState, type ChangeEvent, type Dispatch } from 'react'
 import type { SetStateAction } from 'react'
 import { message } from '@/components/ui/message'
 import { apiFetch, getApiUrl } from '@/lib/api'
+import { useSystemSettingsStore } from '@/store/systemSettingsStore'
 import type {
   UpdateInfo,
   UpdateProgress,
   UpdateStageEventPayload,
 } from './shared'
+
+/** 桌面 GUI 托管时的统一提示（与后端 DESKTOP_UPDATE_HINT 同文案） */
+const DESKTOP_UPDATE_HINT =
+  '当前由 ZViewer Desktop 桌面端管理，请去 GUI 的更新功能中更新'
+
+/** 当前是否由桌面端托管（读取时机取调用瞬间，避免闭包拿到旧值） */
+function isDesktopManaged(): boolean {
+  return useSystemSettingsStore.getState().desktopManaged
+}
 
 interface UseSystemUpdateOptions {
   /** 请求鉴权头（与 AdminPage 其余管理端请求保持一致） */
@@ -110,6 +120,9 @@ export function useSystemUpdate({ authHeaders }: UseSystemUpdateOptions) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const checkUpdate = async () => {
+    // 桌面端托管时更新入口整体禁用（后端也返回 409）：静默跳过自动检测，
+    // 避免进入设置页就弹「检查更新失败」
+    if (isDesktopManaged()) return
     setUpdateLoading(true)
     try {
       const res = await apiFetch(
@@ -122,6 +135,13 @@ export function useSystemUpdate({ authHeaders }: UseSystemUpdateOptions) {
         success: boolean
         info?: UpdateInfo
         message?: string
+        /** 后端 409：运行在桌面 GUI 托管环境 */
+        desktopManaged?: boolean
+      }
+      if (data.desktopManaged === true) {
+        // 公开设置未及时拉到时的兜底：以后端返回为准，静默收起更新入口
+        useSystemSettingsStore.setState({ desktopManaged: true })
+        return
       }
       if (data.success && data.info) {
         setUpdateInfo(data.info)
@@ -144,6 +164,10 @@ export function useSystemUpdate({ authHeaders }: UseSystemUpdateOptions) {
   }
 
   const handleApplyUpdate = async () => {
+    if (isDesktopManaged()) {
+      message.info(DESKTOP_UPDATE_HINT)
+      return
+    }
     setApplyLoading(true)
     setUpdateProgress({
       stage: 'downloading',
@@ -211,6 +235,11 @@ export function useSystemUpdate({ authHeaders }: UseSystemUpdateOptions) {
   }
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (isDesktopManaged()) {
+      message.info(DESKTOP_UPDATE_HINT)
+      event.target.value = ''
+      return
+    }
     const file = event.target.files?.[0]
     if (!file) return
 

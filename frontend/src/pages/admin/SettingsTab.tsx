@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { Download, Upload } from 'lucide-react'
+import { Download, MonitorCog, Upload } from 'lucide-react'
 import { AniSubsGithubBrowser } from '@/modules/admin/components/AniSubsGithubBrowser'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/Switch'
 import { Title, Text } from '@/components/ui/Typography'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
+import { useSystemSettingsStore } from '@/store/systemSettingsStore'
 import type { AdminSettings } from './shared'
 import {
   CMS_SOURCE_PRESETS,
@@ -74,6 +75,8 @@ export function SettingsTab({
     handleApplyUpdate,
     handleFileUpload,
   } = update
+  // 桌面 GUI 托管：整包版本由 GUI 维护，网页端不提供检查/更新入口
+  const desktopManaged = useSystemSettingsStore((s) => s.desktopManaged)
   return (
     <div className="glass-card p-4">
       {settingsLoading ? (
@@ -597,281 +600,314 @@ export function SettingsTab({
             版本更新
           </Title>
           <div className="glass-card mb-6 p-4">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-[var(--md-sys-color-outline-variant)]">
-              <div className="flex-1 min-w-0 pr-3">
-                <Text className="text-sm font-medium">
-                  接收最新构建版本更新
-                </Text>
-                <Text type="secondary" className="block text-xs mt-0.5">
-                  开启后始终更新到最新一次构建（含预发布版），关闭则仅在正式版之间更新
-                </Text>
-              </div>
-              <Switch
-                checked={includePrerelease}
-                onChange={(e) => {
-                  setIncludePrerelease(e.target.checked)
-                  localStorage.setItem(
-                    'update-include-prerelease',
-                    String(e.target.checked)
-                  )
-                }}
-              />
-            </div>
-            {/* CDN 加速配置 */}
-            <div className="pb-3 mb-3 border-b border-[var(--md-sys-color-outline-variant)]">
-              <div className="flex items-center justify-between pb-3">
-                <div className="flex-1 min-w-0 pr-3">
-                  <Text className="text-sm font-medium">更新 CDN 加速</Text>
-                  <Text type="secondary" className="block text-xs mt-0.5">
-                    开启后，更新检测和 Release 下载将走 CDN 代理加速
-                  </Text>
+            {desktopManaged ? (
+              /* 桌面 GUI 托管：整包版本由 GUI 更新链路维护，网页端更新入口整体禁用 */
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--md-sys-shape-corner)]"
+                  style={{
+                    backgroundColor:
+                      'color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent)',
+                  }}
+                >
+                  <MonitorCog
+                    className="h-4 w-4"
+                    style={{ color: 'var(--md-sys-color-primary)' }}
+                  />
                 </div>
-                <Switch
-                  checked={settings.cdnAccelerate}
-                  onChange={(e) =>
-                    onSettingsChange((prev) => ({
-                      ...prev,
-                      cdnAccelerate: e.target.checked,
-                    }))
-                  }
-                />
-              </div>
-              {settings.cdnAccelerate && (
-                <div className="space-y-3">
-                  <div>
-                    <Text className="mb-1.5 block text-[10px] uppercase tracking-wide text-[var(--md-sys-color-on-surface-variant)]">
-                      CDN 代理地址
-                    </Text>
-                    <Input
-                      value={settings.cdnProxyUrl}
-                      onChange={(e) =>
-                        onSettingsChange((prev) => ({
-                          ...prev,
-                          cdnProxyUrl: e.target.value.trim(),
-                        }))
-                      }
-                      placeholder="https://gh-proxy.com"
-                    />
-                    <Text type="secondary" className="block text-xs mt-1.5">
-                      使用 GitHub 代理前缀方式加速，默认
-                      https://gh-proxy.com，可替换为自建代理。
-                    </Text>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* 更新进度条：下载/上传/解压/启动各阶段实时显示 */}
-            {updateProgress && (
-              <div className="mb-3 rounded-[var(--md-sys-radius-small)] bg-[var(--md-sys-color-surface-container-high)] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Text className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
-                    {updateProgress.stage === 'downloading' &&
-                      (updateProgress.message || '正在下载更新包…')}
-                    {updateProgress.stage === 'extracting' && '正在解压更新包…'}
-                    {updateProgress.stage === 'starting' && '正在启动更新脚本…'}
-                    {updateProgress.stage === 'done' &&
-                      (updateProgress.message || '更新已触发')}
-                    {updateProgress.stage === 'error' &&
-                      (updateProgress.message || '更新失败')}
+                <div className="min-w-0">
+                  <Text className="text-sm font-medium">
+                    版本更新由桌面端管理
                   </Text>
-                  {updateProgress.stage === 'downloading' &&
-                    updateProgress.total > 0 && (
-                      <Text className="shrink-0 text-[10px] font-mono text-[var(--md-sys-color-on-surface-variant)]">
-                        {formatBytes(updateProgress.received)} /{' '}
-                        {formatBytes(updateProgress.total)}
-                      </Text>
-                    )}
-                </div>
-                {/* 进度条 */}
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--md-sys-color-surface-container-lowest)]">
-                  {updateProgress.stage === 'downloading' ? (
-                    updateProgress.total > 0 ? (
-                      <div
-                        className="h-full rounded-full bg-[var(--md-sys-color-primary)] transition-all duration-150"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            (updateProgress.received / updateProgress.total) *
-                              100
-                          )}%`,
-                        }}
-                      />
-                    ) : (
-                      // 总大小未知时显示不确定进度动画
-                      <div className="zen-indeterminate-bar h-full w-1/3 rounded-full bg-[var(--md-sys-color-primary)]" />
-                    )
-                  ) : (
-                    <div
-                      className={cn(
-                        'h-full rounded-full transition-all duration-300',
-                        updateProgress.stage === 'done' &&
-                          'w-full bg-[var(--md-sys-color-primary)]',
-                        updateProgress.stage === 'error' &&
-                          'w-full bg-[var(--md-sys-color-error)]',
-                        (updateProgress.stage === 'extracting' ||
-                          updateProgress.stage === 'starting') &&
-                          'w-1/2 bg-[var(--md-sys-color-primary)] zen-indeterminate-bar'
-                      )}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-            {updateLoading ? (
-              <div className="py-4">
-                <Spinner tip="检查更新中..." size={24} />
-              </div>
-            ) : updateInfo ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Text className="text-sm">
-                    当前版本：
-                    <span className="font-mono text-[var(--md-sys-color-on-surface-variant)]">
-                      {updateInfo.currentVersion}
-                    </span>
+                  <Text type="secondary" className="mt-0.5 block text-xs">
+                    请去 ZViewer Desktop 的更新功能中更新。
                   </Text>
-                  <Text className="text-sm">
-                    远程版本：
-                    <span className="font-mono text-[var(--md-sys-color-on-surface-variant)]">
-                      {updateInfo.remoteVersion}
-                    </span>
-                  </Text>
-                </div>
-                {updateInfo.isPrerelease && (
-                  <div className="inline-flex rounded-full bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5">
-                    <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--md-sys-color-on-tertiary-container)]">
-                      预发布版本
-                    </span>
-                  </div>
-                )}
-                {updateInfo.publishedAt && (
-                  <Text type="secondary" className="text-xs">
-                    发布时间：
-                    {new Date(updateInfo.publishedAt).toLocaleString('zh-CN')}
-                  </Text>
-                )}
-                {updateInfo.assetSize > 0 && (
-                  <Text type="secondary" className="text-xs">
-                    构建产物：{updateInfo.assetName} (
-                    {(updateInfo.assetSize / (1024 * 1024)).toFixed(1)}
-                    MB)
-                  </Text>
-                )}
-                {updateInfo.releaseNotes && (
-                  <div className="max-h-32 overflow-y-auto rounded-[var(--md-sys-radius-small)] bg-[var(--md-sys-color-surface-container-high)] p-2">
-                    <Text className="whitespace-pre-wrap text-xs leading-relaxed">
-                      {updateInfo.releaseNotes
-                        .split('\n')
-                        .slice(0, 10)
-                        .join('\n')}
-                    </Text>
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    icon={<Download className="h-4 w-4" />}
-                    onClick={handleApplyUpdate}
-                    loading={applyLoading}
-                    disabled={applyLoading || !updateInfo.hasUpdate}
-                  >
-                    {updateInfo.hasUpdate ? '一键更新' : '已是最新'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={checkUpdate}
-                    disabled={updateLoading}
-                  >
-                    重新检测
-                  </Button>
-                  {updateInfo.releaseUrl && (
-                    <a
-                      href={updateInfo.releaseUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-[var(--md-sys-color-primary)] hover:underline"
-                    >
-                      查看发布
-                    </a>
-                  )}
-                </div>
-                {/* 分割线 */}
-                <div className="my-2 border-t border-[var(--md-sys-color-outline-variant)]" />
-                {/* 手动导入压缩包 */}
-                <div className="space-y-2">
-                  <Text className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
-                    手动导入更新包
-                  </Text>
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".zip,.tar.gz"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={<Upload className="h-4 w-4" />}
-                      onClick={() => fileInputRef.current?.click()}
-                      loading={uploadLoading}
-                      disabled={uploadLoading}
-                    >
-                      选择压缩包
-                    </Button>
-                    <Text type="secondary" className="text-xs">
-                      支持 .zip / .tar.gz 格式
-                    </Text>
-                  </div>
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between py-2">
-                  <Text type="secondary" className="text-sm">
-                    未获取版本信息
-                  </Text>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={checkUpdate}
-                    disabled={updateLoading}
-                  >
-                    检查更新
-                  </Button>
-                </div>
-                <div className="my-2 border-t border-[var(--md-sys-color-outline-variant)]" />
-                <div className="space-y-2">
-                  <Text className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
-                    手动导入更新包
-                  </Text>
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".zip,.tar.gz"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={<Upload className="h-4 w-4" />}
-                      onClick={() => fileInputRef.current?.click()}
-                      loading={uploadLoading}
-                      disabled={uploadLoading}
-                    >
-                      选择压缩包
-                    </Button>
-                    <Text type="secondary" className="text-xs">
-                      支持 .zip / .tar.gz 格式
+              <>
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-[var(--md-sys-color-outline-variant)]">
+                  <div className="flex-1 min-w-0 pr-3">
+                    <Text className="text-sm font-medium">
+                      接收最新构建版本更新
+                    </Text>
+                    <Text type="secondary" className="block text-xs mt-0.5">
+                      开启后始终更新到最新一次构建（含预发布版），关闭则仅在正式版之间更新
                     </Text>
                   </div>
+                  <Switch
+                    checked={includePrerelease}
+                    onChange={(e) => {
+                      setIncludePrerelease(e.target.checked)
+                      localStorage.setItem(
+                        'update-include-prerelease',
+                        String(e.target.checked)
+                      )
+                    }}
+                  />
                 </div>
-              </div>
+                {/* CDN 加速配置 */}
+                <div className="pb-3 mb-3 border-b border-[var(--md-sys-color-outline-variant)]">
+                  <div className="flex items-center justify-between pb-3">
+                    <div className="flex-1 min-w-0 pr-3">
+                      <Text className="text-sm font-medium">更新 CDN 加速</Text>
+                      <Text type="secondary" className="block text-xs mt-0.5">
+                        开启后，更新检测和 Release 下载将走 CDN 代理加速
+                      </Text>
+                    </div>
+                    <Switch
+                      checked={settings.cdnAccelerate}
+                      onChange={(e) =>
+                        onSettingsChange((prev) => ({
+                          ...prev,
+                          cdnAccelerate: e.target.checked,
+                        }))
+                      }
+                    />
+                  </div>
+                  {settings.cdnAccelerate && (
+                    <div className="space-y-3">
+                      <div>
+                        <Text className="mb-1.5 block text-[10px] uppercase tracking-wide text-[var(--md-sys-color-on-surface-variant)]">
+                          CDN 代理地址
+                        </Text>
+                        <Input
+                          value={settings.cdnProxyUrl}
+                          onChange={(e) =>
+                            onSettingsChange((prev) => ({
+                              ...prev,
+                              cdnProxyUrl: e.target.value.trim(),
+                            }))
+                          }
+                          placeholder="https://gh-proxy.com"
+                        />
+                        <Text type="secondary" className="block text-xs mt-1.5">
+                          使用 GitHub 代理前缀方式加速，默认
+                          https://gh-proxy.com，可替换为自建代理。
+                        </Text>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* 更新进度条：下载/上传/解压/启动各阶段实时显示 */}
+                {updateProgress && (
+                  <div className="mb-3 rounded-[var(--md-sys-radius-small)] bg-[var(--md-sys-color-surface-container-high)] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Text className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
+                        {updateProgress.stage === 'downloading' &&
+                          (updateProgress.message || '正在下载更新包…')}
+                        {updateProgress.stage === 'extracting' &&
+                          '正在解压更新包…'}
+                        {updateProgress.stage === 'starting' &&
+                          '正在启动更新脚本…'}
+                        {updateProgress.stage === 'done' &&
+                          (updateProgress.message || '更新已触发')}
+                        {updateProgress.stage === 'error' &&
+                          (updateProgress.message || '更新失败')}
+                      </Text>
+                      {updateProgress.stage === 'downloading' &&
+                        updateProgress.total > 0 && (
+                          <Text className="shrink-0 text-[10px] font-mono text-[var(--md-sys-color-on-surface-variant)]">
+                            {formatBytes(updateProgress.received)} /{' '}
+                            {formatBytes(updateProgress.total)}
+                          </Text>
+                        )}
+                    </div>
+                    {/* 进度条 */}
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--md-sys-color-surface-container-lowest)]">
+                      {updateProgress.stage === 'downloading' ? (
+                        updateProgress.total > 0 ? (
+                          <div
+                            className="h-full rounded-full bg-[var(--md-sys-color-primary)] transition-all duration-150"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                (updateProgress.received /
+                                  updateProgress.total) *
+                                  100
+                              )}%`,
+                            }}
+                          />
+                        ) : (
+                          // 总大小未知时显示不确定进度动画
+                          <div className="zen-indeterminate-bar h-full w-1/3 rounded-full bg-[var(--md-sys-color-primary)]" />
+                        )
+                      ) : (
+                        <div
+                          className={cn(
+                            'h-full rounded-full transition-all duration-300',
+                            updateProgress.stage === 'done' &&
+                              'w-full bg-[var(--md-sys-color-primary)]',
+                            updateProgress.stage === 'error' &&
+                              'w-full bg-[var(--md-sys-color-error)]',
+                            (updateProgress.stage === 'extracting' ||
+                              updateProgress.stage === 'starting') &&
+                              'w-1/2 bg-[var(--md-sys-color-primary)] zen-indeterminate-bar'
+                          )}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+                {updateLoading ? (
+                  <div className="py-4">
+                    <Spinner tip="检查更新中..." size={24} />
+                  </div>
+                ) : updateInfo ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Text className="text-sm">
+                        当前版本：
+                        <span className="font-mono text-[var(--md-sys-color-on-surface-variant)]">
+                          {updateInfo.currentVersion}
+                        </span>
+                      </Text>
+                      <Text className="text-sm">
+                        远程版本：
+                        <span className="font-mono text-[var(--md-sys-color-on-surface-variant)]">
+                          {updateInfo.remoteVersion}
+                        </span>
+                      </Text>
+                    </div>
+                    {updateInfo.isPrerelease && (
+                      <div className="inline-flex rounded-full bg-[var(--md-sys-color-tertiary-container)] px-2 py-0.5">
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--md-sys-color-on-tertiary-container)]">
+                          预发布版本
+                        </span>
+                      </div>
+                    )}
+                    {updateInfo.publishedAt && (
+                      <Text type="secondary" className="text-xs">
+                        发布时间：
+                        {new Date(updateInfo.publishedAt).toLocaleString(
+                          'zh-CN'
+                        )}
+                      </Text>
+                    )}
+                    {updateInfo.assetSize > 0 && (
+                      <Text type="secondary" className="text-xs">
+                        构建产物：{updateInfo.assetName} (
+                        {(updateInfo.assetSize / (1024 * 1024)).toFixed(1)}
+                        MB)
+                      </Text>
+                    )}
+                    {updateInfo.releaseNotes && (
+                      <div className="max-h-32 overflow-y-auto rounded-[var(--md-sys-radius-small)] bg-[var(--md-sys-color-surface-container-high)] p-2">
+                        <Text className="whitespace-pre-wrap text-xs leading-relaxed">
+                          {updateInfo.releaseNotes
+                            .split('\n')
+                            .slice(0, 10)
+                            .join('\n')}
+                        </Text>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        icon={<Download className="h-4 w-4" />}
+                        onClick={handleApplyUpdate}
+                        loading={applyLoading}
+                        disabled={applyLoading || !updateInfo.hasUpdate}
+                      >
+                        {updateInfo.hasUpdate ? '一键更新' : '已是最新'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={checkUpdate}
+                        disabled={updateLoading}
+                      >
+                        重新检测
+                      </Button>
+                      {updateInfo.releaseUrl && (
+                        <a
+                          href={updateInfo.releaseUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-[var(--md-sys-color-primary)] hover:underline"
+                        >
+                          查看发布
+                        </a>
+                      )}
+                    </div>
+                    {/* 分割线 */}
+                    <div className="my-2 border-t border-[var(--md-sys-color-outline-variant)]" />
+                    {/* 手动导入压缩包 */}
+                    <div className="space-y-2">
+                      <Text className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
+                        手动导入更新包
+                      </Text>
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".zip,.tar.gz"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<Upload className="h-4 w-4" />}
+                          onClick={() => fileInputRef.current?.click()}
+                          loading={uploadLoading}
+                          disabled={uploadLoading}
+                        >
+                          选择压缩包
+                        </Button>
+                        <Text type="secondary" className="text-xs">
+                          支持 .zip / .tar.gz 格式
+                        </Text>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between py-2">
+                      <Text type="secondary" className="text-sm">
+                        未获取版本信息
+                      </Text>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={checkUpdate}
+                        disabled={updateLoading}
+                      >
+                        检查更新
+                      </Button>
+                    </div>
+                    <div className="my-2 border-t border-[var(--md-sys-color-outline-variant)]" />
+                    <div className="space-y-2">
+                      <Text className="text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
+                        手动导入更新包
+                      </Text>
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".zip,.tar.gz"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<Upload className="h-4 w-4" />}
+                          onClick={() => fileInputRef.current?.click()}
+                          loading={uploadLoading}
+                          disabled={uploadLoading}
+                        >
+                          选择压缩包
+                        </Button>
+                        <Text type="secondary" className="text-xs">
+                          支持 .zip / .tar.gz 格式
+                        </Text>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

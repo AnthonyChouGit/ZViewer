@@ -409,6 +409,9 @@ func (c *Controller) environment() ([]string, error) {
 	env["HTTPS"] = strconv.FormatBool(config.Https)
 	env["RTMP_PORT"] = strconv.Itoa(config.RtmpPort)
 	env["HTTP_FLV_PORT"] = strconv.Itoa(config.FlvPort)
+	// 标记后端运行在桌面 GUI 壳内：网页管理端的「版本更新」会因此禁用，
+	// 整包版本由 GUI 自己的更新链路维护（详见 backend services/desktop-runtime.ts）
+	env["ZVIEWER_DESKTOP"] = "1"
 	env["LIVEKIT_EXTERNAL"] = "1"
 	env["LIVEKIT_API_HOST"] = fmt.Sprintf("http://127.0.0.1:%d", config.LivekitPort)
 	env["LIVEKIT_API_KEY"] = c.voiceKey
