@@ -159,7 +159,8 @@ Supported commands: `start` / `backend` / `stop` / `restart` / `status` / `logs`
 | 3333/tcp | Unified entry: HTTP/HTTPS API, WebSocket, frontend pages, `/live` FLV proxy |
 | 3333/udp | LiveKit voice chat                                             |
 | 3334     | OBS push                                                     |
-| 3337/tcp | Voice TCP mode                                                |
+| 3337/tcp | Voice ICE/TCP fallback (on by default; used automatically when UDP is blocked) |
+| 3338/tcp | Voice TURN/TLS relay (optional, enabled by the three certificate variables)      |
 
 ## Docker Deployment
 
@@ -184,7 +185,7 @@ services:
       - "3333:3333"      # API + WebSocket + frontend + /live FLV proxy + /rtc voice signaling proxy
       - "3333:3333/udp"  # LiveKit WebRTC media transport
       - "3334:3334"      # RTMP push (OBS)
-      - "3337:3337"      # Voice TCP mode
+      - "3337:3337"      # Voice ICE/TCP fallback (on by default)
     volumes:
       - zviewer-data:/app/config
     restart: unless-stopped
@@ -213,7 +214,9 @@ services:
 | `HTTP_FLV_PORT`          | FLV pull port (internal)                          | `3335`                  |
 | `LIVEKIT_EXTERNAL`       | `1` uses an external LiveKit and skips the bundled one               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE advertised address; set the public IP manually for complex NAT or no outbound internet       | empty (automatic STUN)             |
-| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP direct port (enabled when voice transport mode = TCP)        | `3337`                  |
+| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP fallback port (on by default; set `0` to disable)        | `3337`                  |
+| `LIVEKIT_RTC_ADVERTISE_INTERNAL_IP` | Advertise both external and internal IP candidates (`advertise_internal_ip`); `false` disables | `true` |
+| `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION` | Skip the external IP self-ping check (enable when NAT blocks self-ping) | unset |
 | `LIVEKIT_TURN_TLS_PORT`  | TURN/TLS relay port (separate from 3337, both can run at once)       | `3338`                  |
 | `LIVEKIT_TURN_DOMAIN`    | TURN/TLS domain                           | —                       |
 | `LIVEKIT_TURN_CERT`      | TURN TLS certificate path                         | —                       |
@@ -221,9 +224,35 @@ services:
 
 ### Voice Transport
 
-- Audio uses 3333/udp by default, so the firewall must allow it; you can switch to TCP in the admin panel, which additionally opens 3337/tcp for direct connections
+- Two channels are open by default: `3333/udp` (low-latency direct) and `3337/tcp` (ICE/TCP fallback). ICE prefers UDP when it works and falls back to `3337/tcp` automatically when UDP is blocked by an ISP, corporate firewall, or proxy — no manual switch needed
+- To disable the fallback, pick "UDP only" in the admin panel or set `LIVEKIT_RTC_TCP_PORT=0`. The value must be an explicit 0 — leaving it unset/deleted makes LiveKit fall back to its default 7881, which is never port-mapped, so clients only get candidates that can never connect
+- Private and public networks both work: `advertise_internal_ip` is on by default, advertising the mapped external IP alongside the local interface IP. In bridge networking the local IP is the container's 172.x and is unreachable from LAN clients; for LAN direct connections use host networking (drop the compose `ports` section, add `network_mode: host`) and narrow the interfaces with `rtc.interfaces.includes: [eth0]` in `LIVEKIT_CONFIG`. Add `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION=true` when NAT blocks self-ping
 - Once all three `LIVEKIT_TURN_*` variables are set, a TURN/TLS relay is also opened on 3338/tcp (a CA-issued certificate is required; this penetrates proxies and multi-layer NAT best). 3337 and 3338 are two independent channels that can coexist, and the client picks automatically: UDP direct > TCP direct > TURN relay
 - When STUN discovery fails on a pure intranet or unusual NAT, set `LIVEKIT_NODE_IP` to the server's public IP
+
+**Direct connections from both LAN and WAN (host networking recommended)**
+
+With bridge networking only the mapped address is reachable, and LAN clients often fail because the router does not support NAT hairpinning. Switch to host networking and pin the interface:
+
+```yaml
+services:
+  zviewer:
+    image: zerowy0721/zviewer:latest
+    network_mode: host          # drop the ports section: 3333, 3333/udp, 3334, 3337, 3338 listen directly on the host
+    environment:
+      LIVEKIT_RTC_USE_EXTERNAL_IP: "true"
+      LIVEKIT_RTC_ADVERTISE_INTERNAL_IP: "true"
+      LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION: "true"   # add when NAT blocks self-ping
+      LIVEKIT_CONFIG: |-
+        rtc:
+          interfaces:
+            includes: [eth0]
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped
+```
+
+`interfaces.includes` keeps docker0, veth, tailscale and similar interfaces out of the candidate list, so clients are not handed unreachable addresses.
 - To use the TURN/TLS relay, configure `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` (the compose file already maps `3338:3338`, and 3338/tcp must be allowed through the firewall)
 
 ## Windows Desktop Console (Optional)

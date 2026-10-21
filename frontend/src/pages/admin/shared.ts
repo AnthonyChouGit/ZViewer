@@ -106,7 +106,7 @@ export interface AdminSettings {
   cdnProxyUrl: string
   /** 允许单用户在多个页面同时登录同一房间（仅供测试，服务端门控） */
   roomMultiInstanceLogin: boolean
-  /** 语音（LiveKit）媒体传输模式：udp=优先 3333/udp；tcp=额外开启 3337/tcp ICE/TCP 直连（TURN 中继固定 3338/tcp，与模式无关） */
+  /** 语音（LiveKit）TCP 兜底通道：tcp=默认，3333/udp 与 3337/tcp 并存；udp=仅 UDP，不广播 TCP 候选；TURN 中继固定 3338/tcp，与模式无关 */
   voiceTransportMode: 'udp' | 'tcp'
   /** 自定义 LiveKit 服务器地址（客户端连接；空=按页面域名自动推导） */
   livekitExternalUrl: string

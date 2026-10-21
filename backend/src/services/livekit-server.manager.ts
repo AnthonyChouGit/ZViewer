@@ -31,12 +31,20 @@ const HTTP_PORT = 3336;
  */
 const UDP_PORT = 3333;
 /**
- * ICE/TCP 直连端口（LiveKit 原生 rtc.tcp_port，官方默认 7881）：管理端切
- * 「TCP 模式」时开启——UDP 被墙（运营商/企业防火墙）时客户端经此端口以
- * TCP 直连媒体。部署侧需放行 3337/tcp（compose 已含映射）。
- * 可用环境变量 LIVEKIT_RTC_TCP_PORT 覆盖。
+ * ICE/TCP 直连端口（LiveKit 原生 rtc.tcp_port，官方默认 7881）：UDP 被墙
+ * （运营商/企业防火墙、代理 TUN 吞包）时客户端经此端口以 TCP 直连媒体，
+ * 是唯一不需要证书的兜底通道。默认为 3337，部署侧需放行 3337/tcp
+ * （compose 已含映射）。
+ *
+ * 绝不能「不设」这个值：不设时 LiveKit 回落到默认 7881，而 7881 从未做过
+ * 端口映射，客户端只会拿到必然连不上的候选（社区实测反馈：UDP 模式回退
+ * TCP 时用的还是 7881）。要关闭回退必须显式设 0，不能删除环境变量。
+ * 可用环境变量 LIVEKIT_RTC_TCP_PORT 覆盖端口或设 0 关闭。
  */
-const TCP_PORT = Number(process.env.LIVEKIT_RTC_TCP_PORT?.trim()) || 3337;
+const CONFIGURED_TCP_PORT = process.env.LIVEKIT_RTC_TCP_PORT?.trim();
+const TCP_PORT = Number(CONFIGURED_TCP_PORT) || 3337;
+/** 用户显式 LIVEKIT_RTC_TCP_PORT=0：主动关闭 ICE/TCP 回退（仅 UDP） */
+const TCP_DISABLED_BY_USER = CONFIGURED_TCP_PORT === '0';
 /**
  * TURN/TLS 中继端口（默认 3338）：与 TCP 直连分成两个端口，因此**可以
  * 同时开启**——客户端 ICE 择优：UDP 直连 > TCP 直连 > TURN 中继（中继多
@@ -61,13 +69,15 @@ function readTurnConfig(): { domain: string; cert: string; key: string } | null 
 
 export type VoiceTransportMode = 'udp' | 'tcp';
 /**
- * 当前语音媒体传输模式（管理端基础设置下发）：
- * - 'udp'（默认）：优先 UDP 复用端口 3333（配了 TURN 时中继仍常开作兜底）
- * - 'tcp'：保留 UDP 3333 并额外开启 ICE/TCP 直连 3337
+ * 当前语音媒体传输模式（管理端「TCP 兜底通道」下发）：
+ * - 'tcp'（默认）：UDP 3333 与 ICE/TCP 直连 3337 同时开启，UDP 可用时仍优先，
+ *   被运营商/企业防火墙或代理拦截时自动回退到 3337
+ * - 'udp'：只开 UDP 3333（显式把 rtc.tcp_port 置 0，绝不删除——删除会回落到
+ *   未映射的 7881）；被拦 UDP 的网络将无法建立媒体
  * LiveKit 无法禁用 UDP 候选，多通道并行由客户端 ICE 自动选路：
- * UDP 直连 > TCP 直连 > TURN 中继（3338）。
+ * UDP 直连 > TCP 直连 > TURN 中继（3338，配了 TURN 三件套时常开）。
  */
-let voiceTransportMode: VoiceTransportMode = 'udp';
+let voiceTransportMode: VoiceTransportMode = 'tcp';
 /**
  * 监听地址：默认 `::`（Go dual-stack，同时收 IPv4/IPv6——IPv4 连接以
  * v4-mapped 形式进入，127.0.0.1 回环依然可达）。绑 0.0.0.0 会只收
@@ -305,7 +315,7 @@ async function spawnAndAwait(
     // 注意：livekit-server CLI 没有 --tcp-port flag（v1.13.7 实测报
     // "flag provided but not defined"），rtc.tcp_port 只能经 config 环
     // 境变量 LIVEKIT_RTC_TCP_PORT 下发（在 startEmbeddedLivekit 注入区
-    // 按传输模式设置/删除，机制同 LIVEKIT_RTC_USE_EXTERNAL_IP）。
+    // 按传输模式写具体端口或 '0'，机制同 LIVEKIT_RTC_USE_EXTERNAL_IP）。
     // --keys 格式硬性要求 "key: secret"（冒号后必须带空格），缺空格
     // livekit 会直接退出（冒烟实测踩坑）
     '--keys',
@@ -384,14 +394,27 @@ export async function startEmbeddedLivekit(): Promise<void> {
     process.env.LIVEKIT_RTC_USE_EXTERNAL_IP ??= 'true';
     console.log('[voice] 已启用 LiveKit 原生 STUN 外部 IP 发现');
   }
-  // 端口分配（默认：ICE/TCP 直连 3337、TURN/TLS 中继 3338，两者可同时开）：
-  // - 配齐 TURN 三件套：中继常开（UDP 模式也开，覆盖 UDP 被吞的网络）；
-  //   TCP 模式再额外开 ICE/TCP 直连，客户端 ICE 自动择优
-  //   （UDP 直连 > TCP 直连 > TURN 中继，中继多一跳、延迟略高）。
-  // - 两个端口被手工配成同号时无法并存（实测同端口启动直接 bind 失败退出），
-  //   此时让给 TURN 并关闭 ICE/TCP，避免整个语音服务起不来。
-  // - UDP 模式且配了 TURN：rtc.tcp_port 置 0——不再开放默认 7881，避免广播
-  //   一条客户端必然连不上的 TCP 候选。
+  // 内外网双候选：只开 STUN 时，LiveKit 会用 NAT1To1 把本地候选「替换」成
+  // 探测到的外网 IP，于是同一个部署只能服务一侧——局域网用户拿到公网地址后
+  // 常因路由器不支持 NAT 回环（hairpin）而连不上，反之亦然。
+  // advertise_internal_ip 会保留本地网卡地址、再追加映射后的外网地址（官方
+  // 原文：clients connect from both private and public networks），两侧各自
+  // 选中可达的那条候选。
+  // 注意：bridge 网络下「本地地址」是容器 172.x，对局域网客户端不可达，多出来
+  // 的只是 ICE 并发探测；host 网络（推荐）下它就是真实局域网 IP，才真正有用。
+  // 可用 LIVEKIT_RTC_ADVERTISE_INTERNAL_IP=false 关闭。
+  process.env.LIVEKIT_RTC_ADVERTISE_INTERNAL_IP ??= 'true';
+  if (process.env.LIVEKIT_RTC_ADVERTISE_INTERNAL_IP !== 'false') {
+    console.log('[voice] 已启用内外网双 IP 候选（advertise_internal_ip）');
+  }
+  // 端口分配（UDP 媒体 3333、ICE/TCP 直连 3337、TURN/TLS 中继 3338）：
+  // - ICE/TCP 由管理端「TCP 兜底通道」（voiceTransportMode）控制：'tcp'（默认）
+  //   开启、'udp' 关闭。关闭时必须显式写 0，不能 delete——delete 会让 LiveKit
+  //   回落到默认 7881，而 7881 未做端口映射，等于广播一条必死的候选。
+  // - TURN 三件套齐全时中继常开（与传输模式无关），与直连不同端口可并存，
+  //   客户端 ICE 择优：UDP 直连 > TCP 直连 > TURN 中继（中继多一跳，延迟略高）。
+  // - 唯一冲突：TURN 与 ICE/TCP 被手工配成同号——两个 TCP 监听无法共存
+  //   （实测同端口启动直接 bind 失败退出），此时让给中继并关闭直连。
   const turn = readTurnConfig();
   if (turn) process.env.LIVEKIT_TURN_TLS_PORT ??= String(TURN_PORT);
 
@@ -401,21 +424,19 @@ export async function startEmbeddedLivekit(): Promise<void> {
       `[voice] TURN 与 ICE/TCP 端口同号（${TCP_PORT}），同端口无法并存，已让给 TURN/TLS 中继并关闭 ICE/TCP 直连；` +
         '如需两者共存，请把 LIVEKIT_TURN_TLS_PORT 设为 3338 之类的独立端口'
     );
-  } else if (voiceTransportMode === 'tcp') {
-    process.env.LIVEKIT_RTC_TCP_PORT = String(TCP_PORT);
-    console.log(
-      `[voice] ICE/TCP 已启用: ${TCP_PORT}/tcp` +
-        (turn
-          ? `（TURN 中继同时监听 ${TURN_PORT}/tcp，客户端共存择优）`
-          : '（UDP 直连仍并行尝试）')
-    );
-  } else if (turn) {
+  } else if (TCP_DISABLED_BY_USER || voiceTransportMode === 'udp') {
     process.env.LIVEKIT_RTC_TCP_PORT = '0';
     console.log(
-      `[voice] TCP 兜底通道: ${TURN_PORT}/tcp TURN/TLS 中继已就绪（UDP 模式不开 ICE/TCP 直连）`
+      `[voice] ICE/TCP 已关闭（仅 3333/udp）` +
+        (turn ? `，TURN 中继仍在 ${TURN_PORT}/tcp` : '') +
+        '；UDP 被拦的网络将无法建立媒体'
     );
   } else {
-    delete process.env.LIVEKIT_RTC_TCP_PORT;
+    process.env.LIVEKIT_RTC_TCP_PORT = String(TCP_PORT);
+    console.log(
+      `[voice] ICE/TCP 已启用: ${TCP_PORT}/tcp（UDP 不通时自动回退）` +
+        (turn ? `；TURN 中继并存于 ${TURN_PORT}/tcp` : '')
+    );
   }
   // 注意：此处不设置 LIVEKIT_URL——客户端地址由 voice.routes 按请求头
   // 推导（跟随页面域名与协议）。在容器/多网卡环境探测本机 IP 会得到
@@ -499,16 +520,16 @@ export async function applyVoiceTransportMode(
   const changed = next !== voiceTransportMode;
   voiceTransportMode = next;
   if (!changed) return;
-  // 日志按「实际开启的通道」描述：UDP 常开；TCP 模式下再叠加 ICE/TCP 直连；
+  // 日志按「实际开启的通道」描述：UDP 常开；'tcp' 模式再叠加 ICE/TCP 直连；
   // TURN 三件套齐全时中继常开（与直连不同端口，可并存）。
   const turn = readTurnConfig();
+  const tcpEnabled =
+    next === 'tcp' && !TCP_DISABLED_BY_USER && !(turn && TURN_PORT === TCP_PORT);
   const channels = ['3333/udp'];
-  if (next === 'tcp' && !(turn && TURN_PORT === TCP_PORT)) {
-    channels.push(`${TCP_PORT}/tcp ICE/TCP 直连`);
-  }
+  if (tcpEnabled) channels.push(`${TCP_PORT}/tcp ICE/TCP 直连`);
   if (turn) channels.push(`${TURN_PORT}/tcp TURN/TLS 中继`);
   console.log(
-    `[voice] 语音传输模式: ${next === 'tcp' ? 'TCP' : 'UDP'}（${channels.join(' + ')}）`
+    `[voice] 语音传输模式: ${tcpEnabled ? 'UDP + TCP 回退' : '仅 UDP'}（${channels.join(' + ')}）`
   );
   if (!child) return;
   killChild();

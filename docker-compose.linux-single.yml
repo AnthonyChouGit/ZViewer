@@ -7,7 +7,7 @@ services:
       - "3333:3333"     # 统一端口：后端 API + WebSocket + 前端静态文件 + /live HTTP-FLV 代理
       - "3333:3333/udp" # LiveKit WebRTC 媒体传输（与页面 HTTP 同号，协议不同）
       - "3334:3334"     # RTMP 推流 (OBS)
-      - "3337:3337"     # 语音 ICE/TCP 直连（管理端「语音传输模式=TCP」时启用；UDP 被拦时直连媒体）
+      - "3337:3337"     # 语音 ICE/TCP 直连（默认开启；UDP 被防火墙/代理拦截时自动回退到此端口）
       - "3338:3338"     # 语音 TURN/TLS 中继（配齐 LIVEKIT_TURN_* 三项才启用；穿透代理/多层 NAT 最强）
     environment:
       # 语音聊天（LiveKit）：LiveKit 已内嵌进本镜像（启动时由后端自动拉起，
@@ -19,6 +19,19 @@ services:
       # 自动启用 LiveKit 原生 STUN 外部 IP 发现（需容器可出网，v4/v6 均支持）；
       # NAT/复杂网络或 STUN 不通时手动指定为宿主公网 IP，否则信令能通但媒体连不上。
       - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP:-}
+      # 内外网双 IP 候选（默认开启）：同时广播映射后的外网 IP 与本地网卡 IP，
+      # 内网与外网用户各自选中可达的那条，避免只服务一侧。
+      # 注意 bridge 网络下「本地 IP」是容器 172.x，对局域网客户端不可达，多出来
+      # 的只是并发探测；真正生效需要 host 网络（去掉 ports 段、改用
+      # network_mode: host），并用 LIVEKIT_CONFIG 限定网卡，避免 docker0 /
+      # tailscale 等接口混入候选：
+      #   - LIVEKIT_RTC_ADVERTISE_INTERNAL_IP=false   # 关闭双 IP 候选
+      #   - LIVEKIT_CONFIG: |-
+      #       rtc:
+      #         interfaces:
+      #           includes: [eth0]
+      # NAT 不支持自 ping（部分云主机 / 家用路由）导致候选校验失败时再加：
+      #   - LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION=true
       # 可选：TURN/TLS 媒体中继（TCP 3338）——UDP 直连不通时的兜底通道。
       # 地址用域名（DNS 解析），无需公网 IP；三个变量齐全即自动启用。
       # 端口 3338 与 ICE/TCP 直连 3337 分开，二者可同时开启（客户端择优：

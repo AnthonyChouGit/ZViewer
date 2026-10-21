@@ -157,7 +157,8 @@ npm start               # 启动
 | 3333/tcp | 统一入口：HTTP/HTTPS API、WebSocket、前端页面、`/live` FLV 代理 |
 | 3333/udp | LiveKit 语音聊天                                             |
 | 3334     | OBS 推流                                                     |
-| 3337/tcp | 语音 TCP 模式                                                |
+| 3337/tcp | 语音 ICE/TCP 回退（默认开启，UDP 被拦时自动改走此端口）             |
+| 3338/tcp | 语音 TURN/TLS 中继（可选，配齐证书三项即启用）                    |
 
 ## Docker 部署
 
@@ -182,7 +183,7 @@ services:
       - "3333:3333"      # API + WebSocket + 前端页面 + /live FLV 代理 + /rtc 语音信令反代
       - "3333:3333/udp"  # LiveKit WebRTC 媒体传输
       - "3334:3334"      # RTMP 推流（OBS）
-      - "3337:3337"      # 语音 TCP 模式
+      - "3337:3337"      # 语音 ICE/TCP 回退（默认开启）
     volumes:
       - zviewer-data:/app/config
     restart: unless-stopped
@@ -211,7 +212,9 @@ services:
 | `HTTP_FLV_PORT`          | FLV 拉流端口（内部）                          | `3335`                  |
 | `LIVEKIT_EXTERNAL`       | `1` 时使用外置 LiveKit，跳过内嵌               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE 广播地址；NAT 复杂或无出网环境可手动指定公网 IP       | 空（自动 STUN）             |
-| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 直连端口（语音传输模式 = TCP 时启用）        | `3337`                  |
+| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 回退端口（默认开启；设 `0` 关闭回退）       | `3337`                  |
+| `LIVEKIT_RTC_ADVERTISE_INTERNAL_IP` | 内外网双 IP 候选（`advertise_internal_ip`），`false` 关闭 | `true`         |
+| `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION` | 跳过外部 IP 自 ping 校验（NAT 不允许自 ping 时开启） | 未设置        |
 | `LIVEKIT_TURN_TLS_PORT`  | TURN/TLS 中继端口（与 3337 分开，可同时开启）       | `3338`                  |
 | `LIVEKIT_TURN_DOMAIN`    | TURN/TLS 域名                           | —                       |
 | `LIVEKIT_TURN_CERT`      | TURN TLS 证书路径                         | —                       |
@@ -219,9 +222,35 @@ services:
 
 ### 语音传输
 
-- 默认音频走 3333/udp，防火墙需放行；可在管理端切换为 TCP，此时额外开启 3337/tcp 直连
+- 默认同时开启两条通道：`3333/udp`（低延迟直连）与 `3337/tcp`（ICE/TCP 回退）。UDP 可用时 ICE 优先走 UDP，被运营商/企业防火墙或代理拦截时自动回退 `3337/tcp`，无需手工切换
+- 关闭回退：管理端「语音 TCP 回退通道」选「仅 UDP」，或设 `LIVEKIT_RTC_TCP_PORT=0`。实现上必须显式写 0——若把该变量留空或删除，LiveKit 会回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选
+- 内外网双通：默认开启 `advertise_internal_ip`，同时广播映射后的外网 IP 与本地网卡 IP，内网与外网用户各自选中可达的那条。bridge 网络下本地 IP 是容器 172.x，对局域网客户端不可达；需要内网直连时改用 host 网络（去掉 compose 的 `ports` 段、加 `network_mode: host`），并用 `LIVEKIT_CONFIG` 的 `rtc.interfaces.includes: [eth0]` 限定网卡。NAT 不允许自 ping 时再加 `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION=true`
 - 配齐 `LIVEKIT_TURN_*` 三项时，还会在 3338/tcp 开启 TURN/TLS 中继（需正式证书，穿透代理/多层 NAT 能力最强）。3337 与 3338 是两条独立通道，可并存，客户端自动择优：UDP 直连 > TCP 直连 > TURN 中继
 - 纯内网 / 特殊 NAT 环境 STUN 探测失败时，用 `LIVEKIT_NODE_IP` 指定服务器公网 IP
+
+**内网与外网同时直连（推荐 host 网络）**
+
+bridge 网络下只有映射后的地址可达，局域网用户常因路由器不支持 NAT 回环（hairpin）而连不上。需要两侧都直连时改用 host 网络，并把网卡限死：
+
+```yaml
+services:
+  zviewer:
+    image: zerowy0721/zviewer:latest
+    network_mode: host          # 去掉原 ports 段：3333、3333/udp、3334、3337、3338 直接监听宿主
+    environment:
+      LIVEKIT_RTC_USE_EXTERNAL_IP: "true"
+      LIVEKIT_RTC_ADVERTISE_INTERNAL_IP: "true"
+      LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION: "true"   # NAT 不允许自 ping 时再加
+      LIVEKIT_CONFIG: |-
+        rtc:
+          interfaces:
+            includes: [eth0]
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped
+```
+
+`interfaces.includes` 用于排除 docker0、veth、tailscale 等接口，避免广播一批必然不可达的候选。
 - 需要 TURN/TLS 中继时，配置 `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` 三项即可（compose 已含 `3338:3338` 映射，需放行 3338/tcp）
 
 ## Windows 桌面控制台（可选）
