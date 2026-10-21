@@ -1,299 +1,167 @@
 # ZViewer
 
-> Sync-watch, co-viewing & remote sharing platform.
+> A platform for watching movies, listening to music, voice-chatting and sharing your screen together.
 
 English | **[中文](README.md)**
 
-<p align="left">
-  <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/Zero-wyc/ZViewer?style=flat-square&logo=github&label=LICENSE&labelColor=333&color=blue" alt="MIT">
-  </a>
-  <img src="https://img.shields.io/github/stars/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Stars&labelColor=333&color=blue" alt="Stars">
-  <a href="https://github.com/Zero-wyc/ZViewer/releases">
-    <img src="https://img.shields.io/github/v/release/Zero-wyc/ZViewer?style=flat-square&logo=github&label=RELEASE&labelColor=333&color=green" alt="Release">
-  </a>
-  <img src="https://img.shields.io/github/contributors/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Contributors&labelColor=333&color=brightgreen" alt="Contributors">
-  <img src="https://img.shields.io/github/repo-size/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Size&labelColor=333&color=yellow" alt="Repo Size">
-  <img src="https://img.shields.io/github/last-commit/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Last%20Commit&labelColor=333&color=inactive" alt="Last Commit">
-  <img src="https://img.shields.io/github/languages/top/Zero-wyc/ZViewer?style=flat-square&logo=typescript&labelColor=333&color=3178C6" alt="Top Language">
-  <a href="https://t.me/Zero_251">
-    <img src="https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram">
-  </a>
+<p align="left">  
+  <a href="LICENSE">  
+    <img src="https://img.shields.io/github/license/Zero-wyc/ZViewer?style=flat-square&logo=github&label=LICENSE&labelColor=333&color=blue" alt="MIT">  
+  </a>  
+  <img src="https://img.shields.io/github/stars/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Stars&labelColor=333&color=blue" alt="Stars">  
+  <a href="https://github.com/Zero-wyc/ZViewer/releases">  
+    <img src="https://img.shields.io/github/v/release/Zero-wyc/ZViewer?style=flat-square&logo=github&label=RELEASE&labelColor=333&color=green" alt="Release">  
+  </a>  
+  <img src="https://img.shields.io/github/contributors/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Contributors&labelColor=333&color=brightgreen" alt="Contributors">  
+  <img src="https://img.shields.io/github/repo-size/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Size&labelColor=333&color=yellow" alt="Repo Size">  
+  <img src="https://img.shields.io/github/last-commit/Zero-wyc/ZViewer?style=flat-square&logo=github&label=Last%20Commit&labelColor=inactive" alt="Last Commit">  
+  <img src="https://img.shields.io/github/languages/top/Zero-wyc/ZViewer?style=flat-square&logo=typescript&labelColor=333&color=3178C6" alt="Top Language">  
+  <a href="https://t.me/Zero_251">  
+    <img src="https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram">  
+  </a>  
 </p>
 
 ---
 
+[Telegram](https://t.me/Zero_251) [QQ](https://qm.qq.com/q/MuKPRVz8wc)
+
+---
+
+Project docs: [docx.zviewer.zero251.xyz](https://docx.zviewer.zero251.xyz)
+
+| ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003200919255.webp) | ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003200942428.webp) |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003200643035.webp) | ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003200707122.webp) |
+| ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20260930211758831.webp) | ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003201053941.webp) |
+| ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003200715093.webp) | ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20261003201139524.webp) |
+
+## Star History
+
+<a href="https://star-history.com/#Zero-wyc/ZViewer&Zero-wyc/ZViewerCLI&Zero-wyc/ZViewerAPP&Date">
+ <picture>  
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Zero-wyc/ZViewer,Zero-wyc/ZViewerCLI,Zero-wyc/ZViewerAPP&type=Date&theme=dark&v=2" />  
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Zero-wyc/ZViewer,Zero-wyc/ZViewerCLI,Zero-wyc/ZViewerAPP&type=Date&v=2" />  
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Zero-wyc/ZViewer,Zero-wyc/ZViewerCLI,Zero-wyc/ZViewerAPP&type=Date&v=2" />  
+ </picture>  
+</a>
+
 ## Browser Requirements
 
-> **Strongly recommended to use a high-version Chromium-based browser such as Chrome / Edge (kernel 130+)** to access ZViewer.
->
-> ⚠️ **Not recommended**: Safari and Firefox — due to differences in their support for MSE / MKV / browser-side decoding and transcoding, you may encounter playback stuttering, videos failing to decode, and subtitle extraction issues.
+> Chrome / Edge or another Chromium-based browser with kernel 130+ is recommended. Safari and Firefox have incomplete MSE / MKV decoding support — you may see stuttering, failed decoding, or subtitle glitches.
+
+#### PS: There is also a [ZViewer mobile app](https://github.com/Zero-wyc/ZViewerAPP) under development　|　built by [FredQin](https://github.com/fredqin2006-X)
 
 ## Table of Contents
 
 - [Features](#features)
-- [Quick Start](#quick-start)
-- [Ports](#ports)
-- [HTTPS & Certificates](#https--certificates)
+- [Installation & Startup](#installation--startup)
+  - [Interactive Menu](#interactive-menu)
 - [Docker Deployment](#docker-deployment)
-- [GitHub Actions](#github-actions)
-- [Local Development](#local-development)
-- [Environment Variables](#environment-variables)
-- [Permission Model](#permission-model)
-- [Video Sources](#video-sources)
-- [ZViewerCLI](#zviewercli)
-- [Voice Advanced Configuration](#voice-advanced-configuration)
-- [FAQ](#faq)
+- [Deployment Configuration](#deployment-configuration)
 
 ---
 
-| ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20260804013054107.webp) | ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20260804013133193.webp) |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20260804013107507.webp) | ![](https://raw.githubusercontent.com/Zero-wyc/Image/main/All/20260804013127227.webp) |
+## Docker Upgrade Notice (required reading for v4.3.6 and below)
 
-## ⚠️ Docker Upgrade Notice (required reading for v4.3.6 and below)
-
-> **Docker users on v4.3.6 or lower**: voice chat has been migrated to LiveKit and is now bundled inside the container. Do **not** upgrade via the admin panel's "One-click Update" (Settings → Basic) — the old image does not contain the LiveKit companion binary, and the in-place update cannot add it, leaving voice chat broken after the update. Pull the new image and recreate the whole container instead:
->
-> ```bash
-> docker pull zerowyc0721/zviewer:latest
-> docker compose up -d --force-recreate
-> ```
->
-> **You must also update your `docker-compose.linux-single.yml` file**: the new compose adds the `3333:3333/udp` media port mapping, which the old file lacks — updating the image without updating the compose file leaves the voice media port unexposed and voice chat still broken.
->
-> Your data lives in the `/app/config` volume — recreating the container keeps the database and configuration intact.
+> **Docker users on v4.3.6 or lower**: do **not** upgrade through the admin panel's "One-click Update" (Settings → Basic). Redeploy with the latest docker compose file instead.
 
 ## Features
 
-### Watch-Together Rooms
+- **Watch together**: synchronized group viewing; the host controls playback, viewers can request pause / seek
+- **Video sources**: Bilibili (multi-part, quality selection, premium quality), MP4 direct links, WebDAV / FTP / OpenList, Emby / Jellyfin, server local folders
+- **Format compatibility**: MKV / AVI / TS / WMV, DTS / AC3 / EAC3 and other formats that browsers cannot play natively
+- **Playback modes**: CLI local proxy (high quality, no server traffic), server DASH relay, MP4 direct link (up to 720P) — switch on demand
+- **Danmaku & subtitles**: Bilibili official / DandanPlay / local XML·JSON (multiple tracks); SRT / ASS / SSA / VTT / SMI / SUB
+- **Interaction & streaming**: comments, voice chat, WebRTC screen sharing, OBS push
+- **Listen together**: NetEase Cloud Music × Bilibili; playlists auto-filled with recommendations, one-click favorites into both folders, MV lyrics page background
+- **Personalization**: Material You dynamic theme, custom theme colors and backgrounds, glassmorphism, independent danmaku and subtitle font sizes
+- **Operations**: one-click auto update; Docker / single-file builds ready out of the box
 
-- Create or join rooms to watch with friends in sync.
-- Room host controls playback: play, pause, seek, speed. Viewers can request control.
-- When host goes offline, viewers enter **self-control mode** and can control the player directly; the request-based mode is restored when the host reconnects.
-- Playback memory: if the host briefly disconnects, the server continues broadcasting the current state.
-- Room auto-closes if the host is offline for more than 10 minutes.
+## ZViewerCLI
 
-### Multi-Source Video Parsing
+[ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) (Go) is a proxy that runs on the user's own machine: it parses and proxies the video stream locally with your own Bilibili cookie, so everyone in the room shares premium quality while barely consuming server bandwidth. It is meant for cases where you want high quality without paying for server traffic (server DASH relay uses a lot of bandwidth).
 
-| Source | Description |
-|---|---|
-| **Bilibili** | Parse BV/AV video links, multi-part (P) selection, quality switching, premium credentials |
-| **MP4 Direct Link** | Play MP4 videos directly from accessible URLs |
-| **WebDAV** | Mount WebDAV servers, browse and play video files |
-| **FTP** | Mount FTP servers, browse and play video files |
-| **OpenList** | Mount OpenList services, browse and play video files |
-| **Emby / Jellyfin** | Mount media libraries as a shared movie library with poster browsing |
-| **Server Local Files** | Mount video directories on the deployment server as a room-shared library, no external cloud drive required |
+## Installation & Startup
 
-Signed network-drive direct links are automatically re-resolved when they expire, so binge-watching is never interrupted.
+On first startup a ROOT administrator is created automatically: username `root`, password `root`. **Change the password immediately after installation.**
 
-### Subtitles & Audio Compatibility
+### Windows Desktop (GUI)
 
-- **Unified subtitle rendering**: SRT / ASS / SSA / VTT / SMI / SUB and MKV embedded subtitles are all normalized through a self-developed sparse-probing subtitle engine before rendering. Styled effects (e.g. ASS karaoke/fancy text) are NOT reproduced verbatim — text content and timing stay precise, with broad format compatibility and smooth performance even on long videos with multiple subtitle tracks.
-- **Browser-side embedded subtitle extraction**: text subtitle tracks inside MKV containers are extracted directly in the browser (custom MKV demux with sparse scanning that skips audio/video payload) — subtitles appear in seconds even for multi-gigabyte files, no server-side FFmpeg required.
-- **Browser-side playback engine (playsvideo)**: containers such as MKV / AVI / TS / WMV are automatically remuxed to fMP4 in the browser; browser-incompatible audio tracks (DTS / AC3 / EAC3, etc.) are transcoded to AAC in real time in the browser. Fully automatic — **no admin-panel toggles required** — and the transcode core ships with the frontend assets, so no server-side FFmpeg is needed.
+`ZViewer-Windows-<version>-x64.zip` in Releases is a native desktop console (Go + system WebView2) for managing the local service, certificates, FRP tunneling and the high-quality proxy:
 
-### Playback Modes
+- Extract the archive and double-click `ZViewerDesktop.exe`; closing the window sends it to the system tray by default
+- The runtime lives in `runtime/` inside the extracted folder, where `.env` and `config` are created on first launch
+- `SHA256SUMS.txt` lists the checksums for the ZIP and the EXE
+- The distribution does not bundle the high-quality proxy CLI; put `zviewer-cli-windows-amd64.exe` into `runtime/` when you need it
 
-Three playback modes switchable on demand:
-
-| Mode | Quality | Server bandwidth | Use case |
-|---|---|---|---|
-| CLI local proxy | Up to 4K high bitrate | Nearly zero (recommended) | Someone can run the CLI, max quality wanted |
-| Server DASH relay | High quality for all | Heavy | No CLI available, sufficient bandwidth |
-| MP4 direct-link relay | Up to 720P | Medium | Best-compatibility fallback, instant playback |
-
-### Real-Time Interaction
-
-- Comment panel & danmaku system: supports Bilibili official danmaku, DandanPlay danmaku, and local XML/JSON danmaku files. Multiple tracks can be overlaid at once (multiple Bilibili danmaku tracks on the same video included), multiplying the danmaku volume.
-- Playback state sync: host actions are broadcast to all viewers in real time.
-- Viewers can request pause or seek; the host sees notifications at the top-left of the player.
-- Voice chat: host enables voice chat for viewers to listen in real time (LiveKit WebRTC, bundled with the server out of the box; IPv6 support, UDP/TCP transport mode switch, and TURN/TLS fallback relay).
-
-### Screen Sharing & Streaming
-
-- WebRTC-based screen sharing: share your screen or video capture, or push the room movie to a big-screen device and use your phone as a remote.
-- OBS RTMP push support with Node Media Server for HTTP-FLV pull (via backend `/live` proxy).
-
-### Listen Together
-
-- **Dual music sources — NetEase Cloud Music × Bilibili**: NetEase Cloud Music with QR-code login, room-shared VIP credentials, and automatic quality degradation based on login state; Bilibili music-zone videos play directly as songs. Seamless synced song switching for the whole room.
-- **One-click song search & favorite**: search NetEase Cloud Music by the playing Bilibili video title and favorite the result into your playlist in one click.
-- **Lyrics now-playing page**: auto-filled playlist recommendations, one-click favorites into both `bilibili` and `music` folders, NetEase Cloud Music search, Bilibili MV/PV as playback background, and line-by-line lyric scrolling synced with the room.
-- **Content filtering**: two-level keyword filtering (global blocked words + music-zone blocked words) removes unwanted content from lists and recommendations automatically.
-
-### Management & Operations
-
-- Member registration approval queue — new members join only after admin approval.
-- Moderator appointment; one-click auto update with data and configuration preserved.
-- Docker / single-file deployment, ready out of the box.
-
-### Theme System
-
-- Material You (Monet) dynamic theme system, extracting colors from wallpapers to generate a complete palette.
-- Light/dark theme toggle, custom backgrounds, glassmorphism UI, reduced motion mode.
-
----
-
-## Quick Start
-
-On first startup, the system automatically creates a super admin account: username `root`, password `root`. **Change the default password immediately after production deployment.**
+See `desktop/README.md` for build and debug instructions.
 
 ### Single-File Build (Recommended)
 
-No Node.js / npm required. Download the latest archive from [Releases](https://github.com/Zero-wyc/ZViewer/releases), extract, and run:
+Download the archive for your platform from [Releases](https://github.com/Zero-wyc/ZViewer/releases), extract it, then:
 
-```bash
-# Windows
-start.bat              # Interactive menu
-start.bat start        # Start service
+- **Windows**: double-click `start.bat` to open the interactive menu
+- **Linux**: run `./start.sh` (without arguments) to open the interactive menu
 
-# Linux
-./start.sh             # Interactive menu
-./start.sh start       # Start service
+Choose `1` to start the service, then visit `http://localhost:3333`.
+
+You can also skip the menu and pass a command directly, e.g. `start.bat start` / `./start.sh start`; see `start.bat help` for all commands.
+
+#### Interactive Menu
+
+```text
+  1) 启动服务              2) 仅启动后端
+  3) 停止服务              4) 重启服务
+  5) 查看状态              6) 查看日志
+  7) 一键签发 SSL 证书     8) HTTPS 启动（自动签发证书）
+  0) 退出
 ```
 
-The archive bundles the `livekit-server` companion binary (voice chat). The backend spawns it automatically on startup and discovers the public IP via STUN — no separate installation or configuration needed. Voice automatically uses `wss://` on HTTPS pages.
+> The bundled scripts print this menu in Chinese; the table below describes each entry.
 
-### Source Code Deployment
+| # | Action | Description |
+| -- | -------- | ------------------------------------------------------ |
+| 1  | Start service | Starts over HTTP; the port comes from `PORT` in `.env` (default 3333) |
+| 2  | Backend only | Choose HTTP / HTTPS first; skips frontend artifact validation, suited to debugging frontend and backend separately |
+| 3  | Stop service | Stops by the recorded PID, and cleans up port occupants as a fallback |
+| 4  | Restart service | Stops, then starts again |
+| 5  | Status | Port listening, process PID, presence of the program and certificates |
+| 6  | Logs | Prints the last 50 lines of `log/backend.log` |
+| 7  | Issue SSL certificate | Self-signed for `localhost`, or Let's Encrypt for a public domain / public IP (the domain must resolve and port 80 must be reachable; private IPs fall back to self-signed) |
+| 8  | HTTPS start | Starts over HTTPS after the certificate has been issued |
+| 0  | Exit | Closes the menu window only; the background service keeps running — choose `3` to stop it |
 
-The `start-prod` scripts in the project root automatically detect dependencies, build on demand, and start the service.
+> Press Enter after each action to return to the menu.
 
-**Windows**:
+> **Issuing production certificates from the command line is not recommended**: Let's Encrypt issuance from menu `7` / `8` is fine for testing, but renewals and failed-validation troubleshooting are on you. For production, hand the domain to an edge service that issues and renews automatically — **Cloudflare, ESA, EdgeOne** — or use a panel such as **aaPanel, 1Panel** to apply and renew, then reverse-proxy to ZViewer's port 3333.
+
+### From Source
+
+```bash
+npm install             # Install dependencies
+npm run build           # Production build
+npm start               # Start
+```
+
+Or use the script that handles dependency installation, build and startup:
 
 ```powershell
-.\start-prod.bat              # Interactive menu
-.\start-prod.bat start        # Start (HTTP)
-.\start-prod.bat stop         # Stop service
-.\start-prod.bat status       # Check status
-.\start-prod.bat cert         # Issue SSL certificate
-.\start-prod.bat https        # Issue certificate + HTTPS start
+.\start-prod.bat start    # Windows
+./start-prod.sh start     # Linux / macOS
 ```
 
-**Linux / macOS**:
+Supported commands: `start` / `backend` / `stop` / `restart` / `status` / `logs` / `build` / `cert` / `https` / `help`.
 
-```bash
-./start-prod.sh               # Interactive menu
-./start-prod.sh start
-./start-prod.sh stop
-./start-prod.sh status
-```
+### Ports
 
-### Interactive Menu
-
-```
-========================================
-  ZViewer Service Manager
-========================================
-  1) Start Service (HTTP)
-  2) Start Backend Only (HTTP / HTTPS)
-  3) Stop Service
-  4) Restart Service
-  5) Check Status
-  6) View Logs
-  7) Issue SSL Certificate
-  8) HTTPS Start (Auto Certificate)
-  9) Build Frontend & Backend (Source)
-  0) Exit
-```
-
-### CLI Commands
-
-| Command | Description |
-|---|---|
-| `start` | Start service (HTTP; add `-Https` for HTTPS mode) |
-| `backend` | Start backend only (HTTP/HTTPS) |
-| `cert [host]` | Issue SSL certificate; interactive type selection if host omitted |
-| `https [host]` | Issue certificate + HTTPS start (backend serves all) |
-| `stop` / `restart` | Stop / restart service |
-| `status` | Check running status (PID, port listeners, certificate) |
-| `logs [backend\|frontend]` | View logs (default: backend) |
-| `build` | Build frontend & backend (source) |
-| `help` / `menu` | Help / interactive menu |
-
-### Access
-
-| Mode | URL |
-|------|-----|
-| HTTP | `http://localhost:3333` |
-| HTTPS | `https://localhost:3333` |
-
----
-
-## Ports
-
-| Service | Port | Description |
-|---|---|---|
-| Backend (unified entry) | 3333/tcp | HTTP/HTTPS API, WebSocket, frontend static files, SPA fallback, `/live` HTTP-FLV proxy |
-| LiveKit media (voice) | 3333/udp | WebRTC media transport (same port number as the page, different protocol) |
-| RTMP Push | 3334 | OBS push port (standalone; RTMP is a TCP binary protocol, cannot share with HTTP) |
-| HTTP-FLV Pull | 3335 | Internal port (Node Media Server), container-only, not exposed externally |
-| ICE/TCP direct | 3337/tcp | Direct-connect fallback for blocked UDP (admin "Voice Transport Mode = TCP") |
-| TURN/TLS relay | 3338/tcp | Relay fallback, enabled when `LIVEKIT_TURN_*` is fully configured. Independent from 3337 — both can run at the same time |
-
-In production mode, **only ports 3333 (tcp+udp) and 3334 are exposed externally**. Voice signaling goes through the `/rtc` reverse proxy on 3333 — no extra port needed. The backend handles API requests, frontend static resources, WebSocket, and reverse-proxies `/live` to the internal HTTP-FLV service.
-
----
-
-## HTTPS & Certificates
-
-### Certificate Types
-
-Certificate issuance is built into the backend binary (`zviewer-backend --gen-cert`, source at `scripts/generate-cert.js` + `backend/src/services/ssl/`); the issuance method is selected automatically based on the address type:
-
-| Address Type | Certificate | Description |
-|---|---|---|
-| `localhost` | Self-signed | SAN includes `localhost`, `127.0.0.1`, `::1`; 10-year validity |
-| Domain (e.g. `example.com`) | **Let's Encrypt CA-trusted** | Auto-request via built-in ACME client; no browser warning |
-| Public IP (e.g. `1.2.3.4`) | **Let's Encrypt CA-trusted** | Let's Encrypt supports IP certificates since 2025 (shortlived profile, ~6-day validity) |
-| Private IP (e.g. `192.168.1.1`) | Self-signed | SAN includes the IP |
-
-### CLI Usage
-
-```bash
-# localhost → self-signed certificate
-start.bat cert
-./start.sh cert
-
-# Domain → auto-request Let's Encrypt trusted certificate
-start.bat cert example.com
-./start.sh cert example.com
-
-# Public IP → auto-request Let's Encrypt trusted certificate
-start.bat cert 1.2.3.4
-
-# Private IP → self-signed certificate
-start.bat cert 192.168.1.1
-
-# Force re-issue
-start.bat cert example.com --force
-```
-
-Direct invocation (bypassing the start scripts):
-
-```bash
-zviewer-backend.exe --gen-cert example.com [--force] [--staging] [--email me@example.com]
-./zviewer-backend --gen-cert example.com [--force] [--staging] [--email me@example.com]
-```
-
-### Prerequisites for Let's Encrypt
-
-1. Domain resolves to your public IP, or the public IP is directly accessible.
-2. **Port 80** is open and firewall/security group allows it (ACME HTTP-01 challenge).
-3. Rate limit: 5 certificates per domain per week. Use `--staging` for testing.
-
-Certificate files are stored in `config/ssl/` (`cert.pem` chain, `key.pem` private key, `acme-account.key` ACME account key).
-
----
+| Port     | Purpose                                                         |
+| -------- | ------------------------------------------------------------ |
+| 3333/tcp | Unified entry: HTTP/HTTPS API, WebSocket, frontend pages, `/live` FLV proxy |
+| 3333/udp | LiveKit voice chat                                             |
+| 3334     | OBS push                                                     |
+| 3337/tcp | Voice TCP mode                                                |
 
 ## Docker Deployment
-
-The image bundles voice chat (the LiveKit companion binary ships with the image and is spawned automatically by the backend on startup). A single container provides all features — no separate LiveKit container needed.
-
-Docker images run in HTTP mode. The backend serves frontend static files. For HTTPS, add a reverse proxy (Nginx / Caddy) in front of the container.
-
-### docker run
 
 ```bash
 docker run -d \
@@ -306,295 +174,58 @@ docker run -d \
   zerowyc0721/zviewer:latest
 ```
 
-> Note: The update process replaces files inside the container (including `livekit-server`) then restarts the backend process in-place,
-> without restarting the whole container and without relying on a restart policy.
-> Keeping `--restart unless-stopped` is still recommended to recover from backend crashes (non-update exits).
-
-### Docker Compose
+Or with docker compose:
 
 ```yaml
 services:
   zviewer:
     image: zerowyc0721/zviewer:latest
     ports:
-      - "3333:3333"      # Unified entry (API + WebSocket + frontend + /live proxy + /rtc voice signaling)
-      - "3333:3333/udp"  # LiveKit WebRTC media (same port number, different protocol)
+      - "3333:3333"      # API + WebSocket + frontend + /live FLV proxy + /rtc voice signaling proxy
+      - "3333:3333/udp"  # LiveKit WebRTC media transport
       - "3334:3334"      # RTMP push (OBS)
-      # - "3337:3337"    # ICE/TCP media: uncomment when admin "Voice Transport Mode = TCP"
+      - "3337:3337"      # Voice TCP mode
     volumes:
       - zviewer-data:/app/config
     restart: unless-stopped
-
-volumes:
-  zviewer-data:
 ```
 
-- Image tags: `latest` and `X.Y` only move on official releases (pushing a `vX.Y.Z` tag), while `X.Y.Z` pins an exact version. `dev` tracks the latest `main` build and may be unstable — for testing only.
-- Voice chat works out of the box with zero configuration: the public IP is discovered automatically via LiveKit's native STUN, and signaling URLs are derived from the page origin (HTTPS pages get `wss://`). Media travels over 3333/udp; make sure your firewall allows it. When UDP is blocked by ISP/corporate firewalls, switch "Voice Transport Mode" to TCP in the admin panel (LiveKit native ICE/TCP 3337 direct-connect fallback; requires port 3337/tcp and the compose mapping).
-- **Advanced** (voice transport mode UDP/TCP switch, TURN/TLS fallback relay for blocked UDP, manual ICE address for complex NAT): see *Voice Advanced Configuration* in the extended tutorials.
-
-### Build Yourself
-
-```bash
-# Build artifacts first (backend binary + livekit-server + frontend)
-node build-all.js --linux
-docker build -t zviewer -f Dockerfile.linux-single .
-docker compose -f docker-compose.linux-single.yml up -d
-```
-
-### Access
-
-Visit `http://localhost:3333` for all features. OBS push URL: `rtmp://localhost:3334/live`.
-
-### Data Persistence
-
-Mount `/app/config` as a volume:
-
-| Path | Content |
-|---|---|
-| `/app/config/dev.sqlite` | Database |
-| `/app/config/ssl/` | SSL certificates |
-| `/app/config/uploads/` | User uploads |
-| `/app/config/media/` | NMS stream media segments |
-
----
-
-## GitHub Actions
-
-Automatic builds on every push to `main` or tag (`v*`):
-
-1. **Build Linux single-file** → upload artifact + push to Docker Hub (`zerowyc0721/zviewer`).
-2. **Build Windows single-file** → upload artifact.
-3. Tag pushes create a GitHub Release with both platform archives.
-
-### Version Management
-
-| Trigger | Version | Example |
-|---|---|---|
-| Tag `v1.0.0` | Release | `1.0.0` |
-| Push to `main` | Pre-release | `0.0.0-dev.a1b2c3d` |
-| Manual trigger | Manual build | `0.0.0-manual` |
-
-### Build Artifacts
-
-| Platform | Archive | Contents |
-|---|---|---|
-| Linux | `zviewer-linux-x64.tar.gz` | `zviewer-backend`, `livekit-server`, `start.sh` |
-| Windows | `zviewer-windows-x64.zip` | `zviewer-backend.exe`, `livekit-server.exe`, `start.bat` |
-| Docker | `zerowyc0721/zviewer:latest` | Docker image based on Linux single-file build (bundles LiveKit) |
-
-Builds target Node 26 (`node26-*-x64`). The `build-all.js` script downloads the LiveKit companion binary alongside the platform build; CI fails hard if the LiveKit download fails, guaranteeing voice capability in every artifact.
-
----
-
-## Local Development
-
-The project uses npm workspaces. Install all dependencies from the root:
-
-```bash
-# Install all dependencies
-npm install
-
-# Start both frontend and backend dev servers
-npm run dev
-
-# Or start separately
-npm run dev:backend
-npm run dev:frontend
-```
-
-Development ports:
-
-- Frontend: `http://localhost:5174` (Vite dev server, HMR)
-- Backend: `http://localhost:3333` (Express + TypeScript, hot reload)
-
-In development, Vite proxies `/api`, `/socket.io`, and `/live` requests to the backend.
-
-### Project Structure
-
-```
-ZViewer/
-├── backend/          # Express backend (TypeScript + TypeORM + sql.js)
-│   └── src/
-│       ├── routes/          # REST API routes
-│       ├── services/        # Business logic (Bilibili, proxy, update, etc.)
-│       ├── modules/         # Modular architecture (rooms, viewers, sync, etc.)
-│       ├── entities/        # TypeORM entities
-│       └── middleware/      # Auth middleware
-├── frontend/         # React frontend (Vite + Tailwind CSS)
-│   └── src/
-│       ├── pages/           # Page components
-│       ├── components/      # Shared UI components
-│       ├── modules/         # Feature modules
-│       └── store/           # Zustand state management
-├── docker/           # Docker entrypoint scripts
-├── packaging/        # Startup script templates
-├── dist/             # Build output
-└── build-all.js      # Single-file build script
-```
-
----
-
-## Voice Advanced Configuration
-
-The default deployment works with zero configuration: the public IP is discovered automatically via LiveKit's native STUN (requires outbound internet), and media connects over UDP directly. The options below are for special network environments.
-
-### Voice Transport Mode (UDP / TCP Switch)
-
-The admin panel "Basic Settings → Voice Transport Mode" switches the voice media channel. Saving automatically hot-restarts the voice service (ongoing calls drop briefly and reconnect):
-
-| Mode | livekit-server config | Deployment requirement |
-|---|---|---|
-| UDP (default) | `--udp-port 3333` | Allow 3333/udp |
-| TCP | `--udp-port 3333` + `LIVEKIT_RTC_TCP_PORT=3337` | Additionally allow 3337/tcp (the bundled compose already maps it) |
-
-TCP mode adds LiveKit's native ICE/TCP **direct connection**: the server advertises both UDP and TCP candidates, and the browser's ICE picks automatically — UDP direct connection when reachable, automatic fallback over 3337/tcp when UDP is blocked by ISP/corporate firewalls. The UDP channel stays on (LiveKit cannot disable UDP candidates); TCP mode adds a fallback rather than replacing UDP. The port can be overridden with `LIVEKIT_RTC_TCP_PORT`.
-
-TURN/TLS relay (3338/tcp) and ICE/TCP direct (3337/tcp) use **separate ports and can run at the same time**. With `LIVEKIT_TURN_*` configured, the browser gets three candidates and ICE picks automatically: UDP direct > TCP direct > TURN relay (the relay adds one hop, so it is slightly slower but penetrates the hardest networks — proxy TUN, multi-layer NAT, unreachable server IP). Firewalls must allow both TCP ports if you want both fallbacks.
-
-### TURN/TLS Fallback Relay
-
-Use case: the server or clients sit behind networks that **block UDP** (corporate firewalls, some campus networks), making STUN direct connections impossible.
-
-How it works: the browser connects to the server's TURN relay over **TCP 3338**, and media is forwarded through the relay. The address is a domain name (resolved via DNS), so no public IP is needed. UDP direct connections are still attempted in parallel — TURN is only a fallback and does not affect low-latency direct connections.
-
-The relay is enabled automatically when all three variables are set:
-
-```yaml
-# Append to docker-compose.linux-single.yml
-    ports:
-      - "3338:3338"      # TURN/TLS relay (TCP), coexists with 3337 ICE/TCP direct
-    environment:
-      - LIVEKIT_TURN_DOMAIN=zviewer.example.com
-      - LIVEKIT_TURN_CERT=/app/cert/live/zviewer.example.com/fullchain.pem
-      - LIVEKIT_TURN_KEY=/app/cert/live/zviewer.example.com/privkey.pem
-    volumes:
-      - /etc/letsencrypt:/app/cert:ro   # Mount host certificate directory
-```
-
-- The domain must match the certificate and resolve to this server
-- A **CA-issued certificate is required** (Let's Encrypt etc.) — self-signed certificates are not trusted by browser WebRTC
-- Set `LIVEKIT_TURN_EXTERNAL_TLS=true` when TLS is terminated by an external reverse proxy
-- The relay port is 3338 by default and can be changed with `LIVEKIT_TURN_TLS_PORT` (e.g. the upstream default `5349`); it must then be mapped in compose and must differ from `LIVEKIT_RTC_TCP_PORT` (same port cannot be bound twice)
-
-### Manual ICE Address (`LIVEKIT_NODE_IP`)
-
-When STUN discovery fails (fully offline intranet deployment, unusual NAT), ICE would advertise unreachable internal addresses. In that case, specify the server's public IP manually:
-
-```yaml
-    environment:
-      - LIVEKIT_NODE_IP=203.0.113.10   # Host public IP; use the v6 address for direct IPv6 scenarios
-```
-
-An explicit value takes the highest priority (STUN auto-discovery is skipped when set).
-
-## Environment Variables
-
-### Backend
-
-| Variable | Description | Default |
-|---|---|---|
-| `PORT` | Backend service port | `3333` |
-| `HOST` | Listen address | (dual-stack) |
-| `NODE_ENV` | Environment | `production` |
-| `DATABASE_URL` | SQLite file path or PostgreSQL connection string | `<config>/dev.sqlite` |
-| `CONFIG_DIR` | Data root directory | `<project-root>/config` |
-| `CORS_ORIGIN` | Allowed CORS origins (comma-separated) | `*` |
-| `JWT_ACCESS_SECRET` | Access Token secret (must change in production) | — |
-| `JWT_REFRESH_SECRET` | Refresh Token secret (must change in production) | — |
-| `JWT_ACCESS_EXPIRES_IN` | Access Token expiry | `15m` |
-| `JWT_REFRESH_EXPIRES_IN` | Refresh Token expiry | `7d` |
-| `RTMP_PORT` | RTMP push port | `3334` |
-| `HTTP_FLV_PORT` | HTTP-FLV pull port (internal) | `3335` |
-| `LIVEKIT_EXTERNAL` | `1` skips the bundled LiveKit and uses an external service | `0` |
-| `LIVEKIT_BIND` | Bundled LiveKit listen address | `::` (dual-stack) |
-| `LIVEKIT_NODE_IP` | ICE advertised address; leave empty to enable LiveKit's native STUN external IP discovery (requires outbound internet), set manually for complex NAT | (auto) |
-| `LIVEKIT_RTC_TCP_PORT` | ICE/TCP direct port (opened when admin "Voice Transport Mode = TCP") | `3337` |
-| `LIVEKIT_TURN_TLS_PORT` | TURN/TLS relay port (independent from the item above — both can run at the same time) | `3338` |
-| `LIVEKIT_TURN_DOMAIN` | TURN/TLS domain (enables the TCP 3338 relay when set together with CERT/KEY; domain-based addressing needs no public IP) | — |
-| `LIVEKIT_TURN_CERT` | TURN TLS certificate path (CA-issued required; self-signed is not trusted by browser WebRTC) | — |
-| `LIVEKIT_TURN_KEY` | TURN TLS private key path | — |
-
-### Frontend Build
-
-| Variable | Description | Default |
-|---|---|---|
-| `VITE_API_URL` | API / Socket.IO base URL; leave empty for `window.location.origin` | — |
-| `VITE_FLV_BASE_URL` | OBS streaming HTTP-FLV pull base URL | — |
-
----
-
-## Permission Model
-
-Four-tier permission system:
-
-| Role | Description | Permissions |
-|---|---|---|
-| `root` | Super admin | Create/control/delete any room, approve users, change roles, admin panel |
-| `admin` | Admin | Create rooms, full control of own rooms, cannot delete others' rooms |
-| `user` | Regular user | Join rooms, watch, send comments and danmaku; cannot create rooms |
-| `guest` | Guest | Join rooms, watch, send comments and danmaku; cannot create rooms |
-
-New users register as `guest` with `pending` status. Only `root` can approve users in the admin panel, upgrading them to `user`.
-
----
-
-## Video Sources
-
-### Bilibili
-
-Parse BV/AV video links, with quality switching and premium content support. Configure Bilibili credentials in the admin panel for premium quality. Supports ZViewerCLI for local cookie-based high-quality streaming.
-
-### Direct Links & Mounts
-
-- **MP4 Direct Link**: Input a direct MP4 URL to play.
-- **WebDAV / FTP / OpenList**: Save connection configurations in mount management, browse directories, and play video files.
-
----
-
-## ZViewerCLI
-
-[ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) is an optional local proxy client that solves the browser's inability to use user Bilibili cookies and high-quality addresses:
-
-- Uses local user cookies to parse Bilibili videos, obtaining premium high-quality addresses.
-- Proxies video stream requests locally, injecting correct Referer/Origin/User-Agent headers to bypass CDN hotlink protection and CORS restrictions.
-- Registers with the room via WebSocket; the frontend auto-detects and uses the local proxy.
-
----
-
-## FAQ
-
-### Self-signed certificate shows "Not Secure"
-
-`localhost` and private IPs use self-signed certificates. Solutions:
-
-- Import `config/ssl/cert.pem` into the client's "Trusted Root Certification Authorities"; or
-- Use a domain or public IP with Let's Encrypt for a trusted certificate.
-
-### WebSocket connection fails
-
-Ensure your reverse proxy (Nginx, etc.) is properly configured with WebSocket upgrade headers:
-
-```nginx
-proxy_http_version 1.1;
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection "upgrade";
-```
-
-### WebRTC connection fails
-
-`getUserMedia` requires HTTPS. Configure SSL in production. If both peers are behind strict NAT, consider deploying a TURN server (e.g., coturn).
-
-### Database
-
-The backend uses TypeORM + sql.js (WASM-based SQLite) — pure JS, no native modules. The single-file build runs on any platform without compilation. The database file is standard SQLite format (`config/dev.sqlite`), readable with any SQLite tool.
-
-### Bilibili parse failure
-
-- Check that the backend sends the correct Referer and other headers.
-- Thumbnails and video URLs are fetched via the backend proxy to avoid CORS and hotlink protection issues.
-- Premium content requires valid Bilibili credentials in the admin panel, or use ZViewerCLI.
-
-### Update mechanism
-
-The system supports automatic update detection from GitHub Releases and manual upload of update archives (zip/tar.gz). The admin panel controls whether to accept pre-release (main branch) updates.
+- Replace `zviewer-data` with your actual data directory
+- Image tags: `latest` and `X.Y` only move when an official release is published (a `vX.Y.Z` tag is pushed), while `X.Y.Z` pins an exact version; `dev` follows the latest `main` build and may be unstable — for early testing only
+- The image starts in HTTP mode; HTTPS is up to you: an edge service such as Cloudflare, ESA or EdgeOne, or a panel such as aaPanel / 1Panel that issues and renews certificates, reverse-proxied to 3333 (issuing production certificates from the command line is not recommended)
+- `/app/config` holds the database (`dev.sqlite`), certificates (`ssl/`), uploads (`uploads/`) and stream segments (`media/`)
+- Web-based updates remain available in Docker mode
+
+## Deployment Configuration
+
+### Environment Variables
+
+| Variable                       | Description                                    | Default                     |
+| ------------------------ | ------------------------------------- | ----------------------- |
+| `PORT`                   | Backend port                                  | `3333`                  |
+| `HOST`                   | Listen address                                  | empty (dual-stack)                   |
+| `CONFIG_DIR`             | Data root directory                                 | `<project-root>/config` |
+| `DATABASE_URL`           | SQLite path or PostgreSQL connection string             | `<config>/dev.sqlite`   |
+| `CORS_ORIGIN`            | CORS origins, comma-separated                          | `*`                     |
+| `JWT_ACCESS_SECRET`      | Access secret (must be changed in production)                     | —                       |
+| `JWT_REFRESH_SECRET`     | Refresh secret (must be changed in production)                    | —                       |
+| `RTMP_PORT`              | RTMP push port                             | `3334`                  |
+| `HTTP_FLV_PORT`          | FLV pull port (internal)                          | `3335`                  |
+| `LIVEKIT_EXTERNAL`       | `1` uses an external LiveKit and skips the bundled one               | `0`                     |
+| `LIVEKIT_NODE_IP`        | ICE advertised address; set the public IP manually for complex NAT or no outbound internet       | empty (automatic STUN)             |
+| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP direct port (enabled when voice transport mode = TCP)        | `3337`                  |
+| `LIVEKIT_TURN_TLS_PORT`  | TURN/TLS relay port (separate from 3337, both can run at once)       | `3338`                  |
+| `LIVEKIT_TURN_DOMAIN`    | TURN/TLS domain                           | —                       |
+| `LIVEKIT_TURN_CERT`      | TURN TLS certificate path                         | —                       |
+| `LIVEKIT_TURN_KEY`       | TURN TLS private key path                         | —                       |
+
+### Voice Transport
+
+- Audio uses 3333/udp by default, so the firewall must allow it; you can switch to TCP in the admin panel, which additionally opens 3337/tcp for direct connections
+- Once all three `LIVEKIT_TURN_*` variables are set, a TURN/TLS relay is also opened on 3338/tcp (a CA-issued certificate is required; this penetrates proxies and multi-layer NAT best). 3337 and 3338 are two independent channels that can coexist, and the client picks automatically: UDP direct > TCP direct > TURN relay
+- When STUN discovery fails on a pure intranet or unusual NAT, set `LIVEKIT_NODE_IP` to the server's public IP
+- To use the TURN/TLS relay, configure `LIVEKIT_TURN_DOMAIN` / `LIVEKIT_TURN_CERT` / `LIVEKIT_TURN_KEY` (the compose file already maps `3338:3338`, and 3338/tcp must be allowed through the firewall)
+
+## Windows Desktop Console (Optional)
+
+Windows users can build the native directory GUI (Go + system WebView2 — no runtime to install, no Electron dependency). Double-click the single `ZViewerDesktop.exe` in the distribution folder to open the console; the runtime sits in the sibling `runtime/` directory. The console provides a system tray, local HTTPS, self-hosted FRP, a persistable listen port, and in-window configuration plus QR-code login for the ZViewerCLI high-quality proxy. See [desktop/README.md](desktop/README.md) for build and usage steps; the existing web UI and command-line source workflows stay compatible.
