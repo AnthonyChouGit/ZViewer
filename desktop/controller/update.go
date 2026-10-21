@@ -9,8 +9,6 @@ package controller
 import (
 	"archive/zip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -187,7 +185,6 @@ func (c *Controller) CheckUpdate(force bool) UpdateReport {
 		c.update.Asset = asset.Name
 		c.update.Size = asset.Size
 		c.updateURL, c.updateFallbackURL = downloadCandidates(asset, usedProxy)
-		c.updateSum = checksumURL(info.Assets, usedProxy)
 		c.update.Progress = 0
 	}
 	report := c.update
@@ -224,18 +221,18 @@ func (c *Controller) StartUpdateDownload() (UpdateReport, error) {
 	c.update.Progress = 0
 	c.update.Error = ""
 	c.update.Path = target
-	link, fallback, size, sum := c.updateURL, c.updateFallbackURL, c.update.Size, c.updateSum
+	link, fallback, size := c.updateURL, c.updateFallbackURL, c.update.Size
 	report = c.update
 	c.updateMu.Unlock()
 	c.emit()
 
-	go c.downloadUpdate(link, fallback, target, size, sum, c.update.Asset)
+	go c.downloadUpdate(link, fallback, target, size)
 	return report, nil
 }
 
 // downloadUpdate 流式下载并校验，成功后才把状态推进到 ready。
 // 首选地址失败（例如反代不可用）时用回退地址再试一次，两次都失败才算失败。
-func (c *Controller) downloadUpdate(link, fallback, target string, size int64, sum, asset string) {
+func (c *Controller) downloadUpdate(link, fallback, target string, size int64) {
 	progress := func(done, total int64) {
 		value := 0
 		if total > 0 {
@@ -257,9 +254,6 @@ func (c *Controller) downloadUpdate(link, fallback, target string, size int64, s
 	}
 	if err == nil {
 		err = verifyUpdatePackage(target)
-	}
-	if err == nil {
-		err = verifyChecksum(target, sum, asset)
 	}
 	c.updateMu.Lock()
 	c.updateBusy = false
@@ -452,85 +446,6 @@ func publicHost(host string) bool {
 		return true
 	}
 	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast())
-}
-
-// checksumURL 找到发布页附带的 SHA256SUMS.txt，拿不到时返回空串（跳过校验）。
-func checksumURL(assets []releaseAsset, prefix string) string {
-	for _, asset := range assets {
-		if strings.EqualFold(asset.Name, "SHA256SUMS.txt") {
-			if prefix != "" {
-				return proxyURL(prefix, asset.URL)
-			}
-			return assetDownloadURL(asset)
-		}
-	}
-	return ""
-}
-
-// verifyChecksum 与发布页的 SHA256 比对；没有校验文件时放行，只有明确不一致才拦截。
-func verifyChecksum(pkg, sumURL, name string) error {
-	if sumURL == "" || name == "" {
-		return nil
-	}
-	text, err := fetchText(sumURL)
-	if err != nil {
-		return nil
-	}
-	expected := ""
-	for _, line := range strings.Split(text, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[1] == name {
-			expected = strings.ToLower(fields[0])
-			break
-		}
-	}
-	if expected == "" {
-		return nil
-	}
-	actual, err := fileSHA256(pkg)
-	if err != nil {
-		return err
-	}
-	if actual != expected {
-		return errors.New("安装包校验值与发布页不一致")
-	}
-	return nil
-}
-
-func fetchText(link string) (string, error) {
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, link, nil)
-	if err != nil {
-		return "", err
-	}
-	request.Header.Set("Accept", "application/octet-stream")
-	request.Header.Set("User-Agent", "ZViewerDesktop")
-	client := &http.Client{Timeout: 15 * time.Second}
-	response, err := client.Do(request)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("校验文件返回 %d", response.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
-}
-
-func fileSHA256(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	digest := sha256.New()
-	if _, err := io.Copy(digest, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 // downloadFile 写入临时文件，完成后原子改名；回调用于进度。

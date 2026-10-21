@@ -91,7 +91,6 @@ Release 中的 `ZViewer-Windows-<版本>-x64.zip` 是原生桌面控制台（Go 
 
 - 解压后双击 `ZViewerDesktop.exe`；关闭窗口默认收起到系统托盘
 - 运行包在解压目录的 `runtime/`，首次启动会在其中生成 `.env` 与 `config`
-- `SHA256SUMS.txt` 给出 ZIP 与 EXE 的校验值
 - 分发包不带高画质代理 CLI，需要时把 `zviewer-cli-windows-amd64.exe` 放进 `runtime/`
 
 构建与调试方式见 `desktop/README.md`。

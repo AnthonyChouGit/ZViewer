@@ -67,7 +67,7 @@ npm --prefix desktop run preview   # http://127.0.0.1:17839
 ```powershell
 npm --prefix desktop run shell:dist -- --skip-cli   # 离线或已有 CLI 副本时，直接复用本机那份
 npm --prefix desktop run shell:dist                 # 首次会构建 CLI，耗时较长
-npm --prefix desktop run package                    # 打包成 ZIP 并输出 SHA256
+npm --prefix desktop run package                    # 打包成 ZIP
 ```
 
 CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里找它）。缺少时 `shell:dist` 会直接报错，可用 `ZVIEWER_CLI_EXE=<路径>` 指定已有二进制；确实要打不含高画质代理的包时加 `--allow-missing-cli`，清单里 `cli` 记为 `null`。复用未校验副本时，`BUILD-MANIFEST.json` 会写 `verified: false` 与来源路径。
@@ -160,7 +160,7 @@ Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解
 
 - 检查：读取 GitHub Release 的最新正式版，与当前版本按数字段比较；预发布版本不参与，因此 main 分支的 `latest` 预发布不会被提示为更新。
 - 前置反代：弹窗里可开“使用前置反代”，把检查和下载都拼在一个前缀式反代后面，默认 `https://gh-proxy.com`，可改成 `https://ghproxy.net` 等服务商，配置项为 `updateProxy` / `updateProxyUrl`。启用时检查请求走 `<前缀>/https://api.github.com/...`，下载首选 `<前缀>/<github.com 直链>`、回退 `api.github.com` 资产端点；反代检查失败会自动退回直连，下载失败也会换回退地址重试一次。只接受 `https://` 前缀，域名会加入下载白名单，未启用时只允许 GitHub 官方域。
-- 下载：默认走 `api.github.com` 的资产端点（直连 `github.com` 在部分网络下会超时），流式写入配置目录 `updates/<版本>/`，期间控制台照常可用；下载完成后核对文件大小、ZIP 结构与 `SHA256SUMS.txt` 摘要，通过才标记为待安装。
+- 下载：默认走 `api.github.com` 的资产端点（直连 `github.com` 在部分网络下会超时），流式写入配置目录 `updates/<版本>/`，期间控制台照常可用；下载完成后核对文件大小与 ZIP 结构，通过才标记为待安装。
 - 安装：点击“重启并安装”时先在更新目录写好 PowerShell 脚本并启动，再正常退出控制台（受管服务一并停止）；脚本等待本进程结束，解压覆盖运行目录并重新启动 `ZViewerDesktop.exe`。覆盖失败会记入同目录 `apply.log`，此时界面已退出，需要手动处理。
 - 运行目录必须可写（便携包默认如此）。放进 `Program Files` 等受保护目录时覆盖会失败，建议解压到用户目录。
 

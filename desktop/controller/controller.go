@@ -118,7 +118,6 @@ type Controller struct {
 	updateURL  string
 	// updateFallbackURL 是反代不可用时的备用下载地址，为空表示没有备用。
 	updateFallbackURL string
-	updateSum         string
 
 	operation   int32
 	livekitMu   sync.Mutex

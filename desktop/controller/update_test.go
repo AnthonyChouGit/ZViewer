@@ -28,7 +28,7 @@ func TestCompareVersions(t *testing.T) {
 func TestPickUpdateAsset(t *testing.T) {
 	assets := []releaseAsset{
 		{Name: "zviewer-windows-x64.zip", Size: 1},
-		{Name: "SHA256SUMS.txt", Size: 1},
+		{Name: "release-notes.txt", Size: 1},
 		{Name: "zviewer-windows-x64-GUI.zip", Size: 2048},
 	}
 	asset, ok := pickUpdateAsset(assets)

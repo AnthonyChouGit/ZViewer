@@ -3,7 +3,6 @@
 输入是 `node desktop/scripts/build-dist.mjs` 产出的目录，入口名以 BUILD-MANIFEST.json 的 entry 为准
 （壳改名时不需要动这里）。
 """
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -37,13 +36,4 @@ with zipfile.ZipFile(archive) as output:
     failure = output.testzip()
     if failure:
         raise SystemExit(f'ZIP CRC verification failed: {failure}')
-def sha256(file):
-    with file.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
-checksums = [(sha256(file), file.relative_to(release).as_posix()) for file in [archive, entry]]
-checksum_file = release / 'SHA256SUMS.txt'
-existing = checksum_file.read_text(encoding='ascii').splitlines() if checksum_file.exists() else []
-names = {name for _, name in checksums}
-existing = [line for line in existing if line.split('  ', 1)[-1] not in names]
-checksum_file.write_text('\n'.join(existing + [f'{digest}  {name}' for digest, name in checksums]) + '\n', encoding='ascii')
-print(json.dumps({'archive': str(archive), 'version': version, 'bytes': archive.stat().st_size, 'files': len(files), 'crc': 'passed', 'sha256': checksums[0][0]}, indent=2))
+print(json.dumps({'archive': str(archive), 'version': version, 'bytes': archive.stat().st_size, 'files': len(files), 'crc': 'passed'}, indent=2))
