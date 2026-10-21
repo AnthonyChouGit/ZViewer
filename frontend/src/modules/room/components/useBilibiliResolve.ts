@@ -19,7 +19,11 @@ import { resolveBilibili } from '@/modules/movie-source/resolveSource'
 import { resolveBilibiliWithOptions } from '@/modules/bilibili/bilibiliApi'
 import { getActiveCliProxyUrl } from '@/modules/movie-source/resolver'
 import { resolveBilibiliWithCliFallback } from '@/modules/bilibili/resolveWithCliFallback'
-import { getHdrSupport, isHdrQn } from '@/modules/player/hdr-capability'
+import {
+  getHdrSupport,
+  hdrUnsupportedMessage,
+  isHdrQn,
+} from '@/modules/player/hdr-capability'
 import type { ResolvedSource } from '@/modules/movie-source/resolveSource'
 
 interface UseBilibiliResolveParams {
@@ -144,9 +148,7 @@ export function useBilibiliResolve({
 
     // HDR 档位需要 HEVC Main10 解码能力，本机不支持时保持原档位并提示
     if (isHdrQn(qn) && getHdrSupport() === 'none') {
-      message.warning(
-        '本机无法解码 HDR（需要 HEVC 10bit 硬件解码），已保持当前清晰度'
-      )
+      message.warning(hdrUnsupportedMessage())
       return
     }
 

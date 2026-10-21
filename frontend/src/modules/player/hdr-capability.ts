@@ -2,13 +2,16 @@
  * 视频解码 / HDR 能力探测。
  *
  * 目标：
- * 1. 起播前判断当前浏览器（含 Wails 的 WebView2）能否解码目标编码，
+ * 1. 起播前判断当前浏览器能否解码目标编码，
  *    避免 HDR（HEVC Main10）在不支持的设备上黑屏；
- * 2. 给清晰度列表提供「本机不支持」标注所需的结论。
+ * 2. 给清晰度列表提供「HDR 档位为何不可用」的标注结论。
  *
  * 说明：`isTypeSupported` 返回 false 时，MSE 必然无法 append，属于硬结论；
  * 返回 true 只代表可解码，是否真正以 HDR 呈现还取决于显示器与系统 HDR 开关，
  * 这一层不做拦截（避免误伤 SDR 显示器上的正常播放）。
+ *
+ * 播放器网页由后端托管、在系统默认浏览器中打开（桌面壳只做服务启停与控制台），
+ * 所以这里探测的始终是这个浏览器的能力。
  */
 
 export type HdrSupportLevel = 'full' | 'decode' | 'none'
@@ -111,13 +114,37 @@ export function isHdrQn(qn?: number): boolean {
   return qn === 125 || qn === 126
 }
 
+export type HdrUnsupportedReason = 'browser' | 'device'
+
+/** Firefox 的 MSE 没有 HEVC 解码，是唯一常见的内核级不支持 */
+function isFirefox(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /firefox\/|fxios\//i.test(navigator.userAgent)
+}
+
 /**
- * 清晰度选项的「本机不支持」后缀。
- * 仅在明确无法解码时返回文案，其余返回空串。
+ * HDR 档位不可用的原因：
+ * - `browser`：浏览器内核不支持 HEVC（Firefox），换 Edge / Chrome 即可；
+ * - `device`：浏览器支持 HEVC，但本机缺少 HEVC 10bit 硬解；
+ * - `null`：可解码，无需提示（显示器是否开启 HDR 不在拦截范围）。
  */
-export function unsupportedHdrHint(qn?: number): string {
-  if (!isHdrQn(qn)) return ''
-  return getHdrSupport() === 'none' ? '本机不支持' : ''
+export function getHdrUnsupportedReason(): HdrUnsupportedReason | null {
+  if (getHdrSupport() !== 'none') return null
+  return isFirefox() ? 'browser' : 'device'
+}
+
+/** 清晰度选项后缀（不含括号）；可用时返回空串 */
+export function hdrUnsupportedLabel(): string {
+  const reason = getHdrUnsupportedReason()
+  if (!reason) return ''
+  return reason === 'browser' ? '需换用 Edge/Chrome' : '本机不支持'
+}
+
+/** 选中不可用 HDR 档位时的提示文案 */
+export function hdrUnsupportedMessage(): string {
+  return getHdrUnsupportedReason() === 'browser'
+    ? '当前浏览器无法解码 HDR，请用 Edge 或 Chrome 打开'
+    : '本机无法解码 HDR，已保持当前清晰度'
 }
 
 /** 测试/热更新用：清空探测缓存 */

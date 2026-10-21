@@ -144,7 +144,7 @@ export function filterQualitiesByVip(
  * - 会员：DASH + HDR + 4K（208）
  * - qn=127：额外启用 8K 位（1024）
  * - qn=126：额外启用杜比视界位（512），仅当调用方显式允许（默认关闭，
- *   因为 Chromium/WebView2 无法解码 DoVi，暴露即黑屏）
+ *   因为 Chromium 内核浏览器无法解码 DoVi，暴露即黑屏）
  * - 编码偏好 av1：额外启用 AV1 位（2048）
  *
  * 杜比音频位（256）不单独请求：Android/iOS 端才常用，且 dash.dolby 会随

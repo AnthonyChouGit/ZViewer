@@ -37,7 +37,12 @@ import {
   getBilibiliParseOptions,
 } from '@/modules/bilibili/parseOptions'
 import { useCliAgentStore } from '@/store/cliAgentStore'
-import { getHdrSupport, isHdrQn } from '@/modules/player/hdr-capability'
+import {
+  getHdrSupport,
+  hdrUnsupportedLabel,
+  hdrUnsupportedMessage,
+  isHdrQn,
+} from '@/modules/player/hdr-capability'
 import { getEmbyApiMovieSource, resolveEmby } from '@/modules/emby/embyApi'
 import { resolveJellyfin } from '@/modules/jellyfin/jellyfinApi'
 import type { EmbyVersionInfo } from '@/modules/emby/types'
@@ -276,9 +281,7 @@ export function MovieListPanel({
     // HDR 档位需要 HEVC Main10 解码能力。本机 MSE 明确不支持时直接拦截，
     // 避免切过去黑屏（保持当前档位即等价于回退）。
     if (isHdrQn(qn) && getHdrSupport() === 'none') {
-      message.warning(
-        '本机无法解码 HDR（需要 HEVC 10bit 硬件解码），已保持当前清晰度'
-      )
+      message.warning(hdrUnsupportedMessage())
       return
     }
 
@@ -990,7 +993,7 @@ function BilibiliQualitySelect({
     isHost || (parsePrefs.cliEnabled && cliAgentAvailable)
 
   // HDR 档位在本机无法解码时给出后缀标注（仍可展开查看，选中时拦截并提示）
-  const hdrUnsupported = getHdrSupport() === 'none'
+  const hdrLabel = hdrUnsupportedLabel()
 
   return (
     <>
@@ -1003,8 +1006,7 @@ function BilibiliQualitySelect({
         options={movie.acceptQuality.map((q) => {
           const base = q.resolution ? `${q.label} · ${q.resolution}` : q.label
           return {
-            label:
-              hdrUnsupported && isHdrQn(q.id) ? `${base}（本机不支持）` : base,
+            label: hdrLabel && isHdrQn(q.id) ? `${base}（${hdrLabel}）` : base,
             value: String(q.id),
           }
         })}

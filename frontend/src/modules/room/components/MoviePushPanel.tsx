@@ -14,7 +14,7 @@ import { Text, Paragraph } from '@/components/ui/Typography'
 import { Modal } from '@/components/ui/Modal'
 import { Tag } from '@/components/ui/Tag'
 import { formatDuration } from '@/lib/utils'
-import { getHdrSupport, isHdrQn } from '@/modules/player/hdr-capability'
+import { hdrUnsupportedLabel, isHdrQn } from '@/modules/player/hdr-capability'
 
 import { message } from '@/components/ui/message'
 import { useRoomStore } from '@/store/roomStore'
@@ -1491,10 +1491,11 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
                     const base = q.resolution
                       ? `${q.label} · ${q.resolution}`
                       : q.label
+                    const hdrLabel = hdrUnsupportedLabel()
                     return {
                       label:
-                        getHdrSupport() === 'none' && isHdrQn(q.id)
-                          ? `${base}（本机不支持）`
+                        hdrLabel && isHdrQn(q.id)
+                          ? `${base}（${hdrLabel}）`
                           : base,
                       value: String(q.id),
                     }
