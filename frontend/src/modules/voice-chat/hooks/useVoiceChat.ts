@@ -98,6 +98,9 @@ function getVoicePeerConnections(room: Room): RTCPeerConnection[] {
   return out
 }
 
+/** 媒体通道（ICE）建立失败判定窗口：超过仍未连通即提示，不再傻等 */
+const MEDIA_WATCHDOG_TIMEOUT_MS = 10_000
+
 export interface UseVoiceChatOptions {
   roomId: string | undefined
   username?: string
@@ -116,6 +119,12 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
   const [micVolume, setMicVolumeState] = useState(1)
   /** 当前语音媒体传输协议（ICE 选中线路；未连接/未探测到时为 null） */
   const [transport, setTransport] = useState<VoiceTransport | null>(null)
+  /**
+   * 媒体通道是否真正建立（ICE connected）。
+   * room.connect() 成功只代表信令通了——ICE 全部失败时（典型如代理/VPN
+   * 吞掉 UDP）成员列表照常显示但无声可听，面板据此区分「已加入」与「已连通」。
+   */
+  const [mediaConnected, setMediaConnected] = useState(false)
 
   const [selfId, setSelfId] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
@@ -140,6 +149,51 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
   >(new Map())
   const globalVolumeRef = useRef(1)
   const peerVolumesRef = useRef<Map<string, number>>(new Map())
+
+  // ==================== 媒体通道监看（ICE watchdog） ====================
+
+  const watchdogTimerRef = useRef<number | null>(null)
+
+  const clearMediaWatchdog = useCallback(() => {
+    if (watchdogTimerRef.current !== null) {
+      clearInterval(watchdogTimerRef.current)
+      watchdogTimerRef.current = null
+    }
+  }, [])
+
+  /**
+   * 监看媒体通道：周期检查 publisher/subscriber 的 ICE 状态，
+   * 任一 PC 进入 connected/completed 即视为连通；超过窗口仍未连通则
+   * 提示失败（不再依赖 SDK 默认 15s 超时后只在控制台留痕）。加入与
+   * 断线重连（Reconnecting）时各布防一次。
+   */
+  const armMediaWatchdog = useCallback(
+    (room: Room) => {
+      clearMediaWatchdog()
+      const startedAt = Date.now()
+      watchdogTimerRef.current = window.setInterval(() => {
+        const connected = getVoicePeerConnections(room).some(
+          (pc) =>
+            pc.connectionState === 'connected' ||
+            pc.iceConnectionState === 'connected' ||
+            pc.iceConnectionState === 'completed'
+        )
+        if (connected) {
+          clearMediaWatchdog()
+          setMediaConnected(true)
+          return
+        }
+        if (Date.now() - startedAt > MEDIA_WATCHDOG_TIMEOUT_MS) {
+          clearMediaWatchdog()
+          setMediaConnected(false)
+          message.warning('媒体通道未建立，请检查网络（可尝试关闭代理/VPN）', {
+            duration: 8000,
+          })
+        }
+      }, 500)
+    },
+    [clearMediaWatchdog]
+  )
 
   // ==================== 播放与音量 ====================
 
@@ -233,6 +287,7 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
 
   /** 释放全部本地媒体资源（幂等） */
   const teardown = useCallback(() => {
+    clearMediaWatchdog()
     micTrackRef.current = null
     for (const id of Array.from(remoteRef.current.keys())) cleanupRemote(id)
     try {
@@ -253,12 +308,13 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
       monitorAudioRef.current = null
     }
     setAudioLevels(new Map())
-  }, [cleanupRemote])
+  }, [cleanupRemote, clearMediaWatchdog])
 
   const leave = useCallback(() => {
     roomRef.current?.disconnect()
     teardown()
     setJoined(false)
+    setMediaConnected(false)
     setMembers([])
     setVoiceMutedIds(new Set())
     setMonitorEnabled(false)
@@ -366,14 +422,27 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
             }
           }
         )
+        .on(RoomEvent.Reconnecting, () => {
+          // 断线重连：媒体通道先判失效，重连成功由监看重新置回；
+          // 10s 内未恢复则同样给出失败提示
+          setMediaConnected(false)
+          armMediaWatchdog(room)
+        })
         .on(RoomEvent.Disconnected, () => {
           // 服务器踢出/房间关闭：SDK 已断开，仅复位 UI
+          clearMediaWatchdog()
           setJoined(false)
+          setMediaConnected(false)
           setMembers([])
           setTransport(null)
         })
 
-      await room.connect(data.url, data.token)
+      await room.connect(data.url, data.token, {
+        // 媒体建连超时由 SDK 默认 15s 收紧到 10s，与监看窗口一致
+        peerConnectionTimeout: MEDIA_WATCHDOG_TIMEOUT_MS,
+      })
+      // connect() 只保证信令建立，ICE 是否连通交给监看判定
+      armMediaWatchdog(room)
       await room.localParticipant.publishTrack(track, {
         source: Track.Source.Microphone,
         // 高音质发布档：SDK 默认按语音会议档（~24-32kbps+DTX）编码，
@@ -391,14 +460,25 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
       setMicEnabled(track.enabled)
     } catch (err) {
       console.error('[voice] join error:', err)
-      message.error(err instanceof Error ? err.message : '加入语音聊天失败')
+      // 媒体建连超时（peerConnectionTimeout）的原始报错是英文
+      // "connection timeout"，换成可读文案
+      const raw = err instanceof Error ? err.message : ''
+      message.error(
+        /timeout/i.test(raw)
+          ? '语音媒体连接超时，请检查网络后重试'
+          : err instanceof Error
+            ? err.message
+            : '加入语音聊天失败'
+      )
       teardown()
     } finally {
       setJoining(false)
     }
   }, [
+    armMediaWatchdog,
     attachRemote,
     cleanupRemote,
+    clearMediaWatchdog,
     joining,
     joined,
     micEnabled,
@@ -581,6 +661,7 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
   // 卸载兜底（AudioContext.close 二次关闭走 Promise 拒绝，须显式 catch）
   useEffect(() => {
     return () => {
+      clearMediaWatchdog()
       try {
         void roomRef.current?.disconnect()
       } catch {
@@ -591,12 +672,14 @@ export function useVoiceChat({ roomId, username }: UseVoiceChatOptions) {
       levelsCtxRef.current?.close().catch(() => {})
       levelsCtxRef.current = null
     }
-  }, [])
+  }, [clearMediaWatchdog])
 
   return {
     joined,
     joining,
     micEnabled,
+    /** 媒体通道是否真正建立（ICE connected）；join 成功但 ICE 失败时为 false */
+    mediaConnected,
     /** 自己的成员 id（LiveKit identity），面板用它判定“我” */
     selfId,
     members,

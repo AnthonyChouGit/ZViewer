@@ -46,6 +46,7 @@ export function VoiceChatPanel({
     joined,
     joining,
     micEnabled,
+    mediaConnected,
     selfId,
     members,
     transport,
@@ -99,11 +100,18 @@ export function VoiceChatPanel({
         className="mb-2"
         subtitle={
           <div className="flex items-center gap-1.5">
+            {/* 媒体未连通时明确显示「连接中」而不是人数——connect 成功不等于
+                ICE 连通（代理/UDP 被拦时成员列表照常，但无声），避免误导 */}
             <span className="text-[10px] uppercase tracking-wide text-[var(--md-sys-color-on-surface-variant)]">
-              {joined ? `${memberCount} 人在线` : '未连接'}
+              {joined
+                ? mediaConnected
+                  ? `${memberCount} 人在线`
+                  : '媒体连接中…'
+                : '未连接'}
             </span>
-            {/* 媒体传输协议徽标：ICE 选中线路（UDP 直连 / TCP 兜底），周期实测非配置值 */}
-            {joined && transport && (
+            {/* 媒体传输协议徽标：ICE 选中线路（UDP 直连 / TCP 兜底），周期实测非配置值；
+                媒体未连通时无有效线路可测，一并隐藏 */}
+            {joined && mediaConnected && transport && (
               <span
                 className="rounded-full px-1.5 py-px text-[9px] font-semibold tracking-wide"
                 style={{
