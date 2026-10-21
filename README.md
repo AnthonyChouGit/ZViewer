@@ -89,7 +89,7 @@
 
 Release 中的 `ZViewer-Windows-<版本>-x64.zip` 是原生桌面控制台（Go + 系统 WebView2），用于管理本机服务、证书、FRP 穿透与高画质代理：
 
-- 解压后双击 `ZViewerShell.exe`；关闭窗口默认收起到系统托盘
+- 解压后双击 `ZViewerDesktop.exe`；关闭窗口默认收起到系统托盘
 - 运行包在解压目录的 `runtime/`，首次启动会在其中生成 `.env` 与 `config`
 - `SHA256SUMS.txt` 给出 ZIP 与 EXE 的校验值
 - 分发包不带高画质代理 CLI，需要时把 `zviewer-cli-windows-amd64.exe` 放进 `runtime/`
@@ -224,4 +224,4 @@ services:
 
 ## Windows 桌面控制台（可选）
 
-Windows 用户可构建原生目录 GUI（Go + 系统 WebView2，无需安装运行时，也不依赖 Electron），双击分发目录唯一的 `ZViewerShell.exe` 打开控制台，运行包放在同级 `runtime/`。控制台提供系统托盘、本机 HTTPS、自建 FRP、可保存的监听端口，以及直接在窗口内配置和扫码登录的 ZViewerCLI 高画质代理。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有服务端网页与命令行源码保持兼容。
+Windows 用户可构建原生目录 GUI（Go + 系统 WebView2，无需安装运行时，也不依赖 Electron），双击分发目录唯一的 `ZViewerDesktop.exe` 打开控制台，运行包放在同级 `runtime/`。控制台提供系统托盘、本机 HTTPS、自建 FRP、可保存的监听端口，以及直接在窗口内配置和扫码登录的 ZViewerCLI 高画质代理。构建和使用步骤见 [desktop/README.md](desktop/README.md)，现有服务端网页与命令行源码保持兼容。

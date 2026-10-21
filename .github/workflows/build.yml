@@ -275,7 +275,7 @@ jobs:
 
             下载说明：
             - Windows: 下载 `zviewer-windows-x64.zip`，解压后运行 `start.bat`
-            - Windows GUI: 下载 `zviewer-windows-x64-GUI.zip`，解压后运行 `ZViewerShell.exe`（附 `SHA256SUMS.txt`）
+            - Windows GUI: 下载 `zviewer-windows-x64-GUI.zip`，解压后运行 `ZViewerDesktop.exe`（附 `SHA256SUMS.txt`）
             - Linux: 下载 `zviewer-linux-x64.tar.gz`，解压后运行 `./start.sh`
             - Docker: `docker pull zerowyc0721/zviewer:dev`（main 分支最新构建；正式版请用 `:latest` 或具体版本号）
 
@@ -342,7 +342,7 @@ jobs:
             echo "## 下载说明"
             echo ""
             echo "- **Windows**: 下载 \`zviewer-windows-x64.zip\`，解压后运行 \`start.bat\`"
-            echo "- **Windows GUI**: 下载 \`zviewer-windows-x64-GUI.zip\`，解压后运行 \`ZViewerShell.exe\`（附 \`SHA256SUMS.txt\`）"
+            echo "- **Windows GUI**: 下载 \`zviewer-windows-x64-GUI.zip\`，解压后运行 \`ZViewerDesktop.exe\`（附 \`SHA256SUMS.txt\`）"
             echo "- **Linux**: 下载 \`zviewer-linux-x64.tar.gz\`，解压后运行 \`./start.sh\`"
             echo "- **Docker**: \`docker pull zerowyc0721/zviewer:${VERSION}\`"
           } > release_body.md

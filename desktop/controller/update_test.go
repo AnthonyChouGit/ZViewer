@@ -42,13 +42,15 @@ func TestPickUpdateAsset(t *testing.T) {
 
 func TestApplyScriptWaitsForExit(t *testing.T) {
 	script := applyScript(`C:\Users\Zero\AppData\Roaming\ZViewer\updates\0.4.2\zviewer-windows-x64-GUI.zip`,
-		`C:\Apps\ZViewer`, `C:\Apps\ZViewer\ZViewerShell.exe`, 4321)
+		`C:\Apps\ZViewer`, `C:\Apps\ZViewer\ZViewerDesktop.exe`, 4321)
 	for _, want := range []string{
 		"$procId = 4321",
 		"Get-Process -Id $procId",
 		"Expand-Archive",
 		"Copy-Item",
-		"Start-Process -FilePath $exe",
+		"$installed = Get-ChildItem",
+		"remove stale entry",
+		"Start-Process -FilePath $next",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("script missing %q", want)
@@ -56,6 +58,23 @@ func TestApplyScriptWaitsForExit(t *testing.T) {
 	}
 	if !strings.Contains(script, `'C:\Users\Zero\AppData\Roaming\ZViewer\updates\0.4.2\zviewer-windows-x64-GUI.zip'`) {
 		t.Fatal("path should be single quoted")
+	}
+}
+
+func TestIsShellEntry(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"zviewer-windows-x64-GUI/ZViewerDesktop.exe", true},
+		{"zviewer-windows-x64-GUI/ZViewerShell.exe", true},
+		{"zviewer-windows-x64-GUI/runtime/zviewer-backend.exe", false},
+		{"zviewer-windows-x64-GUI/README.md", false},
+	}
+	for _, item := range cases {
+		if got := isShellEntry(item.name); got != item.want {
+			t.Fatalf("isShellEntry(%q)=%v, want %v", item.name, got, item.want)
+		}
 	}
 }
 

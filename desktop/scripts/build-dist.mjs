@@ -13,6 +13,7 @@ import { cpSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, stat
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SHELL_EXE_NAME } from './shell-entry.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const desktop = root;
@@ -64,7 +65,7 @@ else if (cliSource !== cliExe) console.warn(`CLI: 使用未校验的本地副本
 if (existsSync(distribution)) throw new Error(`拒绝覆盖已存在的分发包：${distribution}`);
 mkdirSync(distribution, { recursive: true });
 
-const shell = join(distribution, 'ZViewerShell.exe');
+const shell = join(distribution, SHELL_EXE_NAME);
 execFileSync(process.execPath, [join(desktop, 'scripts', 'build-shell.mjs'), '--release'], {
   cwd: desktop, stdio: 'inherit', env: { ...process.env, ZVIEWER_OUT_DIR: distribution }
 });
@@ -130,7 +131,7 @@ function walk(dir) {
   return out;
 }
 const tracked = [
-  'ZViewerShell.exe',
+  SHELL_EXE_NAME,
   'assets/ZViewer.ProcessHost.exe',
   'runtime/zviewer-backend.exe',
   'runtime/livekit-server.exe',
@@ -146,7 +147,7 @@ const files = tracked.filter(name => existsSync(join(distribution, name))).map(n
 const manifest = {
   version: pkg.version,
   format: 'directory',
-  entry: 'ZViewerShell.exe',
+  entry: SHELL_EXE_NAME,
   shell: 'wails-v2 / go',
   runtime: 'runtime',
   installation: false,

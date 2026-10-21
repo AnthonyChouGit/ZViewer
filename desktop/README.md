@@ -1,10 +1,10 @@
 # ZViewer Windows 桌面控制台
 
-原生桌面控制台，管理现有 Windows 运行包，保留服务端网页。壳层是 Go + 系统 WebView2（Wails v2），分发目录只有一个 `ZViewerShell.exe`，不需要安装运行时，也没有 Electron。支持系统托盘、端口配置持久化、localhost HTTPS、自建 FRP 和 ZViewerCLI 哔哩哔哩高画质代理；CLI 设置、扫码登录与连接操作直接在窗口右侧完成。
+原生桌面控制台，管理现有 Windows 运行包，保留服务端网页。壳层是 Go + 系统 WebView2（Wails v2），分发目录只有一个 `ZViewerDesktop.exe`，不需要安装运行时，也没有 Electron。支持系统托盘、端口配置持久化、localhost HTTPS、自建 FRP 和 ZViewerCLI 哔哩哔哩高画质代理；CLI 设置、扫码登录与连接操作直接在窗口右侧完成。
 
 ## 双击打开 GUI
 
-双击运行目录中的 `ZViewerShell.exe`，直接显示控制台窗口。默认只打开界面；服务、代理和浏览器由用户在界面内点击按钮启动，也可沿用已保存的自动启动偏好。
+双击运行目录中的 `ZViewerDesktop.exe`，直接显示控制台窗口。默认只打开界面；服务、代理和浏览器由用户在界面内点击按钮启动，也可沿用已保存的自动启动偏好。
 
 同一 Windows 用户只运行一个正常实例。再次双击入口会恢复并聚焦已打开的窗口，最小化或收在托盘时也会唤回，不创建第二套受管服务。整个文件夹可复制、可移动，无需安装步骤，也不把运行包搬进用户缓存目录。
 
@@ -12,7 +12,7 @@
 
 | 内容                     | 位置                                       |
 | ---------------------- | ---------------------------------------- |
-| GUI 入口                 | 运行目录中的 `ZViewerShell.exe`                |
+| GUI 入口                 | 运行目录中的 `ZViewerDesktop.exe`              |
 | 进程监管宿主                 | 同目录 `assets/ZViewer.ProcessHost.exe`     |
 | 后端、LiveKit、FRP、CLI 与网页 | `runtime/` 内的程序与 `runtime/frontend/dist` |
 | 后端环境与业务数据              | `runtime/.env`、`runtime/config`          |
@@ -46,7 +46,7 @@ node build-all.js --win
 npm --prefix desktop run shell:build
 ```
 
-产物为 `desktop/build/bin/ZViewerShell.exe`。开发期用 `dev` 脚本，一条命令完成「编译 + 独立配置目录 + 带日志启动」：
+产物为 `desktop/build/bin/ZViewerDesktop.exe`。开发期用 `dev` 脚本，一条命令完成「编译 + 独立配置目录 + 带日志启动」：
 
 ```powershell
 npm --prefix desktop run dev
@@ -78,7 +78,7 @@ CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里
 
 ```text
 zviewer-windows-x64-GUI/
-  ZViewerShell.exe                  # 唯一用户启动 EXE
+  ZViewerDesktop.exe                # 唯一用户启动 EXE
   assets/ZViewer.ProcessHost.exe    # 进程监管宿主（Job Object）
   runtime/                          # 后端、LiveKit、FRP、CLI 与网页
   许可证、使用说明与 BUILD-MANIFEST.json
@@ -110,7 +110,7 @@ npm --prefix desktop run check
 
 ## 网页与管理入口
 
-保持整个分发文件夹完整，双击根目录 `ZViewerShell.exe` 打开 GUI。
+保持整个分发文件夹完整，双击根目录 `ZViewerDesktop.exe` 打开 GUI。
 
 首页“打开网页端”与“启动服务”使用相同按钮样式。点击后会先确保本机服务就绪，再用默认浏览器打开当前 HTTP/HTTPS 和端口对应的首页。首页及证书页的“打开管理页面”继续访问 `/admin`；托盘只保留“打开网页端”网页入口。默认首页 `http://localhost:3333/`，管理页 `http://localhost:3333/admin`。使用文档入口：<https://docx.zviewer.zero251.xyz/> 。
 
@@ -161,7 +161,7 @@ Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解
 - 检查：读取 GitHub Release 的最新正式版，与当前版本按数字段比较；预发布版本不参与，因此 main 分支的 `latest` 预发布不会被提示为更新。
 - 前置反代：弹窗里可开“使用前置反代”，把检查和下载都拼在一个前缀式反代后面，默认 `https://gh-proxy.com`，可改成 `https://ghproxy.net` 等服务商，配置项为 `updateProxy` / `updateProxyUrl`。启用时检查请求走 `<前缀>/https://api.github.com/...`，下载首选 `<前缀>/<github.com 直链>`、回退 `api.github.com` 资产端点；反代检查失败会自动退回直连，下载失败也会换回退地址重试一次。只接受 `https://` 前缀，域名会加入下载白名单，未启用时只允许 GitHub 官方域。
 - 下载：默认走 `api.github.com` 的资产端点（直连 `github.com` 在部分网络下会超时），流式写入配置目录 `updates/<版本>/`，期间控制台照常可用；下载完成后核对文件大小、ZIP 结构与 `SHA256SUMS.txt` 摘要，通过才标记为待安装。
-- 安装：点击“重启并安装”时先在更新目录写好 PowerShell 脚本并启动，再正常退出控制台（受管服务一并停止）；脚本等待本进程结束，解压覆盖运行目录并重新启动 `ZViewerShell.exe`。覆盖失败会记入同目录 `apply.log`，此时界面已退出，需要手动处理。
+- 安装：点击“重启并安装”时先在更新目录写好 PowerShell 脚本并启动，再正常退出控制台（受管服务一并停止）；脚本等待本进程结束，解压覆盖运行目录并重新启动 `ZViewerDesktop.exe`。覆盖失败会记入同目录 `apply.log`，此时界面已退出，需要手动处理。
 - 运行目录必须可写（便携包默认如此）。放进 `Program Files` 等受保护目录时覆盖会失败，建议解压到用户目录。
 
 ## 日志、数据与更新

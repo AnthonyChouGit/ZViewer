@@ -10,6 +10,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SHELL_EXE_NAME } from './shell-entry.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const repo = dirname(root);
@@ -20,7 +21,7 @@ const option = (name, fallback) => {
   return hit ? hit.slice(name.length + 1) : fallback;
 };
 
-const exe = join(root, 'build', 'bin', 'ZViewerShell.exe');
+const exe = join(root, 'build', 'bin', SHELL_EXE_NAME);
 const stateDir = resolve(option('--state-dir', process.env.ZVIEWER_STATE_DIR || join(root, '.runtime', 'dev-state')));
 const runtimeRoot = resolve(option('--runtime-root', process.env.ZVIEWER_RUNTIME_ROOT || join(repo, 'dist', 'win')));
 

@@ -328,7 +328,14 @@ func applyScript(pkg, target, exe string, pid int) string {
 		"  if (-not $src) { throw 'install package has no top directory' }",
 		"  Copy-Item -Path (Join-Path $src.FullName '*') -Destination $target -Recurse -Force",
 		"  Write-Log 'files replaced'",
-		"  Start-Process -FilePath $exe -WorkingDirectory $target",
+		// 入口名以解压出来的包为准（新包可能是改名后的 EXE），取不到时回到当前程序。
+		// 注意 -Path 必须传 $src.FullName：直接传 DirectoryInfo 会被当成相对名字解析。
+		"  $installed = Get-ChildItem -Path $src.FullName -Filter '*.exe' -File | Select-Object -First 1",
+		"  $next = if ($installed) { Join-Path $target $installed.Name } else { $exe }",
+		"  Write-Log ('entry: ' + $next)",
+		// 改名后旧入口会留在根目录，两个 EXE 并存会导致更新后仍启动旧版本。
+		"  Get-ChildItem -Path $target -Filter '*.exe' -File | Where-Object { $_.FullName -ne $next } | ForEach-Object { Write-Log ('remove stale entry: ' + $_.Name); Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }",
+		"  Start-Process -FilePath $next -WorkingDirectory $target",
 		"  Write-Log 'restarted'",
 		"  Start-Sleep -Seconds 3",
 		"  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue",
@@ -590,6 +597,20 @@ func downloadFile(link, target string, size int64, allow []string, onProgress fu
 	return nil
 }
 
+// shellEntryNames 是安装包里认可的入口文件名（小写比较）：
+// 第一个是现名，第二个兼容改名前的历史包。
+var shellEntryNames = []string{"zviewerdesktop.exe", "zviewershell.exe"}
+
+func isShellEntry(name string) bool {
+	lower := strings.ToLower(name)
+	for _, allowed := range shellEntryNames {
+		if strings.HasSuffix(lower, allowed) {
+			return true
+		}
+	}
+	return false
+}
+
 // verifyUpdatePackage 只做结构校验：能打开、有内容、包含入口文件。
 func verifyUpdatePackage(path string) error {
 	reader, err := zip.OpenReader(path)
@@ -599,13 +620,13 @@ func verifyUpdatePackage(path string) error {
 	defer reader.Close()
 	found := false
 	for _, entry := range reader.File {
-		if strings.HasSuffix(strings.ToLower(entry.Name), "zviewershell.exe") {
+		if isShellEntry(entry.Name) {
 			found = true
 			break
 		}
 	}
 	if !found || len(reader.File) == 0 {
-		return errors.New("安装包里没有 ZViewerShell.exe")
+		return errors.New("安装包里没有 ZViewerDesktop.exe")
 	}
 	return nil
 }

@@ -308,7 +308,12 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 
 // applyUpdate 交给独立脚本接管：本进程退出后解压覆盖运行目录，再启动新版本。
 func (a *App) applyUpdate() (bool, error) {
-	exe := filepath.Join(a.exeDir, "ZViewerShell.exe")
+	// 用当前进程的真实路径，而不是写死入口名：改名后旧版本仍能正确指回自己，
+	// 新包里的入口由安装脚本按解压结果决定。
+	exe, err := os.Executable()
+	if err != nil {
+		exe = filepath.Join(a.exeDir, shellExeName)
+	}
 	script, err := a.ctrl.PrepareUpdate(a.exeDir, exe, os.Getpid())
 	if err != nil {
 		return false, err

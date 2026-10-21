@@ -19,6 +19,10 @@ import (
 // appVersion 由构建脚本用 -ldflags "-X main.appVersion=..." 覆盖。
 var appVersion = "0.4.1"
 
+// shellExeName 是分发目录里的唯一入口文件名，与 scripts/shell-entry.mjs 保持一致。
+// 仅作为 os.Executable() 取不到自身路径时的兜底。
+const shellExeName = "ZViewerDesktop.exe"
+
 func argValue(key string) string {
 	prefix := "--" + key + "="
 	for _, item := range os.Args[1:] {

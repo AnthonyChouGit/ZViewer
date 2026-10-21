@@ -1,5 +1,5 @@
 // 构建原生壳：编译进程监管宿主（C#），再编译 Wails/Go 主程序。
-// 产物默认 desktop/build/bin/ZViewerShell.exe，可用 ZVIEWER_OUT_DIR 改写目录。
+// 产物默认 desktop/build/bin/<SHELL_EXE_NAME>，可用 ZVIEWER_OUT_DIR 改写目录。
 //
 // 用法：
 //   node scripts/build-shell.mjs                开发构建（带符号，隐藏控制台窗口）
@@ -11,12 +11,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, basename, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SHELL_EXE_NAME } from './shell-entry.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const flags = new Set(process.argv.slice(2));
 const outDir = process.env.ZVIEWER_OUT_DIR || join(root, 'build', 'bin');
-const out = join(outDir, 'ZViewerShell.exe');
+const out = join(outDir, SHELL_EXE_NAME);
 const hostSource = join(root, 'native', 'ProcessHost.cs');
 const hostExe = join(root, 'assets', 'ZViewer.ProcessHost.exe');
 const iconSource = join(root, 'assets', 'app.ico');

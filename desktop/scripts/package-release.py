@@ -1,6 +1,7 @@
 """Archive the clean portable output and verify every ZIP entry before delivery.
 
-输入是 `node desktop/scripts/build-dist.mjs` 产出的目录，入口固定为 ZViewerShell.exe。
+输入是 `node desktop/scripts/build-dist.mjs` 产出的目录，入口名以 BUILD-MANIFEST.json 的 entry 为准
+（壳改名时不需要动这里）。
 """
 import hashlib
 import json
@@ -13,14 +14,19 @@ version = json.loads((desktop / 'package.json').read_text(encoding='utf-8'))['ve
 release = Path(os.environ['ZVIEWER_OUT_DIR']).resolve() if os.environ.get('ZVIEWER_OUT_DIR') else desktop / 'dist-gui'
 portable = release / 'zviewer-windows-x64-GUI'
 archive = release / 'zviewer-windows-x64-GUI.zip'
-entry = portable / 'ZViewerShell.exe'
+manifest_file = portable / 'BUILD-MANIFEST.json'
+if not manifest_file.is_file():
+    raise SystemExit('Build the portable application first (node scripts/build-dist.mjs)')
+manifest = json.loads(manifest_file.read_text(encoding='utf-8'))
+entry_name = manifest['entry']
+entry = portable / entry_name
 if archive.exists():
     raise SystemExit(f'Archive already exists: {archive}')
 files = sorted(p for p in portable.rglob('*') if p.is_file())
 if not entry.is_file():
-    raise SystemExit('Build the portable application first (node scripts/build-dist.mjs)')
-if sorted(file.name for file in portable.glob('*.exe')) != ['ZViewerShell.exe']:
-    raise SystemExit('The distribution must have exactly one top-level EXE entry')
+    raise SystemExit(f'Missing entry point: {entry_name}')
+if sorted(file.name for file in portable.glob('*.exe')) != [entry_name]:
+    raise SystemExit(f'The distribution must have exactly one top-level EXE entry ({entry_name})')
 for file in files:
     if file.is_symlink() or file.suffix.lower() in {'.bat', '.cmd'} or file.name.lower() in {'.env', 'settings.json', 'key.pem', 'root-ca.key'}:
         raise SystemExit(f'Unexpected private file or link: {file}')
