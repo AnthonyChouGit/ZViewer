@@ -333,6 +333,14 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
                 source: 'kazumi',
                 format: resolved.format,
                 serverProxy,
+                // 落元数据：播放时据此重新解析（服务器中转开关切换、
+                // 直链过期自愈都依赖它），结构与 ani-subs 元数据一致
+                sourceMeta: {
+                  kind: 'kazumi',
+                  sourceId: item.sourceId,
+                  episode: item.episode,
+                  originalTitle: item.title,
+                },
               })
             }
             added.push(item.episode.id)
@@ -476,6 +484,13 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           source: 'kazumi',
           format: resolved.format,
           serverProxy,
+          // 同批次添加：落元数据供播放时实时重解析（中转开关 / 直链过期自愈）
+          sourceMeta: {
+            kind: 'kazumi',
+            sourceId,
+            episode,
+            originalTitle: title,
+          },
         })
           .then(() => fetchMovies(roomId))
           .catch((err) => {

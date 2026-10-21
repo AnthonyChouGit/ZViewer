@@ -5,24 +5,29 @@
  * 与添加影片面板的区别：这里的改动直接写回影片记录（updateMovie）并广播
  * 给全房间，属性能实时生效的运行开关，而非「对下一次添加生效」。
  *
- * - 服务器中转（movie.serverProxy）：仅数据源类 anime / cms。
- *   解析链路每次播放都读该字段（resolveAnimeOnline / resolveCmsOnline），
- *   所以改完需要重解析当前源；Kazumi 的播放地址在添加时已固化，没有可
- *   重解析的元数据，故不提供该开关。
+ * - 服务器中转（movie.serverProxy）：ani-subs / Kazumi / CMS 三类数据源。
+ *   解析链路每次播放都读该字段（resolveAnimeOnline / resolveKazumiOnline /
+ *   resolveCmsOnline），所以改完需要重解析当前源。
  * - 浏览器转码（movie.playsvideoEnabled）：所有非 B站 影片。
  *   该字段是引擎门控（shouldUsePlaysVideo），改完需要重挂载才会重新选引擎。
  *
  * 仅房主可操作；观众看到的是房主设定后的当前状态。
  */
 import { useState } from 'react'
-import { ChevronDown, MonitorPlay, Server, Settings2 } from 'lucide-react'
+import {
+  ChevronDown,
+  Cpu,
+  Network,
+  Settings2,
+  type LucideIcon,
+} from 'lucide-react'
 import { Switch } from '@/components/ui'
 import { message } from '@/components/ui/message'
 import { useRoomStore } from '@/store/roomStore'
 import { cn } from '@/lib/utils'
 
 interface SwitchCardProps {
-  icon: React.ReactNode
+  icon: LucideIcon
   title: string
   subtitle: string
   hint: string
@@ -31,9 +36,13 @@ interface SwitchCardProps {
   onToggle: () => void
 }
 
-/** 单个开关子卡：图标 + 标题/英文小标 + 右侧开关 + 一行状态说明 */
+/**
+ * 单个开关子卡：图标 + 标题/英文小标 + 右侧开关 + 一行状态说明。
+ * 图标沿用影片卡片的处理方式（primary 淡底块 + primary 图标），
+ * 关闭时降为中性灰，保持与项目其余列表卡一致的视觉语言。
+ */
 function SwitchCard({
-  icon,
+  icon: Icon,
   title,
   subtitle,
   hint,
@@ -47,19 +56,27 @@ function SwitchCard({
       style={{
         backgroundColor: 'var(--md-sys-color-surface-container-high)',
         border: checked
-          ? '1px solid color-mix(in srgb, var(--md-sys-color-tertiary) 45%, transparent)'
-          : undefined,
+          ? '1px solid color-mix(in srgb, var(--md-sys-color-primary) 38%, transparent)'
+          : '1px solid transparent',
       }}
     >
       <div className="flex items-center gap-1.5">
         <div
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--md-sys-shape-corner)]"
           style={{
-            background:
-              'linear-gradient(135deg, color-mix(in srgb, var(--md-sys-color-tertiary) 22%, transparent), color-mix(in srgb, var(--md-sys-color-secondary) 18%, transparent))',
+            backgroundColor: checked
+              ? 'color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent)'
+              : 'var(--md-sys-color-surface-container-highest)',
           }}
         >
-          {icon}
+          <Icon
+            className="h-3 w-3"
+            style={{
+              color: checked
+                ? 'var(--md-sys-color-primary)'
+                : 'var(--md-sys-color-on-surface-variant)',
+            }}
+          />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <span
@@ -115,9 +132,11 @@ export function MovieRuntimeSettings({
 
   if (!movie) return null
 
-  // 只有数据源类影片有「服务器中转」概念（Kazumi 地址已固化，见文件头注释）
+  // 三类数据源（ani-subs / Kazumi / CMS）都有「服务器中转」概念
   const showServerProxy =
-    movie.sourceType === 'anime' || movie.sourceType === 'cms'
+    movie.sourceType === 'anime' ||
+    movie.sourceType === 'kazumi' ||
+    movie.sourceType === 'cms'
   const serverProxy = movie.serverProxy === true
   // 缺省视为开启，与 shouldUsePlaysVideo 的 `!== false` 宽松语义一致
   const playsvideoEnabled = movie.playsvideoEnabled !== false
@@ -182,12 +201,7 @@ export function MovieRuntimeSettings({
         >
           {showServerProxy && (
             <SwitchCard
-              icon={
-                <Server
-                  className="h-3 w-3"
-                  style={{ color: 'var(--md-sys-color-tertiary)' }}
-                />
-              }
+              icon={Network}
               title="服务器中转"
               subtitle="SERVER RELAY"
               checked={serverProxy}
@@ -197,18 +211,13 @@ export function MovieRuntimeSettings({
                 !isHost
                   ? '由房主统一管理'
                   : serverProxy
-                    ? '媒体流经服务器转发，带防盗链的源需开启'
-                    : '直连源站，服务器不转发媒体流'
+                    ? '媒体流经服务器转发，可绕过防盗链限制'
+                    : '直连源站，不占用服务器带宽'
               }
             />
           )}
           <SwitchCard
-            icon={
-              <MonitorPlay
-                className="h-3 w-3"
-                style={{ color: 'var(--md-sys-color-tertiary)' }}
-              />
-            }
+            icon={Cpu}
             title="浏览器转码"
             subtitle="BROWSER TRANSCODE"
             checked={playsvideoEnabled}

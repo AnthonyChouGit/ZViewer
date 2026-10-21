@@ -9,7 +9,7 @@
  *
  * 本模块不触碰 React 状态 / store / message，所有副作用留在调用方。
  */
-import type { Movie } from '@/store/roomStore'
+import type { Movie, KazumiSourceMeta } from '@/store/roomStore'
 import { useRoomStore } from '@/store/roomStore'
 import { detectMediaFormat, type MediaFormat } from '@/lib/mediaFormat'
 import { resolveBilibiliWithOptions } from '@/modules/bilibili/bilibiliApi'
@@ -21,6 +21,12 @@ import type { QualityOption } from './resolveSource'
 import { buildServerFileProxyUrl } from '@/modules/server-files/serverFilesApi'
 import { resolveMovieDirectUrl } from '@/modules/direct-link/directLinkApi'
 import { resolveAniSubsEpisode, buildAniSubsProxyUrl } from '@/modules/anisubs'
+import {
+  resolveKazumiEpisode,
+  buildKazumiProxyUrl,
+  isKazumiProxyUrl,
+  unwrapKazumiProxyUrl,
+} from '@/modules/kazumi/api'
 import { resolveCmsEpisode, buildCmsProxyUrl } from '@/modules/cms/api'
 import type { CmsSourceMeta } from '@/modules/cms/types'
 import { usesDirectMedia } from './media-policy'
@@ -421,6 +427,78 @@ export async function resolveAnimeOnline(
 }
 
 /**
+ * 在线解析 Kazumi 番剧源播放地址。
+ *
+ * 新添加的 Kazumi 影片会落 sourceMeta（sourceId + episode），播放时用它
+ * 调后端 /kazumi/resolve 重新解析（后端 6min 缓存 + 单飞去重），这样：
+ * - 服务器中转开关切换后能重新拿到带防盗链 headers 的最新直链；
+ * - 旧地址过期后也能自愈。
+ *
+ * 重解析失败 / 没有元数据（旧版本添加的影片）时回退添加时物化的 movie.url：
+ * 依据开关只在「代理包装 / 解包」之间切换，保持与旧行为一致又不至于让开关失效。
+ *
+ * 防盗链处理与 ani-subs / CMS 同语义：是否走服务器代理完全由影片级
+ * 「服务器中转」开关（movie.serverProxy）决定，不自动兜底。
+ */
+export async function resolveKazumiOnline(
+  movie: Movie,
+  recoverySourceUrl?: string
+): Promise<ResolvedMovieSource> {
+  const meta = movie.sourceMeta as KazumiSourceMeta | null
+  const wantProxy = movie.serverProxy === true
+
+  if (meta && meta.kind === 'kazumi') {
+    try {
+      const resolved = await resolveKazumiEpisode(meta.sourceId, meta.episode)
+      return {
+        noProxyFallback: !wantProxy,
+        sourceUrl: wantProxy
+          ? buildKazumiProxyUrl(resolved.url, resolved.headers, true)
+          : resolved.url,
+        audioUrl: undefined,
+        format: (resolved.format as MediaFormat | undefined) ?? movie.format,
+        videoCodec: undefined,
+        audioCodec: undefined,
+        duration: movie.duration ?? 0,
+        headers: undefined,
+        reusedRecoveryUrl: false,
+        playsvideoEnabled: movie.playsvideoEnabled !== false,
+      }
+    } catch (err) {
+      console.warn(
+        '[movie-source-resolver] Kazumi 源重解析失败，回退添加时物化的 URL:',
+        err
+      )
+    }
+  }
+
+  // 回退：物化 URL 与开关语义已一致时原样播放，不一致时就地包装/解包。
+  // 刷新恢复场景优先用后端回传的最近一次 URL（比添加时固化的更新鲜）。
+  const baseUrl = recoverySourceUrl || movie.url
+  const storedIsProxy = isKazumiProxyUrl(baseUrl)
+  let sourceUrl = baseUrl
+  if (wantProxy && !storedIsProxy) {
+    // 旧影片没有 Referer 等 headers 可复用，只能做无头的强制中转
+    sourceUrl = buildKazumiProxyUrl(baseUrl, undefined, true)
+  } else if (!wantProxy && storedIsProxy) {
+    sourceUrl = unwrapKazumiProxyUrl(baseUrl)
+  }
+
+  return {
+    noProxyFallback: !wantProxy,
+    sourceUrl,
+    audioUrl: undefined,
+    format: movie.format || detectMediaFormat(sourceUrl),
+    videoCodec: undefined,
+    audioCodec: undefined,
+    duration: movie.duration ?? 0,
+    headers: undefined,
+    reusedRecoveryUrl: false,
+    playsvideoEnabled: movie.playsvideoEnabled !== false,
+  }
+}
+
+/**
  * 在线解析 CMS 采集源播放地址。
  *
  * 采集站直链普遍短时效且常带 Referer/UA 防盗链，每次播放（含刷新恢复）
@@ -470,6 +548,8 @@ export async function resolveCmsOnline(
  *
  * - B站 源：在线解析 playurl（带解析进度回调）；
  * - ani-subs 番剧源：通过 sourceMeta 在线解析（URL 短期有效，每次重新解析）；
+ * - Kazumi 番剧源：有 sourceMeta 时实时重解析（服务器中转开关才能即时切换），
+ *   无元数据的旧影片回退物化 URL 并按开关包装/解包；
  * - CMS 采集源：通过 sourceMeta 实时解析（直链短时效/防盗链，每次重新解析）；
  * - 房主刷新恢复（recovery）且旧 URL 可用：优先复用旧 URL，
  *   标记 reusedRecoveryUrl，attach 失败时由调用方回退到在线解析；
@@ -524,6 +604,12 @@ export async function resolveMovieSource({
     // CMS 采集源：直链短时效/防盗链，每次播放都通过 sourceMeta 实时重解析
     // recovery 场景同样不复用旧 URL
     return resolveCmsOnline(movie)
+  }
+
+  if (sourceType === 'kazumi') {
+    // Kazumi 番剧源：有 sourceMeta 时每次播放实时重解析（拿到最新直链 +
+    // 防盗链 headers，服务器中转开关才可即时切换）；无元数据回退物化 URL
+    return resolveKazumiOnline(movie, recovery?.sourceUrl)
   }
 
   // 非 B站 源：直接使用影片记录字段（Movie 类型不含 headers，见 roomStore）

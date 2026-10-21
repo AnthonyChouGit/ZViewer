@@ -25,6 +25,21 @@ export interface AniSubsSourceMeta {
   originalTitle: string
 }
 
+/**
+ * Kazumi 番剧源元数据。
+ *
+ * 结构与 AniSubsSourceMeta 逐字段一致（KazumiEpisode 与 AniSubsEpisode 同构），
+ * 靠 kind 判别字段区分来源，供播放时重新解析播放地址——这样影片级
+ * 「服务器中转」开关才能在切集后重新拿到带防盗链 headers 的最新直链。
+ */
+export interface KazumiSourceMeta extends AniSubsSourceMeta {
+  kind: 'kazumi'
+}
+
+/** 影片元数据联合类型（ani-subs / Kazumi / CMS 三类数据源） */
+export type MovieSourceMeta =
+  AniSubsSourceMeta | KazumiSourceMeta | CmsSourceMeta
+
 function jsonHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' }
 }
@@ -110,7 +125,7 @@ export interface Movie {
    * 仅 sourceType='anime'（AniSubsSourceMeta）或 'cms'（CmsSourceMeta）时有值，
    * 用于播放时重新解析播放地址（两类源 URL 均短时效/防盗链）。
    */
-  sourceMeta?: AniSubsSourceMeta | CmsSourceMeta | null
+  sourceMeta?: MovieSourceMeta | null
 }
 
 export interface MovieDto {
@@ -160,7 +175,7 @@ export interface MovieDto {
   /** Emby/Jellyfin 专属：是否存在多版本；false 时不渲染清晰度选择框 */
   multiVersion?: boolean
   /** ani-subs 番剧源元数据（仅 source='anime' 时有值） */
-  sourceMeta: AniSubsSourceMeta | null
+  sourceMeta: MovieSourceMeta | null
   order: number
   createdAt: string
   updatedAt: string
@@ -438,7 +453,7 @@ interface RoomState {
       multiVersion?: boolean
       /** 影片级浏览器播放引擎（playsvideo）开关：false 时强制原生直连播放 */
       playsvideoEnabled?: boolean
-      sourceMeta?: AniSubsSourceMeta | CmsSourceMeta | null
+      sourceMeta?: MovieSourceMeta | null
     }
   ) => Promise<ReturnType<typeof mapDtoToMovie> | undefined>
   updateMovie: (
@@ -479,7 +494,7 @@ interface RoomState {
       directLink?: boolean
       /** 数据源影片（ani/kazumi/cms）服务器中转模式：true 时媒体流一律经服务器 */
       serverProxy?: boolean
-      sourceMeta?: AniSubsSourceMeta | CmsSourceMeta | null
+      sourceMeta?: MovieSourceMeta | null
       /** 仅允许 CLI 模式（B站 番剧/影视） */
       cliOnly?: boolean
       /** Emby/Jellyfin 专属：是否存在多版本；false 时不渲染清晰度选择框 */
