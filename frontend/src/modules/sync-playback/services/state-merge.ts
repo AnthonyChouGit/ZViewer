@@ -22,7 +22,8 @@ export function restoreStateSnapshot(
   const cleared = Object.fromEntries(
     Object.keys(current).map((key) => [key, undefined])
   )
-  const sameSource = current.sourceUrl === snapshot.sourceUrl &&
+  const sameSource =
+    current.sourceUrl === snapshot.sourceUrl &&
     current.sourceType === snapshot.sourceType
   return {
     ...cleared,
@@ -30,8 +31,12 @@ export function restoreStateSnapshot(
     duration: snapshot.duration ?? 0,
     // Older hosts omit these policies in buildStateFromVideo. Keep them only
     // for the same source; a different film must never inherit its policies.
-    playsvideoEnabled: snapshot.playsvideoEnabled ?? (sameSource ? current.playsvideoEnabled : undefined),
-    noProxyFallback: snapshot.noProxyFallback ?? (sameSource ? current.noProxyFallback : undefined),
+    playsvideoEnabled:
+      snapshot.playsvideoEnabled ??
+      (sameSource ? current.playsvideoEnabled : undefined),
+    noProxyFallback:
+      snapshot.noProxyFallback ??
+      (sameSource ? current.noProxyFallback : undefined),
   }
 }
 
@@ -171,7 +176,8 @@ export function isStateEqual(
     a.videoCodec !== b.videoCodec ||
     a.audioCodec !== b.audioCodec ||
     a.cid !== b.cid ||
-    a.noProxyFallback !== b.noProxyFallback
+    a.noProxyFallback !== b.noProxyFallback ||
+    (a.playsvideoEnabled !== false) !== (b.playsvideoEnabled !== false)
   ) {
     return false
   }

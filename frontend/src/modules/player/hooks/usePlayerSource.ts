@@ -42,11 +42,14 @@ import type {
   EngineType,
 } from '../types'
 import { refreshAccessToken } from '@/lib/api'
-
 import {
   isBrowserPlayableFormat,
   getUnsupportedFormatMessage,
 } from '@/lib/mediaFormat'
+
+function mediaPolicyKey(source: PlayerSource): string {
+  return `${source.playsvideoEnabled !== false}:${source.noProxyFallback === true}`
+}
 
 /**
  * 判断引擎错误是否为本站 API 媒体地址的鉴权失效（401/403）。
@@ -217,6 +220,7 @@ export function usePlayerSource(
     | null
   >(null)
   const appliedSourceUrlRef = useRef<string | null>(null)
+  const appliedMediaPolicyRef = useRef<string | null>(null)
   const playerRef = useRef<PlayerController | null>(null)
   // 播放期 error 监听器清理（新 attach 前移除旧的，防累积）
   const playbackErrorCleanupRef = useRef<(() => void) | null>(null)
@@ -300,6 +304,7 @@ export function usePlayerSource(
     // 清空"已应用源"标记：引擎销毁后同 URL 重播不应被去重快速路径跳过，
     // 否则清片/清理后再播放同一 URL 会黑屏。
     appliedSourceUrlRef.current = null
+    appliedMediaPolicyRef.current = null
     // 世代递增：进行中的 attach（await 引擎 attach 期间）据此感知自己
     // 已被取代，落地前/失败后静默退出。
     attachEpochRef.current++
@@ -422,6 +427,7 @@ export function usePlayerSource(
       authRetried = false
     ): Promise<void> => {
       const previousUrl = appliedSourceUrlRef.current
+      const previousMediaPolicy = appliedMediaPolicyRef.current
       // attach 世代基准：cleanup 之后的值才是本次会话的起点（初始 -1 仅
       // 兜底 cleanup 前的异常路径，正常流程必然被 cleanup 后的赋值覆盖）
       let epoch = -1
@@ -450,6 +456,7 @@ export function usePlayerSource(
             : source
         resetVideoElement(video)
         appliedSourceUrlRef.current = source.url
+        appliedMediaPolicyRef.current = mediaPolicyKey(source)
         // playsvideo 的启用由 shouldUsePlaysVideo 依据影片级开关、容器/
         // 音轨与浏览器能力决定；开启后 MKV/avi/ts/wmv 等一律走管线，
         // 无原生快速路径，失败也不回退原生。
@@ -512,6 +519,7 @@ export function usePlayerSource(
         if (attachEpochRef.current !== epoch) return
         // 加载失败时回滚 appliedSourceUrlRef，允许下次重试
         appliedSourceUrlRef.current = previousUrl
+        appliedMediaPolicyRef.current = previousMediaPolicy
         throw err
       }
     },
@@ -555,8 +563,11 @@ export function usePlayerSource(
         return
       }
 
-      // 同一 sourceUrl 不重复加载（快速路径，不入队）
-      if (appliedSourceUrlRef.current === source.url) {
+      // URL 相同但中转/引擎策略改变时仍须重挂载。
+      if (
+        appliedSourceUrlRef.current === source.url &&
+        appliedMediaPolicyRef.current === mediaPolicyKey(source)
+      ) {
         return
       }
 
@@ -576,7 +587,10 @@ export function usePlayerSource(
 
       await enqueue(async () => {
         // 入队期间可能已被其他操作应用了同一源（如 forceReload），再次去重
-        if (appliedSourceUrlRef.current === source.url) {
+        if (
+          appliedSourceUrlRef.current === source.url &&
+          appliedMediaPolicyRef.current === mediaPolicyKey(source)
+        ) {
           return
         }
         await attachInner(video, source)

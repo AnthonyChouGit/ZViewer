@@ -332,6 +332,11 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
                 title: item.title,
                 source: 'kazumi',
                 format: resolved.format,
+                sourceMeta: {
+                  sourceId: item.sourceId,
+                  episode: item.episode,
+                  originalTitle: item.title,
+                },
                 serverProxy,
               })
             }
@@ -475,6 +480,7 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           title,
           source: 'kazumi',
           format: resolved.format,
+          sourceMeta: { sourceId, episode, originalTitle: title },
           serverProxy,
         })
           .then(() => fetchMovies(roomId))

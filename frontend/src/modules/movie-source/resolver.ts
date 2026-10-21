@@ -20,8 +20,10 @@ import { useSystemSettingsStore } from '@/store/systemSettingsStore'
 import type { QualityOption } from './resolveSource'
 import { buildServerFileProxyUrl } from '@/modules/server-files/serverFilesApi'
 import { resolveMovieDirectUrl } from '@/modules/direct-link/directLinkApi'
-import { resolveAniSubsEpisode, buildAniSubsProxyUrl } from '@/modules/anisubs'
-import { resolveCmsEpisode, buildCmsProxyUrl } from '@/modules/cms/api'
+import { resolveAniSubsEpisode } from '@/modules/anisubs'
+import { resolveCmsEpisode } from '@/modules/cms/api'
+import { resolveKazumiEpisode } from '@/modules/kazumi/api'
+import { buildAntileechProxyUrl } from '@/lib/antileech-proxy-url'
 import type { CmsSourceMeta } from '@/modules/cms/types'
 import { usesDirectMedia } from './media-policy'
 
@@ -404,7 +406,10 @@ export async function resolveAnimeOnline(
   // 代理决策：仅由服务器中转模式（movie.serverProxy）决定，不自动兜底
   const finalUrl =
     movie.serverProxy === true
-      ? buildAniSubsProxyUrl(resolved.url, resolved.headers, true)
+      ? buildAntileechProxyUrl('anisubs', resolved.url, resolved.headers, {
+          force: true,
+          relative: true,
+        })
       : resolved.url
 
   return {
@@ -417,6 +422,7 @@ export async function resolveAnimeOnline(
     duration: movie.duration ?? 0,
     headers: undefined,
     reusedRecoveryUrl: false,
+    playsvideoEnabled: movie.playsvideoEnabled !== false,
   }
 }
 
@@ -448,7 +454,10 @@ export async function resolveCmsOnline(
   // 代理决策：仅由服务器中转模式（movie.serverProxy）决定，不自动兜底
   const finalUrl =
     movie.serverProxy === true
-      ? buildCmsProxyUrl(resolved.url, resolved.headers, true)
+      ? buildAntileechProxyUrl('cms', resolved.url, resolved.headers, {
+          force: true,
+          relative: true,
+        })
       : resolved.url
 
   return {
@@ -524,6 +533,58 @@ export async function resolveMovieSource({
     // CMS 采集源：直链短时效/防盗链，每次播放都通过 sourceMeta 实时重解析
     // recovery 场景同样不复用旧 URL
     return resolveCmsOnline(movie)
+  }
+
+  if (sourceType === 'kazumi') {
+    let url = movie.url
+    let headers: Record<string, string> | undefined
+    let format = movie.format
+    const meta = movie.sourceMeta
+    if (meta?.sourceId && 'episode' in meta && meta.episode) {
+      // 新记录重新解析，切换中转时保留源站需要的 Referer/UA 等信息。
+      const resolved = await resolveKazumiEpisode(meta.sourceId, meta.episode)
+      url = resolved.url
+      headers = resolved.headers
+      format = resolved.format
+    } else {
+      // 兼容旧记录中已物化的代理地址：关中转必须还原源站地址，
+      // 开中转则使用当前服务端重新包装，避免重复套代理。
+      try {
+        const legacy = new URL(url, 'http://local.invalid')
+        if (
+          legacy.pathname === '/api/stream/kazumi/proxy' &&
+          legacy.searchParams.get('url')
+        ) {
+          url = legacy.searchParams.get('url')!
+          headers = {}
+          for (const [query, header] of [
+            ['referer', 'Referer'],
+            ['userAgent', 'User-Agent'],
+            ['origin', 'Origin'],
+            ['cookie', 'Cookie'],
+          ]) {
+            const value = legacy.searchParams.get(query)
+            if (value) headers[header] = value
+          }
+        }
+      } catch {
+        // 非代理地址沿用影片记录，错误由播放器正常报告。
+      }
+    }
+    return {
+      sourceUrl:
+        movie.serverProxy === true
+          ? buildAntileechProxyUrl('kazumi', url, headers, {
+              force: true,
+              relative: true,
+            })
+          : url,
+      format: format || detectMediaFormat(url),
+      duration: movie.duration || 0,
+      reusedRecoveryUrl: false,
+      playsvideoEnabled: movie.playsvideoEnabled !== false,
+      noProxyFallback: usesDirectMedia(movie),
+    }
   }
 
   // 非 B站 源：直接使用影片记录字段（Movie 类型不含 headers，见 roomStore）

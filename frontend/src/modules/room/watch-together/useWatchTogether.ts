@@ -143,6 +143,8 @@ export function useWatchTogether({
   const lastLoadedMovieRef = useRef<{
     id: number
     url: string
+    serverProxy: boolean
+    playsvideoEnabled: boolean
   } | null>(null)
   // 房主刷新恢复：用于在 loadMovie 完成后应用 initialPlayback.currentTime 并暂停
   // 通过 ref 暂存，避免修改 effect 依赖导致 loadMovie 重新触发
@@ -376,9 +378,7 @@ export function useWatchTogether({
     }
 
     // 观众端：接收房主广播的预览源，直接加载播放（不经过影片列表）
-    const handlePreviewSource = (payload: {
-      source: PreviewPlayRequest
-    }) => {
+    const handlePreviewSource = (payload: { source: PreviewPlayRequest }) => {
       if (isHostRef.current) return
       const video = videoRef.current
       if (!video) return
@@ -842,19 +842,36 @@ export function useWatchTogether({
     const movie = movies.find((m) => m.id === currentMovieId)
     if (!movie) return
 
-    // 避免 movies 列表刷新时重复加载同一部影片。
+    const previousMovie = lastLoadedMovieRef.current
+    const settingsChanged =
+      previousMovie?.id === movie.id &&
+      (previousMovie.serverProxy !== (movie.serverProxy === true) ||
+        previousMovie.playsvideoEnabled !== (movie.playsvideoEnabled !== false))
+    // 普通列表广播不重载；当前影片的中转/引擎设置变更需要重新解析并同步观众。
     if (
-      lastLoadedMovieRef.current?.id === movie.id &&
-      lastLoadedMovieRef.current?.url === movie.url
+      previousMovie?.id === movie.id &&
+      previousMovie.url === movie.url &&
+      !settingsChanged
     ) {
       return
     }
 
+    // 修改设置是一次明确重试（例如直连因 CORS 失败后开启中转）。
+    if (settingsChanged) failedLoadMovieIdsRef.current.delete(movie.id)
     // 该影片此前已加载失败：等待用户手动重试，不自动循环重试
     if (failedLoadMovieIdsRef.current.has(movie.id)) return
 
     const video = videoRef.current
     if (!video) return
+
+    const settingsPlayback = settingsChanged
+      ? {
+          currentTime: Number.isFinite(video.currentTime)
+            ? video.currentTime
+            : 0,
+          isPlaying: !video.paused && !wasUserPaused(video),
+        }
+      : null
 
     const sourceType: WatchTogetherState['sourceType'] =
       movie.sourceType === 'mp4' ? 'url' : movie.sourceType
@@ -873,6 +890,8 @@ export function useWatchTogether({
     lastLoadedMovieRef.current = {
       id: movie.id,
       url: movie.url,
+      serverProxy: movie.serverProxy === true,
+      playsvideoEnabled: movie.playsvideoEnabled !== false,
     }
 
     /** 带解析进度 UI 的在线解析（B站），读取 localStorage 中该影片的播放模式偏好 */
@@ -909,7 +928,6 @@ export function useWatchTogether({
       // 重置加载失败标记的辅助：允许用户手动重试；errMsg 非空时记录失败原因供 UI 展示
       const resetForRetry = (errMsg?: string) => {
         suppressEventsRef.current = false
-        lastLoadedMovieRef.current = null
         // 记入失败集合：本 effect 不会再自动重试该影片（防请求风暴），
         // 用户点「重试」（retryLoadMovie 清空集合）后才再次尝试
         failedLoadMovieIdsRef.current.add(movie.id)
@@ -980,8 +998,8 @@ export function useWatchTogether({
         // Movie 类型不含 headers 字段，recovery 时从 initialPlayback.headers 获取，
         // 确保 ani-subs 等依赖防盗链的源在刷新恢复后仍能正确 MSE attach。
         headers: r.headers,
-        isPlaying: !isRecovery,
-        currentTime: recoveryTime,
+        isPlaying: settingsPlayback?.isPlaying ?? !isRecovery,
+        currentTime: settingsPlayback?.currentTime ?? recoveryTime,
         playbackRate: isRecovery
           ? (recovery!.playbackRate ?? watchTogether.playbackRate)
           : watchTogether.playbackRate,
@@ -1007,12 +1025,25 @@ export function useWatchTogether({
         // 恢复进度时传入 recoveryTime 作为 startTime，引擎从该时间对应的
         // 字节偏移开始下载，而非从文件头顺序下载到 recoveryTime 才播放。
         const startTime =
-          isRecovery && recoveryTime > 0 ? recoveryTime : undefined
+          settingsPlayback?.currentTime ||
+          (isRecovery && recoveryTime > 0 ? recoveryTime : undefined)
         await applySourceToVideo(video, state, startTime, blobs)
         // attach 已完成但本次加载已过期（新加载进行中）：不再恢复进度/广播/动
         // suppressEventsRef（由新流程管理），避免旧状态覆盖新影片
         if (loadSeqRef.current !== seq) return
-        if (isRecovery && recoveryTime > 0) {
+        if (settingsPlayback) {
+          const currentVideo = videoRef.current ?? video
+          currentVideo.currentTime = settingsPlayback.currentTime
+          const resume =
+            settingsPlayback.isPlaying && !wasUserPaused(currentVideo)
+          if (resume) void safePlay(currentVideo)
+          else currentVideo.pause()
+          suppressEventsRef.current = false
+          if (isHostRef.current) {
+            broadcastState({ ...state, isPlaying: resume })
+            sendControl(resume ? 'play' : 'pause')
+          }
+        } else if (isRecovery && recoveryTime > 0) {
           // 恢复进度：seek 到目标时间并强制暂停
           try {
             video.currentTime = recoveryTime
