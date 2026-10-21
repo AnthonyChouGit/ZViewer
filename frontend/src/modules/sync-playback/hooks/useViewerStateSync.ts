@@ -298,7 +298,9 @@ export function useViewerStateSync({
       // 判断是否为 sourceUrl 变化
       const isSourceChange =
         lastAppliedSourceUrlRef.current !== state.sourceUrl ||
-        previous.noProxyFallback !== state.noProxyFallback
+        previous.noProxyFallback !== state.noProxyFallback ||
+        (previous.playsvideoEnabled !== false) !==
+          (state.playsvideoEnabled !== false)
       setWatchTogether(state)
 
       const processState = async (s: WatchTogetherState, force = false) => {

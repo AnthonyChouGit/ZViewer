@@ -89,8 +89,10 @@ test('CMS, ani-subs and Kazumi resolvers carry direct policy through the host/vi
   const proxy = (url) => `/api/stream/cms/proxy?url=${encodeURIComponent(url)}`;
   const resolver = loadLocalTs('frontend/src/modules/movie-source/resolver.ts', (name) => {
     if (name === './media-policy') return mediaPolicy;
+    if (name === '@/lib/antileech-proxy-url') return { buildAntileechProxyUrl: (_module,url) => proxy(url) };
     if (name === '@/modules/cms/api') return { resolveCmsEpisode: async () => resolved, buildCmsProxyUrl: proxy };
     if (name === '@/modules/anisubs') return { resolveAniSubsEpisode: async () => resolved, buildAniSubsProxyUrl: proxy };
+    if (name === '@/modules/kazumi/api') return { resolveKazumiEpisode: async () => resolved, buildKazumiProxyUrl: proxy };
     if (name === '@/lib/mediaFormat') return { detectMediaFormat: () => 'hls' };
     return {};
   });
@@ -107,6 +109,116 @@ test('CMS, ani-subs and Kazumi resolvers carry direct policy through the host/vi
       assert.equal(syncState.isStateEqual(state, { ...state, noProxyFallback: !state.noProxyFallback }), false);
     }
   }
+});
+
+test('per-movie transcoding survives resolution and broadcasts while paused at the same URL', async () => {
+  const resolved = {url: 'https://media.example/video.mp4', format: 'mp4'};
+  const resolver = loadLocalTs('frontend/src/modules/movie-source/resolver.ts', name => {
+    if (name === './media-policy') return mediaPolicy;
+    if (name === '@/modules/anisubs') return { resolveAniSubsEpisode: async () => resolved };
+    if (name === '@/modules/cms/api') return { resolveCmsEpisode: async () => resolved };
+    if (name === '@/modules/kazumi/api') return { resolveKazumiEpisode: async () => resolved };
+    if (name === '@/lib/mediaFormat') return { detectMediaFormat: () => 'mp4' };
+    return {};
+  });
+  for (const sourceType of ['anime', 'cms', 'kazumi', 'url']) {
+    const movie = {id: 1, url: resolved.url, sourceType, sourceMeta: {sourceId:'test', episode:{id:'1'}, vodId:'1'}};
+    const off = await resolver.resolveMovieSource({movie:{...movie, playsvideoEnabled:false}, sourceType});
+    const on = await resolver.resolveMovieSource({movie:{...movie, playsvideoEnabled:true}, sourceType});
+    assert.equal(off.playsvideoEnabled, false, sourceType);
+    assert.equal(on.playsvideoEnabled, true, sourceType);
+    const before = {...off, isPlaying:false, currentTime:17, playbackRate:1};
+    const after = {...before, playsvideoEnabled:true};
+    assert.equal(syncState.isStateEqual(before, after), false);
+    const wire = JSON.parse(JSON.stringify(syncState.computeStateDiff(before, after)));
+    assert.equal(wire.playsvideoEnabled, true);
+  }
+});
+
+test('Kazumi relay toggles unwrap legacy URLs and retain headers for newly added episodes', async () => {
+  const media = 'https://media.example/video.mp4?token=fixture';
+  let calls = 0;
+  const buildProxy = (url, headers) => `/api/stream/kazumi/proxy?${new URLSearchParams({url, referer:headers?.Referer ?? ''})}`;
+  const resolver = loadLocalTs('frontend/src/modules/movie-source/resolver.ts', name => {
+    if (name === './media-policy') return mediaPolicy;
+    if (name === '@/lib/antileech-proxy-url') return { buildAntileechProxyUrl: (_module,url,headers,options) => {
+      assert.equal(options.relative,true);
+      return buildProxy(url,headers);
+    } };
+    if (name === '@/modules/kazumi/api') return {
+      resolveKazumiEpisode: async () => {calls++; return {url:media, format:'mp4', headers:{Referer:'https://source.example/'}};},
+      buildKazumiProxyUrl: buildProxy,
+    };
+    if (name === '@/lib/mediaFormat') return { detectMediaFormat: () => 'mp4' };
+    return {};
+  });
+  for (const url of [media, buildProxy(media,{Referer:'https://source.example/'})]) {
+    const movie = {id:1, sourceType:'kazumi', url};
+    const direct = await resolver.resolveMovieSource({movie:{...movie, serverProxy:false}, sourceType:'kazumi'});
+    const relay = await resolver.resolveMovieSource({movie:{...movie, serverProxy:true}, sourceType:'kazumi'});
+    assert.equal(direct.sourceUrl, media);
+    assert.equal(direct.noProxyFallback, true);
+    assert.equal(new URL(relay.sourceUrl,'http://test').searchParams.get('url'), media);
+  }
+  for (const serverProxy of [false,true,false]) {
+    const movie = {id:2, sourceType:'kazumi', url:media, serverProxy, sourceMeta:{sourceId:'fixture', episode:{id:'ep1'}}};
+    const result = await resolver.resolveMovieSource({movie,sourceType:'kazumi'});
+    assert.equal(result.sourceUrl, serverProxy ? buildProxy(media,{Referer:'https://source.example/'}) : media);
+  }
+  assert.equal(calls,3);
+});
+
+test('data-source relay snapshots use a relative endpoint for each viewer access address', async () => {
+  const builder = loadLocalTs('frontend/src/lib/antileech-proxy-url.ts', () => ({getApiUrl: () => 'https://host-only.example'}));
+  const resolved = {url:'https://media.example/video.mp4', format:'mp4', headers:{Referer:'https://source.example/'}};
+  const resolver = loadLocalTs('frontend/src/modules/movie-source/resolver.ts', name => {
+    if (name === './media-policy') return mediaPolicy;
+    if (name === '@/lib/antileech-proxy-url') return builder;
+    if (name === '@/modules/anisubs') return {resolveAniSubsEpisode:async()=>resolved};
+    if (name === '@/modules/cms/api') return {resolveCmsEpisode:async()=>resolved};
+    if (name === '@/modules/kazumi/api') return {resolveKazumiEpisode:async()=>resolved};
+    return {};
+  });
+  for (const sourceType of ['anime','cms','kazumi']) {
+    const movie = {id:1, sourceType, serverProxy:true, sourceMeta:{sourceId:'test',episode:{id:'ep1'},vodId:'1'}};
+    const result=await resolver.resolveMovieSource({movie,sourceType});
+    assert.ok(result.sourceUrl.startsWith(`/api/stream/${sourceType === 'anime' ? 'anisubs' : sourceType}/proxy?`));
+    for (const origin of ['https://host.example','https://viewer.example']) {
+      const url=new URL(result.sourceUrl,origin);
+      assert.equal(url.origin,origin);
+      assert.equal(url.searchParams.get('url'),resolved.url);
+      assert.equal(url.searchParams.get('referer'),resolved.headers.Referer);
+    }
+  }
+});
+
+test('player reattaches an unchanged URL when the engine or direct policy changes', async () => {
+  const calls=[];
+  const hook=loadLocalTs('frontend/src/modules/player/hooks/usePlayerSource.ts', name => {
+    if(name==='react')return {useRef:value=>({current:value}),useCallback:fn=>fn,useEffect:()=>{}};
+    if(name==='../engine-selector')return {
+      shouldUsePlaysVideo:source=>source.playsvideoEnabled!==false,
+      selectEngine:source=>({type:source.playsvideoEnabled===false?'direct':'playsvideo',attach:async()=>{calls.push({...source});return {};}}),
+    };
+    if(name==='../utils')return {resetVideoElement:()=>{}};
+    if(name==='@/lib/mediaFormat')return {isBrowserPlayableFormat:()=>true};
+    return {};
+  });
+  const video={addEventListener(){},removeEventListener(){},pause(){}};
+  const player=hook.usePlayerSource({videoRef:{current:video}});
+  const source={url:'/api/server-files/proxy?path=test.mkv',format:'mkv',playsvideoEnabled:false};
+  await player.attachSource(video,source);
+  await player.attachSource(video,{...source});
+  assert.equal(calls.length,1,'identical list broadcasts do not reattach');
+  await player.attachSource(video,{...source,playsvideoEnabled:true});
+  assert.equal(calls.length,2,'same URL switches to the browser engine');
+  await player.attachSource(video,{...source,playsvideoEnabled:undefined});
+  assert.equal(calls.length,2,'legacy default and enabled select the same engine');
+  await player.attachSource(video,{...source,playsvideoEnabled:true,noProxyFallback:true});
+  assert.equal(calls.length,3,'same URL applies a changed transport policy');
+  await Promise.all([player.attachSource(video,source),player.attachSource(video,{...source})]);
+  assert.equal(calls.length,4,'queued duplicate requests still mount only once');
+  player.cleanup();
 });
 
 test('HLS transport keeps direct manifests, segments, keys and maps off the media proxy', () => {

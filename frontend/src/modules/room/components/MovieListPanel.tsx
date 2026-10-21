@@ -28,6 +28,7 @@ import {
 } from '@/modules/bilibili/cliApi'
 import type { ResolvedSource } from '@/modules/bilibili/types'
 import { BilibiliParseSettings } from './BilibiliParseSettings'
+import { MoviePlaybackSettings } from './MoviePlaybackSettings'
 import {
   getEffectivePreferMp4,
   getActiveCliProxyUrl,
@@ -682,8 +683,12 @@ export function MovieListPanel({
                   className={cn(
                     'grid items-center gap-2',
                     isHost || canManage
-                      ? 'grid-cols-[auto_1fr_auto_auto]'
-                      : 'grid-cols-[auto_1fr]'
+                      ? movie.sourceType === 'bilibili'
+                        ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto]'
+                        : 'grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
+                      : movie.sourceType === 'bilibili'
+                        ? 'grid-cols-[auto_minmax(0,1fr)]'
+                        : 'grid-cols-[auto_minmax(0,1fr)_auto]'
                   )}
                 >
                   <div
@@ -794,6 +799,10 @@ export function MovieListPanel({
                         />
                       )}
                   </div>
+                  <MoviePlaybackSettings
+                    movie={movie}
+                    canEdit={(isHost || canManage) && !isScreenShare}
+                  />
                   {(isHost || canManage) && (
                     <Button
                       variant={isActive ? 'primary' : 'secondary'}
