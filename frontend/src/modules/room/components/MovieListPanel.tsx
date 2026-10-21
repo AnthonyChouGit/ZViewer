@@ -683,8 +683,8 @@ export function MovieListPanel({
                   className={cn(
                     'grid items-center gap-2',
                     isHost || canManage
-                      ? 'grid-cols-[auto_1fr_auto_auto]'
-                      : 'grid-cols-[auto_1fr]'
+                      ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto]'
+                      : 'grid-cols-[auto_minmax(0,1fr)]'
                   )}
                 >
                   <div

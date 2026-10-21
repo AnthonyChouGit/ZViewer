@@ -108,32 +108,3 @@ export function buildKazumiProxyUrl(
 ): string {
   return buildAntileechProxyUrl('kazumi', url, headers, { force })
 }
-
-/** 播放地址是否已是 Kazumi 服务器中转代理 URL（而非源站直链） */
-export function isKazumiProxyUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url, 'http://local.invalid')
-    return (
-      /\/api\/stream\/kazumi\/proxy$/.test(parsed.pathname) &&
-      parsed.searchParams.has('url')
-    )
-  } catch {
-    return false
-  }
-}
-
-/**
- * 将 Kazumi 服务器中转代理 URL 还原为源站直链。
- *
- * 仅用于「旧影片没有 sourceMeta、无法重新解析」时切换服务器中转开关：
- * 代理 URL 的 url 查询参数就是添加时物化的源站地址。非代理 URL 原样返回。
- */
-export function unwrapKazumiProxyUrl(url: string): string {
-  try {
-    const parsed = new URL(url, 'http://local.invalid')
-    if (!/\/api\/stream\/kazumi\/proxy$/.test(parsed.pathname)) return url
-    return parsed.searchParams.get('url') || url
-  } catch {
-    return url
-  }
-}

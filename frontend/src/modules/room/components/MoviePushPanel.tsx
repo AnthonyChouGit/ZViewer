@@ -484,7 +484,7 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
           source: 'kazumi',
           format: resolved.format,
           serverProxy,
-          // 同批次添加：落元数据供播放时实时重解析（中转开关 / 直链过期自愈）
+          // 落元数据供播放时实时重解析（中转开关 / 直链过期自愈）
           sourceMeta: {
             kind: 'kazumi',
             sourceId,

@@ -298,11 +298,13 @@ export function useViewerStateSync({
       // 判断是否为 sourceUrl 变化
       // 引擎门控（playsvideoEnabled）变化同样需要重挂载：URL 不变时引擎选择
       // 依据 state.playsvideoEnabled，不重挂载就会继续用旧引擎（房主在影片
-      // 卡片里切换「浏览器转码」后观众应立即跟随）。
+      // 卡片里切换「浏览器转码」后观众应立即跟随）。旧房主上报可能缺该字段，
+      // 按「缺省视为开启」归一化后再比，避免无意义重挂载。
       const isSourceChange =
         lastAppliedSourceUrlRef.current !== state.sourceUrl ||
         previous.noProxyFallback !== state.noProxyFallback ||
-        previous.playsvideoEnabled !== state.playsvideoEnabled
+        (previous.playsvideoEnabled !== false) !==
+          (state.playsvideoEnabled !== false)
       setWatchTogether(state)
 
       const processState = async (s: WatchTogetherState, force = false) => {

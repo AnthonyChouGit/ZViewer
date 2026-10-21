@@ -22,7 +22,8 @@ export function restoreStateSnapshot(
   const cleared = Object.fromEntries(
     Object.keys(current).map((key) => [key, undefined])
   )
-  const sameSource = current.sourceUrl === snapshot.sourceUrl &&
+  const sameSource =
+    current.sourceUrl === snapshot.sourceUrl &&
     current.sourceType === snapshot.sourceType
   return {
     ...cleared,
@@ -30,8 +31,12 @@ export function restoreStateSnapshot(
     duration: snapshot.duration ?? 0,
     // Older hosts omit these policies in buildStateFromVideo. Keep them only
     // for the same source; a different film must never inherit its policies.
-    playsvideoEnabled: snapshot.playsvideoEnabled ?? (sameSource ? current.playsvideoEnabled : undefined),
-    noProxyFallback: snapshot.noProxyFallback ?? (sameSource ? current.noProxyFallback : undefined),
+    playsvideoEnabled:
+      snapshot.playsvideoEnabled ??
+      (sameSource ? current.playsvideoEnabled : undefined),
+    noProxyFallback:
+      snapshot.noProxyFallback ??
+      (sameSource ? current.noProxyFallback : undefined),
   }
 }
 
@@ -171,7 +176,8 @@ export function isStateEqual(
     a.videoCodec !== b.videoCodec ||
     a.audioCodec !== b.audioCodec ||
     a.cid !== b.cid ||
-    a.noProxyFallback !== b.noProxyFallback
+    a.noProxyFallback !== b.noProxyFallback ||
+    (a.playsvideoEnabled !== false) !== (b.playsvideoEnabled !== false)
   ) {
     return false
   }
@@ -208,9 +214,6 @@ export function isStateEqual(
 
   // 缓冲模式标记变化时需要广播（影响观众端是否触发缓存下载）
   if (a.bufferMode !== b.bufferMode) return false
-
-  // 引擎门控（浏览器转码）变化时需要广播：观众端据此重挂载选新引擎
-  if (a.playsvideoEnabled !== b.playsvideoEnabled) return false
 
   // 房主 CLI 标记变化时需要广播（影响观众端是否强制走 MP4）
   if (a.hostCliEnabled !== b.hostCliEnabled) return false

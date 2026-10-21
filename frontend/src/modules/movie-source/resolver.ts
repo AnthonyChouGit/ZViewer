@@ -9,7 +9,7 @@
  *
  * 本模块不触碰 React 状态 / store / message，所有副作用留在调用方。
  */
-import type { Movie, KazumiSourceMeta } from '@/store/roomStore'
+import type { Movie } from '@/store/roomStore'
 import { useRoomStore } from '@/store/roomStore'
 import { detectMediaFormat, type MediaFormat } from '@/lib/mediaFormat'
 import { resolveBilibiliWithOptions } from '@/modules/bilibili/bilibiliApi'
@@ -20,14 +20,10 @@ import { useSystemSettingsStore } from '@/store/systemSettingsStore'
 import type { QualityOption } from './resolveSource'
 import { buildServerFileProxyUrl } from '@/modules/server-files/serverFilesApi'
 import { resolveMovieDirectUrl } from '@/modules/direct-link/directLinkApi'
-import { resolveAniSubsEpisode, buildAniSubsProxyUrl } from '@/modules/anisubs'
-import {
-  resolveKazumiEpisode,
-  buildKazumiProxyUrl,
-  isKazumiProxyUrl,
-  unwrapKazumiProxyUrl,
-} from '@/modules/kazumi/api'
-import { resolveCmsEpisode, buildCmsProxyUrl } from '@/modules/cms/api'
+import { resolveAniSubsEpisode } from '@/modules/anisubs'
+import { resolveKazumiEpisode } from '@/modules/kazumi/api'
+import { resolveCmsEpisode } from '@/modules/cms/api'
+import { buildAntileechProxyUrl } from '@/lib/antileech-proxy-url'
 import type { CmsSourceMeta } from '@/modules/cms/types'
 import { usesDirectMedia } from './media-policy'
 
@@ -410,7 +406,10 @@ export async function resolveAnimeOnline(
   // 代理决策：仅由服务器中转模式（movie.serverProxy）决定，不自动兜底
   const finalUrl =
     movie.serverProxy === true
-      ? buildAniSubsProxyUrl(resolved.url, resolved.headers, true)
+      ? buildAntileechProxyUrl('anisubs', resolved.url, resolved.headers, {
+          force: true,
+          relative: true,
+        })
       : resolved.url
 
   return {
@@ -423,6 +422,41 @@ export async function resolveAnimeOnline(
     duration: movie.duration ?? 0,
     headers: undefined,
     reusedRecoveryUrl: false,
+    playsvideoEnabled: movie.playsvideoEnabled !== false,
+  }
+}
+
+/**
+ * 解析旧记录里已物化的 Kazumi 服务器中转地址。
+ *
+ * 返回其中的源站直链与防盗链 headers（Referer/UA/Origin/Cookie），非代理地址
+ * 返回 null。没有 sourceMeta 的旧影片只能靠它实现「关中转还原直链 / 开中转
+ * 重新包装」，同时保住重新包装时需要的防盗链头（丢了会被源站 403）。
+ */
+function parseKazumiProxyUrl(
+  url: string
+): { sourceUrl: string; headers?: Record<string, string> } | null {
+  try {
+    const parsed = new URL(url, 'http://local.invalid')
+    if (!/\/api\/stream\/kazumi\/proxy$/.test(parsed.pathname)) return null
+    const sourceUrl = parsed.searchParams.get('url')
+    if (!sourceUrl) return null
+    const headers: Record<string, string> = {}
+    for (const [query, header] of [
+      ['referer', 'Referer'],
+      ['userAgent', 'User-Agent'],
+      ['origin', 'Origin'],
+      ['cookie', 'Cookie'],
+    ] as const) {
+      const value = parsed.searchParams.get(query)
+      if (value) headers[header] = value
+    }
+    return {
+      sourceUrl,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -438,22 +472,34 @@ export async function resolveAnimeOnline(
  * 依据开关只在「代理包装 / 解包」之间切换，保持与旧行为一致又不至于让开关失效。
  *
  * 防盗链处理与 ani-subs / CMS 同语义：是否走服务器代理完全由影片级
- * 「服务器中转」开关（movie.serverProxy）决定，不自动兜底。
+ * 「服务器中转」开关（movie.serverProxy）决定，不自动兜底；代理地址一律
+ * 用相对路径构造，让每个客户端都访问自己可达的同源后端。
  */
 export async function resolveKazumiOnline(
   movie: Movie,
   recoverySourceUrl?: string
 ): Promise<ResolvedMovieSource> {
-  const meta = movie.sourceMeta as KazumiSourceMeta | null
+  const meta = movie.sourceMeta
   const wantProxy = movie.serverProxy === true
+  // `kind` 判别字段是后加的，更早落库的 Kazumi 影片只有 sourceId + episode，
+  // 两者都视为可重解析（sourceType 已限定为 kazumi，不会与 CMS 元数据混淆）。
+  const canResolve =
+    !!meta &&
+    'sourceId' in meta &&
+    !!meta.sourceId &&
+    'episode' in meta &&
+    !!meta.episode
 
-  if (meta && meta.kind === 'kazumi') {
+  if (canResolve) {
     try {
       const resolved = await resolveKazumiEpisode(meta.sourceId, meta.episode)
       return {
-        noProxyFallback: !wantProxy,
+        noProxyFallback: usesDirectMedia(movie),
         sourceUrl: wantProxy
-          ? buildKazumiProxyUrl(resolved.url, resolved.headers, true)
+          ? buildAntileechProxyUrl('kazumi', resolved.url, resolved.headers, {
+              force: true,
+              relative: true,
+            })
           : resolved.url,
         audioUrl: undefined,
         format: (resolved.format as MediaFormat | undefined) ?? movie.format,
@@ -475,17 +521,19 @@ export async function resolveKazumiOnline(
   // 回退：物化 URL 与开关语义已一致时原样播放，不一致时就地包装/解包。
   // 刷新恢复场景优先用后端回传的最近一次 URL（比添加时固化的更新鲜）。
   const baseUrl = recoverySourceUrl || movie.url
-  const storedIsProxy = isKazumiProxyUrl(baseUrl)
-  let sourceUrl = baseUrl
-  if (wantProxy && !storedIsProxy) {
-    // 旧影片没有 Referer 等 headers 可复用，只能做无头的强制中转
-    sourceUrl = buildKazumiProxyUrl(baseUrl, undefined, true)
-  } else if (!wantProxy && storedIsProxy) {
-    sourceUrl = unwrapKazumiProxyUrl(baseUrl)
-  }
+  const stored = parseKazumiProxyUrl(baseUrl)
+  const innerUrl = stored?.sourceUrl ?? baseUrl
+  // 开中转时按当前服务端重新包装（旧地址可能指向添加者当时的 origin），
+  // 并复用旧地址里的防盗链头，避免重复套代理后又因缺 Referer 被源站拒绝。
+  const sourceUrl = wantProxy
+    ? buildAntileechProxyUrl('kazumi', innerUrl, stored?.headers, {
+        force: true,
+        relative: true,
+      })
+    : innerUrl
 
   return {
-    noProxyFallback: !wantProxy,
+    noProxyFallback: usesDirectMedia(movie),
     sourceUrl,
     audioUrl: undefined,
     format: movie.format || detectMediaFormat(sourceUrl),
@@ -526,7 +574,10 @@ export async function resolveCmsOnline(
   // 代理决策：仅由服务器中转模式（movie.serverProxy）决定，不自动兜底
   const finalUrl =
     movie.serverProxy === true
-      ? buildCmsProxyUrl(resolved.url, resolved.headers, true)
+      ? buildAntileechProxyUrl('cms', resolved.url, resolved.headers, {
+          force: true,
+          relative: true,
+        })
       : resolved.url
 
   return {
