@@ -43,6 +43,7 @@ import {
 } from '@/modules/movie-source/resolveSource'
 import { useBilibiliQrLogin } from '@/modules/bilibili/useBilibiliQrLogin'
 import { BiliSearchModal } from './BiliSearchModal'
+import { MoviePlaybackSettings } from './MoviePlaybackSettings'
 import {
   resolveOpenList,
   fetchOpenListDirectUrl,
@@ -1382,89 +1383,6 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
 
           {renderActionButton()}
 
-          {/* 服务器中转开关：仅数据源类（ani/kazumi/cms）显示。默认关闭——
-              一律直连源站，服务器零媒体流量（带防盗链的源不开中转无法播放，
-              浏览器无法设置 Referer/UA）；开启后媒体流一律经服务器中转。
-              ani/cms 播放时实时重解析消费，kazumi 添加时物化为代理 URL。 */}
-          {(sourceType === 'anime' ||
-            sourceType === 'kazumi' ||
-            sourceType === 'cms') && (
-            <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[var(--md-sys-shape-corner)] bg-[var(--md-sys-color-surface-container-high)]">
-              <div className="min-w-0">
-                <Text className="block text-xs font-medium">服务器中转</Text>
-                <Text
-                  type="secondary"
-                  className="block text-[11px] leading-snug mt-0.5"
-                >
-                  关闭（默认）：一律直连源站，服务器零媒体流量，带防盗链的源需开启才能播放。开启：媒体流一律经服务器中转，兼容性最好但占用服务器流量。
-                </Text>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={serverProxy}
-                disabled={!isHost}
-                onClick={() => setServerProxy((prev) => !prev)}
-                className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                style={{
-                  backgroundColor: serverProxy
-                    ? 'var(--md-sys-color-primary)'
-                    : 'var(--md-sys-color-outline)',
-                }}
-              >
-                <span
-                  className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                  style={{
-                    transform: serverProxy
-                      ? 'translateX(18px)'
-                      : 'translateX(2px)',
-                  }}
-                />
-              </button>
-            </div>
-          )}
-
-          {/* 浏览器转码引擎开关：仅挂载/文件类源显示。B站 源解析出的
-              MP4/DASH 浏览器必定原生可播，无转码需求，隐藏开关避免困惑。 */}
-          {sourceType !== 'bilibili' && (
-            <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[var(--md-sys-shape-corner)] bg-[var(--md-sys-color-surface-container-high)]">
-              <div className="min-w-0">
-                <Text className="block text-xs font-medium">
-                  浏览器转码引擎
-                </Text>
-                <Text
-                  type="secondary"
-                  className="block text-[11px] leading-snug mt-0.5"
-                >
-                  开启：MKV/DTS
-                  等非常规格式由浏览器端重封装/转码播放。关闭：强制原生直连，不兼容编码将无声。
-                </Text>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={playsvideoEnabled}
-                disabled={!isHost}
-                onClick={() => setPlaysvideoEnabled((prev) => !prev)}
-                className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                style={{
-                  backgroundColor: playsvideoEnabled
-                    ? 'var(--md-sys-color-primary)'
-                    : 'var(--md-sys-color-outline)',
-                }}
-              >
-                <span
-                  className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                  style={{
-                    transform: playsvideoEnabled
-                      ? 'translateX(18px)'
-                      : 'translateX(2px)',
-                  }}
-                />
-              </button>
-            </div>
-          )}
-
           {resolveProgress && (
             <div
               className="flex items-center gap-2 rounded-[var(--md-sys-shape-corner)] px-3 py-2 text-xs"
@@ -1618,6 +1536,22 @@ export function MoviePushPanel({ isHost }: MoviePushPanelProps) {
               </Paragraph>
             </div>
           )}
+
+          {/* 播放设置：服务器中转（仅数据源类）与浏览器转码（非 B站 源）
+              都只影响下一次添加，收进默认收起的折叠区，避免常驻挤压表单。 */}
+          <MoviePlaybackSettings
+            showServerProxy={
+              sourceType === 'anime' ||
+              sourceType === 'kazumi' ||
+              sourceType === 'cms'
+            }
+            serverProxy={serverProxy}
+            onServerProxyChange={setServerProxy}
+            showTranscode={sourceType !== 'bilibili'}
+            playsvideoEnabled={playsvideoEnabled}
+            onPlaysvideoChange={setPlaysvideoEnabled}
+            disabled={!isHost}
+          />
         </div>
       </div>
 
