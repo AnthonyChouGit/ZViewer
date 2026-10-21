@@ -38,7 +38,8 @@ RUN mkdir -p config/ssl config/uploads config/media log \
 # 3333/tcp: 统一端口 - 后端 REST API + WebSocket (Socket.IO) + 前端静态文件 + /live HTTP-FLV 代理
 # 3333/udp: LiveKit WebRTC 媒体传输（与页面同号不同协议）
 # 3334/tcp: RTMP 推流端口 (OBS 连接)
-EXPOSE 3333/tcp 3333/udp 3334/tcp
+# 3337/tcp: 语音 TCP 兜底端口（TURN/TLS 中继或 ICE/TCP 直连，二者互斥共用同一端口号）
+EXPOSE 3333/tcp 3333/udp 3334/tcp 3337/tcp
 
 # Entrypoint（HTTP 模式，仅启动后端，由后端统一提供 API + 前端静态文件）
 COPY docker/entrypoint-linux-single.sh /app/entrypoint.sh

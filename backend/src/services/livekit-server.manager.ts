@@ -31,20 +31,45 @@ const HTTP_PORT = 3336;
  */
 const UDP_PORT = 3333;
 /**
- * ICE/TCP 端口（LiveKit 原生 rtc.tcp_port，官方默认 7881）：TCP 模式下
- * 额外开启——UDP 被墙（运营商/企业防火墙）时客户端自动经此端口以 TCP
- * 直连媒体。部署侧需放行 3337/tcp（Docker 需补端口映射）。
- * 可用环境变量 LIVEKIT_RTC_TCP_PORT 覆盖。
+ * 语音 TCP 兜底端口（默认 3337）：防火墙只为「一条 TCP + 一条 UDP」开口，
+ * 所以 TCP 侧的兜底通道统一收敛到这一个端口号，同一时刻由下面二者之一
+ * 独占（二者都是 TCP 监听，LiveKit 单进程内无法共用端口——实测同端口
+ * 启动直接 bind 失败退出）：
+ * - 配齐 TURN 三件套：TURN/TLS 中继（穿透 NAT、服务端 IP 不可达也有效，
+ *   需正式证书）
+ * - 未配 TURN：管理端切「TCP 模式」时开启 LiveKit 原生 rtc.tcp_port 直连
+ * 可用环境变量 LIVEKIT_RTC_TCP_PORT 覆盖端口号。
  */
 const TCP_PORT = Number(process.env.LIVEKIT_RTC_TCP_PORT?.trim()) || 3337;
+/**
+ * TURN/TLS 中继端口：默认与 TCP 兜底通道同号（见上），防火墙只需放行
+ * 3337/tcp 即可同时覆盖「直连」与「中继」两种部署形态。
+ * 可用环境变量 LIVEKIT_TURN_TLS_PORT 单独覆盖（如想回到官方 5349）。
+ */
+const TURN_PORT =
+  Number(process.env.LIVEKIT_TURN_TLS_PORT?.trim()) || TCP_PORT;
+
+/**
+ * TURN/TLS 三件套（域名 + 证书 + 私钥）是否齐全——三者缺一不算启用。
+ * 自签证书浏览器 WebRTC 不信任，故必须正式证书；域名需与证书一致。
+ * 供「端口归属判定」与「子进程参数注入」共用，避免两处口径不一致
+ * （端口只能由 TURN 或 ICE/TCP 之一占用，判定必须同一口径）。
+ */
+function readTurnConfig(): { domain: string; cert: string; key: string } | null {
+  const domain = process.env.LIVEKIT_TURN_DOMAIN?.trim();
+  const cert = process.env.LIVEKIT_TURN_CERT?.trim();
+  const key = process.env.LIVEKIT_TURN_KEY?.trim();
+  return domain && cert && key ? { domain, cert, key } : null;
+}
 
 export type VoiceTransportMode = 'udp' | 'tcp';
 /**
  * 当前语音媒体传输模式（管理端基础设置下发）：
- * - 'udp'（默认）：仅 UDP 复用端口 3333
- * - 'tcp'：保留 UDP 3333 并额外开启 ICE/TCP 3337（LiveKit 无法禁用
- *   UDP 候选，双开由客户端 ICE 自动选路——UDP 可用走低延迟直连，
- *   被墙环境自动落到 TCP）
+ * - 'udp'（默认）：优先 UDP 复用端口 3333
+ * - 'tcp'：保留 UDP 3333 并开启 TCP 兜底通道 3337（配了 TURN 三件套时该
+ *   端口是 TURN/TLS 中继，否则是 ICE/TCP 直连——二者互斥，见 TCP_PORT）
+ * LiveKit 无法禁用 UDP 候选，双开由客户端 ICE 自动选路：UDP 可用走低延迟
+ * 直连，被墙环境自动落到 TCP 通道。
  */
 let voiceTransportMode: VoiceTransportMode = 'udp';
 /**
@@ -294,20 +319,25 @@ async function spawnAndAwait(
   // 指定时由 LIVEKIT_RTC_USE_EXTERNAL_IP 驱动 LiveKit 自行 STUN 探测
   // 公网 IP（bridge NAT 下枚举网卡只得 172.x 内网地址，浏览器不可达）。
   if (nodeIp) args.push('--node-ip', nodeIp);
-  // TURN/TLS 中继（TCP 5349）：域名寻址 + 正式证书，浏览器经 TCP 主动连
-  // 服务器中继媒体，彻底不依赖 IP 广播——防火墙拦截 UDP/NAT 复杂场景的
-  // 兜底通道。UDP 直连（node-ip/host candidate）仍并行尝试，优先走低延迟
-  // 直连。三个 env 齐全才启用（自签证书不被浏览器信任，必须正式证书）。
-  const turnDomain = process.env.LIVEKIT_TURN_DOMAIN?.trim();
-  const turnCert = process.env.LIVEKIT_TURN_CERT?.trim();
-  const turnKey = process.env.LIVEKIT_TURN_KEY?.trim();
-  if (turnDomain && turnCert && turnKey) {
+  // TURN/TLS 中继：域名寻址 + 正式证书，浏览器经 TCP 主动连服务器中继媒体，
+  // 彻底不依赖 IP 广播与对端可达性——防火墙拦 UDP / 多层 NAT / 服务端 IP 被
+  // 封时的最终兜底。端口与 TCP 直连通道同号（默认 3337，见 TURN_PORT），
+  // 防火墙只需放行一条 TCP。UDP 直连（host/srflx 候选）仍并行尝试，可通时
+  // 优先走低延迟 UDP。三个 env 齐全才启用。
+  const turn = readTurnConfig();
+  if (turn) {
     process.env.LIVEKIT_TURN_ENABLED ??= 'true';
-    process.env.LIVEKIT_TURN_TLS_PORT ??= '5349';
+    process.env.LIVEKIT_TURN_TLS_PORT ??= String(TURN_PORT);
     process.env.LIVEKIT_TURN_EXTERNAL_TLS ??= 'false';
-    args.push('--turn-cert', turnCert, '--turn-key', turnKey);
-    console.log(`[voice] TURN/TLS 已启用: ${turnDomain}:5349 (TCP 中继兜底)`);
-  } else if (turnDomain || turnCert || turnKey) {
+    args.push('--turn-cert', turn.cert, '--turn-key', turn.key);
+    console.log(
+      `[voice] TURN/TLS 已启用: ${turn.domain}:${TURN_PORT} (TCP 中继兜底)`
+    );
+  } else if (
+    process.env.LIVEKIT_TURN_DOMAIN?.trim() ||
+    process.env.LIVEKIT_TURN_CERT?.trim() ||
+    process.env.LIVEKIT_TURN_KEY?.trim()
+  ) {
     console.warn(
       '[voice] TURN 配置不完整（需 LIVEKIT_TURN_DOMAIN + LIVEKIT_TURN_CERT + LIVEKIT_TURN_KEY 三者），已忽略'
     );
@@ -358,10 +388,21 @@ export async function startEmbeddedLivekit(): Promise<void> {
     process.env.LIVEKIT_RTC_USE_EXTERNAL_IP ??= 'true';
     console.log('[voice] 已启用 LiveKit 原生 STUN 外部 IP 发现');
   }
-  // ICE/TCP 端口（LiveKit 原生 rtc.tcp_port）：CLI 无 --tcp-port flag，
-  // 只能经 config 环境变量下发。TCP 模式注入（未显式配置时默认 3337）；
-  // UDP 模式删除——热重启从 TCP 切回 UDP 时清除上次注入的残留。
-  if (voiceTransportMode === 'tcp') {
+  // TCP 兜底通道的端口归属（默认 3337，见 TCP_PORT/TURN_PORT 注释）：
+  // TURN/TLS 中继与 LiveKit 原生 ICE/TCP 直连都是 TCP 监听，同一进程内
+  // 无法共用端口（实测同端口启动直接 bind 失败退出），因此：
+  // - TURN 三件套齐全：3337 由 TURN 独占，rtc.tcp_port=0 关闭 ICE/TCP 监听
+  //   （TURN 能力完全覆盖直连，且不依赖服务端 IP 可达）；UDP 模式下也不再
+  //   开放默认 7881，避免广播一条客户端必然连不上的 TCP 候选。
+  // - 未配 TURN：保持原行为，TCP 模式开 ICE/TCP 3337，UDP 模式删除（回到
+  //   LiveKit 默认 7881，容器内不可达、仅多一条候选）。
+  if (readTurnConfig()) {
+    process.env.LIVEKIT_TURN_TLS_PORT ??= String(TURN_PORT);
+    process.env.LIVEKIT_RTC_TCP_PORT = '0';
+    console.log(
+      `[voice] TCP 兜底通道: ${TURN_PORT}/tcp 由 TURN/TLS 中继独占（ICE/TCP 直连已关闭）`
+    );
+  } else if (voiceTransportMode === 'tcp') {
     process.env.LIVEKIT_RTC_TCP_PORT = String(TCP_PORT);
     console.log(`[voice] ICE/TCP 已启用: ${TCP_PORT}/tcp（UDP 直连仍并行尝试）`);
   } else {
@@ -429,7 +470,7 @@ export async function startEmbeddedLivekit(): Promise<void> {
         '[voice]   ① 部署到有公网 IP 的主机，安全组/防火墙放行 3333/udp（容器场景 docker-compose 已含映射）；\n' +
         '[voice]   ② 用支持端口转发的穿透（frp 等）把 3333/udp 映射到公网，并设 LIVEKIT_NODE_IP=穿透公网地址；\n' +
         '[voice]   ③ 配置 TURN/TLS 中继：LIVEKIT_TURN_DOMAIN + LIVEKIT_TURN_CERT + LIVEKIT_TURN_KEY 三项，' +
-        '并把 5349/tcp 映射到公网（需正式证书，浏览器不信任自签）。'
+        '并把 3337/tcp 映射到公网（需正式证书，浏览器不信任自签）。'
     );
   }
 }
@@ -449,8 +490,16 @@ export async function applyVoiceTransportMode(
   const changed = next !== voiceTransportMode;
   voiceTransportMode = next;
   if (!changed) return;
+  // 日志按「实际占用的通道」描述：3337 上跑的是 TURN 中继还是 ICE/TCP 直连，
+  // 取决于 TURN 三件套是否配齐（见 readTurnConfig），避免日志与实际不符。
+  const tcpFallback = readTurnConfig()
+    ? `${TURN_PORT}/tcp TURN/TLS 中继`
+    : next === 'tcp'
+      ? `${TCP_PORT}/tcp ICE/TCP 直连`
+      : null;
   console.log(
-    `[voice] 语音传输模式: ${next === 'tcp' ? `TCP（ICE/TCP ${TCP_PORT}，UDP 直连仍并行尝试）` : 'UDP（仅 3333/udp）'}`
+    `[voice] 语音传输模式: ${next === 'tcp' ? 'TCP' : 'UDP'}（3333/udp` +
+      `${tcpFallback ? ` + ${tcpFallback}` : ''}）`
   );
   if (!child) return;
   killChild();

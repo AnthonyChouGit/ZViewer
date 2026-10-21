@@ -7,8 +7,8 @@ services:
       - "3333:3333"     # 统一端口：后端 API + WebSocket + 前端静态文件 + /live HTTP-FLV 代理
       - "3333:3333/udp" # LiveKit WebRTC 媒体传输（与页面 HTTP 同号，协议不同）
       - "3334:3334"     # RTMP 推流 (OBS)
-      - "5349:5349"     # TURN/TLS 媒体中继（TCP，UDP 被拦时的兜底通道；未启用时无害）
-      # - "3337:3337"   # ICE/TCP 媒体直连（TCP）：管理端基础设置切换「语音传输模式=TCP」时取消注释
+      - "3337:3337"     # 语音 TCP 兜底端口：配齐 TURN 三件套时=TURN/TLS 中继，否则=ICE/TCP 直连
+                        # （同一端口同一时刻只由一种占用，二者互斥；仅 UDP 被拦的网络才会用到）
     environment:
       # 语音聊天（LiveKit）：LiveKit 已内嵌进本镜像（启动时由后端自动拉起，
       # HTTP/信令经 3333 的 /rtc 反代，媒体走 3333/udp），无需独立容器。
@@ -19,8 +19,10 @@ services:
       # 自动启用 LiveKit 原生 STUN 外部 IP 发现（需容器可出网，v4/v6 均支持）；
       # NAT/复杂网络或 STUN 不通时手动指定为宿主公网 IP，否则信令能通但媒体连不上。
       - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP:-}
-      # 可选：TURN/TLS 媒体中继（TCP 5349）——UDP 直连不通时的兜底通道。
+      # 可选：TURN/TLS 媒体中继（TCP 3337）——UDP 直连不通时的兜底通道。
       # 地址用域名（DNS 解析），无需公网 IP；三个变量齐全即自动启用。
+      # 端口与 ICE/TCP 直连共用 3337：启用 TURN 后由 TURN 独占该端口，
+      # 后端会自动关闭 ICE/TCP 监听（两者都是 TCP 监听，无法共存）。
       # 注意必须用正式证书（Let's Encrypt 等，自签不被浏览器 WebRTC 信任），
       # 域名需与证书一致。挂载证书目录示例：
       #   volumes 追加: - /etc/letsencrypt:/app/cert:ro

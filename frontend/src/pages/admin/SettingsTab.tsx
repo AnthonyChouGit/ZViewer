@@ -213,7 +213,7 @@ export function SettingsTab({
               options={[
                 { label: 'UDP（默认，低延迟直连）', value: 'udp' },
                 {
-                  label: 'TCP（UDP 被墙时的选择，额外开启 3337/TCP）',
+                  label: 'TCP（UDP 被墙时的选择，开启 3337/TCP 兜底）',
                   value: 'tcp',
                 },
               ]}
@@ -226,10 +226,10 @@ export function SettingsTab({
             />
             <p className="mt-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
               切换并保存后语音服务自动重启（进行中的语音短暂中断后重连）。TCP
-              模式额外开启 LiveKit 原生 ICE/TCP 端口 3337：UDP
-              被运营商或企业防火墙拦截时，客户端自动经 3337/TCP 直连媒体；UDP
-              可用时仍优先走低延迟 UDP。需在防火墙放行 3337/tcp（Docker
-              部署需补端口映射）。
+              模式开启 3337/TCP 兜底通道：UDP 被运营商或企业防火墙拦截时，客户端
+              自动改走该端口，UDP 可用时仍优先。该端口由 TURN/TLS 中继与 ICE/TCP
+              直连共用（同一时刻只运行一种：配齐 TURN 三项变量即为中继，
+              否则为直连）。需在防火墙放行 3337/tcp。
             </p>
           </div>
 
