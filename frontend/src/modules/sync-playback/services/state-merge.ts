@@ -209,6 +209,9 @@ export function isStateEqual(
   // 缓冲模式标记变化时需要广播（影响观众端是否触发缓存下载）
   if (a.bufferMode !== b.bufferMode) return false
 
+  // 引擎门控（浏览器转码）变化时需要广播：观众端据此重挂载选新引擎
+  if (a.playsvideoEnabled !== b.playsvideoEnabled) return false
+
   // 房主 CLI 标记变化时需要广播（影响观众端是否强制走 MP4）
   if (a.hostCliEnabled !== b.hostCliEnabled) return false
 

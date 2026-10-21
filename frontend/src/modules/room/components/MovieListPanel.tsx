@@ -28,6 +28,7 @@ import {
 } from '@/modules/bilibili/cliApi'
 import type { ResolvedSource } from '@/modules/bilibili/types'
 import { BilibiliParseSettings } from './BilibiliParseSettings'
+import { MovieRuntimeSettings } from './MovieRuntimeSettings'
 import {
   getEffectivePreferMp4,
   getActiveCliProxyUrl,
@@ -833,6 +834,10 @@ export function MovieListPanel({
                 {/* B站解析设置：每个 B站 影片独享一份配置；房主可操作，观众可查看并独立开启 CLI 代理 */}
                 {movie.sourceType === 'bilibili' && !isScreenShare && (
                   <BilibiliParseSettings movieId={movie.id} isHost={isHost} />
+                )}
+                {/* 影片级播放设置（服务器中转 / 浏览器转码）：即时生效的运行开关 */}
+                {movie.sourceType !== 'bilibili' && !isScreenShare && (
+                  <MovieRuntimeSettings movieId={movie.id} isHost={isHost} />
                 )}
               </div>
             )

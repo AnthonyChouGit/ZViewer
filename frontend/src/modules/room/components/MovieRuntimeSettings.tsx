@@ -1,14 +1,24 @@
 /**
- * 添加影片卡片底部的「播放设置」折叠区。
+ * 影片级「播放设置」折叠区（影片卡片内）。
  *
- * 服务器中转（仅数据源类 ani/kazumi/cms）与浏览器转码（仅非 B站 来源）
- * 都只作用于「下一次添加」，常驻表单会白白挤占高度，因此收进默认收起的
- * 折叠面板，展开后沿用影片卡片里「B站解析设置」的子卡样式。
- * 两个开关都不适用于当前来源时，整块不渲染。
+ * 与「B站解析设置」同款交互：默认收起，展开后是两张子卡开关。
+ * 与添加影片面板的区别：这里的改动直接写回影片记录（updateMovie）并广播
+ * 给全房间，属性能实时生效的运行开关，而非「对下一次添加生效」。
+ *
+ * - 服务器中转（movie.serverProxy）：仅数据源类 anime / cms。
+ *   解析链路每次播放都读该字段（resolveAnimeOnline / resolveCmsOnline），
+ *   所以改完需要重解析当前源；Kazumi 的播放地址在添加时已固化，没有可
+ *   重解析的元数据，故不提供该开关。
+ * - 浏览器转码（movie.playsvideoEnabled）：所有非 B站 影片。
+ *   该字段是引擎门控（shouldUsePlaysVideo），改完需要重挂载才会重新选引擎。
+ *
+ * 仅房主可操作；观众看到的是房主设定后的当前状态。
  */
 import { useState } from 'react'
 import { ChevronDown, MonitorPlay, Server, Settings2 } from 'lucide-react'
 import { Switch } from '@/components/ui'
+import { message } from '@/components/ui/message'
+import { useRoomStore } from '@/store/roomStore'
 import { cn } from '@/lib/utils'
 
 interface SwitchCardProps {
@@ -83,39 +93,61 @@ function SwitchCard({
   )
 }
 
-export interface MoviePlaybackSettingsProps {
-  /** 数据源类（ani/kazumi/cms）才有服务器中转的概念 */
-  showServerProxy: boolean
-  serverProxy: boolean
-  onServerProxyChange: (next: boolean) => void
-  /** B站 解析出的流浏览器必定原生可播，不展示转码开关 */
-  showTranscode: boolean
-  playsvideoEnabled: boolean
-  onPlaysvideoChange: (next: boolean) => void
-  /** 非房主不可修改，仅展示当前状态 */
-  disabled?: boolean
+export interface MovieRuntimeSettingsProps {
+  movieId: number
+  /** 当前用户是否为房主（决定开关是否可操作） */
+  isHost: boolean
 }
 
-export function MoviePlaybackSettings({
-  showServerProxy,
-  serverProxy,
-  onServerProxyChange,
-  showTranscode,
-  playsvideoEnabled,
-  onPlaysvideoChange,
-  disabled = false,
-}: MoviePlaybackSettingsProps) {
+export function MovieRuntimeSettings({
+  movieId,
+  isHost,
+}: MovieRuntimeSettingsProps) {
   const [expanded, setExpanded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const movie = useRoomStore((s) => s.movies.find((m) => m.id === movieId))
+  const roomId = useRoomStore((s) => s.roomId)
+  const currentMovieId = useRoomStore((s) => s.currentMovieId)
+  const updateMovie = useRoomStore((s) => s.updateMovie)
+  const triggerMovieSourceReload = useRoomStore(
+    (s) => s.triggerMovieSourceReload
+  )
 
-  if (!showServerProxy && !showTranscode) return null
+  if (!movie) return null
 
-  // 收起时把当前状态缩成「直连 · 原生」这样的一行摘要，不展开也能看到。
+  // 只有数据源类影片有「服务器中转」概念（Kazumi 地址已固化，见文件头注释）
+  const showServerProxy =
+    movie.sourceType === 'anime' || movie.sourceType === 'cms'
+  const serverProxy = movie.serverProxy === true
+  // 缺省视为开启，与 shouldUsePlaysVideo 的 `!== false` 宽松语义一致
+  const playsvideoEnabled = movie.playsvideoEnabled !== false
+
   const summary = [
     showServerProxy ? (serverProxy ? '中转' : '直连') : null,
-    showTranscode ? (playsvideoEnabled ? '转码' : '原生') : null,
+    playsvideoEnabled ? '转码' : '原生',
   ]
     .filter(Boolean)
     .join(' · ')
+
+  const applySetting = async (patch: {
+    serverProxy?: boolean
+    playsvideoEnabled?: boolean
+  }) => {
+    if (!isHost || !roomId || saving) return
+    setSaving(true)
+    try {
+      await updateMovie(roomId, movieId, patch)
+      // 正在播放的影片才需要即时重解析/重挂载；其余影片的值在下次加载时生效
+      if (movieId === currentMovieId) {
+        triggerMovieSourceReload()
+      }
+    } catch (err) {
+      console.error('[MovieRuntimeSettings] update setting error:', err)
+      message.error(err instanceof Error ? err.message : '切换播放设置失败')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="w-full">
@@ -159,35 +191,39 @@ export function MoviePlaybackSettings({
               title="服务器中转"
               subtitle="SERVER RELAY"
               checked={serverProxy}
-              disabled={disabled}
-              onToggle={() => onServerProxyChange(!serverProxy)}
+              disabled={!isHost || saving}
+              onToggle={() => void applySetting({ serverProxy: !serverProxy })}
               hint={
-                serverProxy
-                  ? '媒体流一律经服务器中转，带防盗链的源需要这样才可播放。'
-                  : '媒体流直连源站，服务器不转发；带防盗链的源请开启。'
+                !isHost
+                  ? '由房主统一管理'
+                  : serverProxy
+                    ? '媒体流经服务器转发，带防盗链的源需开启'
+                    : '直连源站，服务器不转发媒体流'
               }
             />
           )}
-          {showTranscode && (
-            <SwitchCard
-              icon={
-                <MonitorPlay
-                  className="h-3 w-3"
-                  style={{ color: 'var(--md-sys-color-tertiary)' }}
-                />
-              }
-              title="浏览器转码"
-              subtitle="BROWSER TRANSCODE"
-              checked={playsvideoEnabled}
-              disabled={disabled}
-              onToggle={() => onPlaysvideoChange(!playsvideoEnabled)}
-              hint={
-                playsvideoEnabled
-                  ? 'MKV/DTS 等非常规格式由浏览器重封装后播放。'
-                  : '强制原生直连，浏览器不支持的编码会没有画面或声音。'
-              }
-            />
-          )}
+          <SwitchCard
+            icon={
+              <MonitorPlay
+                className="h-3 w-3"
+                style={{ color: 'var(--md-sys-color-tertiary)' }}
+              />
+            }
+            title="浏览器转码"
+            subtitle="BROWSER TRANSCODE"
+            checked={playsvideoEnabled}
+            disabled={!isHost || saving}
+            onToggle={() =>
+              void applySetting({ playsvideoEnabled: !playsvideoEnabled })
+            }
+            hint={
+              !isHost
+                ? '由房主统一管理'
+                : playsvideoEnabled
+                  ? 'MKV / DTS 等非常规格式由浏览器重封装后播放'
+                  : '强制原生播放，浏览器不支持的编码会没有画面或声音'
+            }
+          />
         </div>
       )}
     </div>

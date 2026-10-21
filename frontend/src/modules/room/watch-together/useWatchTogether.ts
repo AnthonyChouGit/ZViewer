@@ -113,6 +113,7 @@ export function useWatchTogether({
     setPendingPreviewPlay,
     pendingReloadBilibili,
     pendingViewerSourceReload,
+    pendingMovieSourceReload,
     setBufferProgress,
   } = useRoomStore(
     useShallow((s) => ({
@@ -129,6 +130,7 @@ export function useWatchTogether({
       setPendingPreviewPlay: s.setPendingPreviewPlay,
       pendingReloadBilibili: s.pendingReloadBilibili,
       pendingViewerSourceReload: s.pendingViewerSourceReload,
+      pendingMovieSourceReload: s.pendingMovieSourceReload,
       setBufferProgress: s.setBufferProgress,
     }))
   )
@@ -376,9 +378,7 @@ export function useWatchTogether({
     }
 
     // 观众端：接收房主广播的预览源，直接加载播放（不经过影片列表）
-    const handlePreviewSource = (payload: {
-      source: PreviewPlayRequest
-    }) => {
+    const handlePreviewSource = (payload: { source: PreviewPlayRequest }) => {
       if (isHostRef.current) return
       const video = videoRef.current
       if (!video) return
@@ -781,6 +781,91 @@ export function useWatchTogether({
     // applySourceToVideo 是 useCallback，依赖已固定；pendingViewerSourceReload 是触发信号
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingViewerSourceReload])
+
+  // 房主：影片级播放设置（服务器中转 / 浏览器转码）变更后重新解析并重挂载当前源。
+  // 设置本身已由 MovieRuntimeSettings 经 updateMovie 落库并广播，这里只负责让
+  // 正在播放的画面即时生效：
+  // - 服务器中转：ani-subs / CMS 每次解析都读 movie.serverProxy，需重解析取新 URL
+  // - 浏览器转码：引擎门控是 state.playsvideoEnabled，需重挂载才会重新选引擎
+  // 重挂载保留当前进度（applySourceToVideo 传入当前时间作为起播偏移）。
+  useEffect(() => {
+    if (pendingMovieSourceReload === 0) return
+    const run = async () => {
+      if (!isHostRef.current) return
+      const video = videoRef.current
+      if (!video) return
+      const storeState = useRoomStore.getState()
+      const movie = storeState.movies.find(
+        (m) => m.id === storeState.currentMovieId
+      )
+      const state = storeState.watchTogether
+      if (!movie || !state.sourceUrl) return
+      // 该链路只服务非 B站 影片：B站 的重解析由 reloadBilibili 负责
+      if (state.sourceType === 'bilibili') return
+
+      const seq = ++loadSeqRef.current
+      const preserveTime = video.currentTime
+      const shouldPlay = !video.paused
+      suppressEventsRef.current = true
+      try {
+        const resolved = await resolveMovieSource({
+          movie,
+          sourceType: state.sourceType,
+          recovery: null,
+        })
+        // 解析期间已开始新的加载（切影片等）：放弃本次结果
+        if (loadSeqRef.current !== seq) return
+
+        const nextState: WatchTogetherState = {
+          ...state,
+          sourceUrl: resolved.sourceUrl,
+          audioUrl: resolved.audioUrl,
+          format: resolved.format,
+          videoCodec: resolved.videoCodec,
+          audioCodec: resolved.audioCodec,
+          duration: resolved.duration,
+          currentTime: preserveTime,
+          playsvideoEnabled: resolved.playsvideoEnabled !== false,
+          noProxyFallback: resolved.noProxyFallback === true,
+        }
+        setWatchTogether(nextState)
+        await applySourceToVideo(video, nextState, preserveTime || undefined)
+        if (loadSeqRef.current !== seq) return
+        if (preserveTime > 0) {
+          try {
+            video.currentTime = preserveTime
+          } catch {
+            /* ignore */
+          }
+        }
+        if (shouldPlay) {
+          void safePlay(video)
+        } else if (!video.paused) {
+          video.pause()
+        }
+        broadcastState(nextState)
+      } catch (err) {
+        if (loadSeqRef.current !== seq) return
+        console.error('[useWatchTogether] 应用影片播放设置失败:', err)
+        message.error(err instanceof Error ? err.message : '切换播放设置失败')
+        // 回退到设置变更前的源，避免播放器停在半挂载状态
+        try {
+          await applySourceToVideo(video, state, preserveTime)
+          if (preserveTime > 0) video.currentTime = preserveTime
+          if (shouldPlay) void safePlay(video)
+        } catch {
+          /* 忽略恢复失败 */
+        }
+      } finally {
+        if (loadSeqRef.current === seq) {
+          suppressEventsRef.current = false
+        }
+      }
+    }
+    void run()
+    // 计数器是唯一触发信号；applySourceToVideo / broadcastState 均为稳定 useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMovieSourceReload])
 
   // 观众：切换影片后清除本地 CLI 清晰度覆盖，避免旧影片的覆盖应用到新影片。
   useEffect(() => {
