@@ -104,7 +104,7 @@ npm --prefix desktop run check
 - 页面启用严格 CSP：`connect-src 'none'`，任何网络请求都必须经绑定方法走控制层；只有内嵌 CLI 设置页通过 `frame-src http://127.0.0.1:*` 放行。
 - 后端、LiveKit、FRP、CLI 各自由一个 `ZViewer.ProcessHost.exe` 托管，挂在 Job Object 上；先请求正常退出，超时后只结束自己的进程树，GUI 被强杀时子进程一并回收。
 - LiveKit 使用外置模式，UDP 跟随网页端口，信令和 RTC TCP 由控制层下发；随机 API 凭据只存在于内存与子进程环境。
-- FRP Token 使用 Windows DPAPI 保存，导出 TOML 通过环境变量读取 Token；私钥留在当前用户配置目录。DPAPI 密文格式与旧版本一致，历史 `settings.json` 可直接沿用。
+- FRP 密钥使用 Windows DPAPI 保存，导出 TOML 通过环境变量读取；私钥留在当前用户配置目录。DPAPI 密文格式与旧版本一致，历史 `settings.json` 可直接沿用。
 - HTTPS 签发不自动安装根证书；安装当前用户信任时需核对指纹并明确确认。
 
 ## 网页与管理入口
@@ -119,7 +119,7 @@ npm --prefix desktop run check
 
 本机模式启用 UDP 回环监听，使 localhost 与 FRP 的回环转发可达；公布公网地址时保留媒体转发所需的网卡。网页/信令监听范围不限制 LiveKit RTC TCP 的底层网卡监听。程序不修改系统防火墙、路由器、hosts 或 DNS。
 
-正式版配置位于 `%APPDATA%/ZViewerDesktop/settings.json`。FRP Token 由当前用户 DPAPI 加密，换电脑或用户后需重新填写。登录启动默认关闭；入口 EXE 只显示界面，服务由界面按钮启动。
+正式版配置位于 `%APPDATA%/ZViewerDesktop/settings.json`。FRP 密钥由当前用户 DPAPI 加密，换电脑或用户后需重新填写。登录启动默认关闭；入口 EXE 只显示界面，服务由界面按钮启动。
 
 关闭窗口默认收起到系统托盘，头像图标可恢复；右键菜单提供服务启停、打开网页端、日志与退出。第二次启动恢复已有窗口。选择“退出并停止受管服务”会停止受管 CLI、FRP、后端和独立 LiveKit，不按端口强杀其他程序。
 
@@ -141,7 +141,7 @@ CA、私钥与服务器证书保存在当前用户配置目录的 `tls`，目录
 
 IPv6 直连：打开页面时由程序经外部接口（`v6.ident.me` 等仅解析 AAAA 的地址）查询本机公网 IPv6，不读取本机网卡。接口能通过 IPv6 访问到本机，说明地址可在公网路由；没有公网 IPv6 时显示“没有”。界面给出的是带端口的完整地址（如 `http://[2409:...]:3333/`），复制后可直接粘贴到浏览器。路由器与 Windows 防火墙仍需放行入站端口，程序不修改防火墙与路由器。
 
-服务商 FRP：列出樱花内网穿透、OpenFrp、cpolar、ngrok，注册后把服务商给出的服务器地址、端口与 Token 填进“高级 → FRP 穿透”的本机 frpc 配置，不用自建服务器；访问域名、远端端口与带宽由服务商决定。
+服务商 FRP：列出樱花内网穿透、OpenFrp、cpolar、ngrok，注册后把服务商给出的服务器地址、端口与密钥填进“高级 → FRP 穿透”的本机 frpc 配置，不用自建服务器；访问域名、远端端口与带宽由服务商决定。
 
 自建 FRP：自己的 VPS 上运行 frps，本机 frpc 连接该服务器，控制台可同时生成 `frps.toml` 与 `frpc.toml`。端口、域名与带宽自管，需自行在安全组与系统防火墙放行映射端口。
 
@@ -151,7 +151,7 @@ Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解
 
 ## 自建 FRP
 
-包中提供 FRP 0.71.1。填写 VPS IP/域名、控制端口、Token，保存后部署对应平台同版本 frps，使用导出 TOML 并设置 `FRP_TOKEN` 环境变量。启动本地服务后连接 FRP。传输 TLS 与浏览器网页 HTTPS 分别配置。
+包中提供 FRP 0.71.1。填写 VPS IP/域名、控制端口、密钥，保存后部署对应平台同版本 frps，使用导出 TOML 并设置 `FRP_TOKEN` 环境变量。启动本地服务后连接 FRP。传输 TLS 与浏览器网页 HTTPS 分别配置。
 
 外网语音需填写 VPS 公网 IPv4 作为公布地址，并重启服务；远端 UDP 需与当前本地网页/语音 UDP 端口一致，远端语音 TCP 需与当前 RTC TCP 端口一致。网页与信令共用网页入口，无需额外暴露内部信令端口。默认映射随相应本地端口变更，手动设置的其他远端映射保留，请自行放行 VPS 安全组/防火墙。
 
