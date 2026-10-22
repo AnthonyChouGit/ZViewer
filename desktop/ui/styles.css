@@ -457,6 +457,46 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
   display: block; margin: 6px 0 0;
   color: var(--text-tertiary); font-size: 12px; line-height: 16px;
 }
+
+/* 下拉：列表由 select.js 在页面内渲染。原生 <select> 的弹出层由浏览器自绘，
+   不跟随 html.dark，会出现白底白字，所以只留它做取值/事件源（透明覆盖在触发器下方）。 */
+.select { position: relative; display: inline-flex; min-width: 0; max-width: 100%; }
+.field .select { display: flex; width: 100%; }
+.select > select, .select-native {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none;
+}
+.select-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; min-width: 0; height: var(--control-height); padding: 0 10px;
+  border: 1px solid var(--control-stroke);
+  border-bottom-color: var(--control-stroke-strong);
+  border-radius: var(--radius-control);
+  background: var(--solid-bg); color: var(--text-primary);
+  font-size: var(--text-body); text-align: left;
+}
+.select-trigger:hover { background: var(--control-fill-hover); }
+.select-trigger:focus-visible {
+  outline: none; border-color: var(--accent); border-bottom: 2px solid var(--accent);
+  padding-bottom: 0;
+}
+.select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-arrow { display: inline-flex; flex: 0 0 auto; color: var(--text-secondary); }
+.select-menu {
+  position: fixed; z-index: 70; min-width: 96px; padding: 4px;
+  border: 1px solid var(--card-stroke); border-radius: 8px;
+  background: var(--flyout-bg); box-shadow: var(--shadow-flyout);
+  font-size: var(--text-body); overflow: auto; outline: none;
+}
+.select-option {
+  display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 4px;
+  background: transparent; color: var(--text-primary); font-size: inherit;
+  text-align: left; white-space: nowrap;
+}
+.select-option[data-active="true"] { background: var(--subtle-hover); }
+.select-option[aria-selected="true"] { color: var(--accent); }
+.log-toolbar .select-trigger, .log-toolbar .select-menu { font-size: 12px; }
+
 .checkbox { width: 16px; height: 16px; accent-color: var(--accent); }
 .validation { min-height: 18px; margin-top: 8px; color: var(--system-critical); font-size: 12px; }
 .muted { color: var(--text-tertiary); }

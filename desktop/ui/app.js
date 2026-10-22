@@ -495,6 +495,8 @@
     $('#tray-label').textContent = state.native ? '收起到托盘' : '托盘预览';
     $('#footer-status').textContent = state.live ? (state.server?.backend === 'running' ? '本地服务运行中' : '原生托盘已启用') : state.native ? '原生托盘已启用' : '本地界面预览';
     icons();
+    // 下拉列表改由页面渲染：原生 select 的弹出层不跟随暗色主题。
+    window.ZViewerSelect?.enhance(document);
     syncWorkspace();
     if (state.live && state.page === 'cli') window.dispatchEvent(new Event('zviewer-cli-visible'));
   }
