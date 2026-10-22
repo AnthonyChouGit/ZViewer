@@ -1,6 +1,6 @@
 package controller
 
-// 内嵌组网的状态解析：把 easytier-cli 的 JSON 输出转成面板用的结构。
+// EasyTier 虚拟组网的状态解析：把 easytier-cli 的 JSON 输出转成面板用的结构。
 // 输出字段会随版本变化，这里的解析一律按「找不到就留空」处理，不用强类型 struct 硬绑。
 
 import (
@@ -189,7 +189,7 @@ func MeshAccessURL(virtualIP string, port int, https bool) string {
 // meshInvite 是发给朋友的组网参数：官方客户端照抄即可入网。
 func meshInvite(cfg MeshConfig, secret string, status MeshStatus, webPort int) string {
 	lines := []string{
-		"ZViewer 内嵌组网",
+		"ZViewer EasyTier 虚拟组网",
 		"网络名称：" + cfg.NetworkName,
 		"网络密钥：" + secret,
 	}

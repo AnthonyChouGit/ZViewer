@@ -1,6 +1,6 @@
 package controller
 
-// 内嵌组网对外接口：桌面对话框只认这几个动作，不直接碰 MeshManager。
+// EasyTier 虚拟组网对外接口：桌面对话框只认这几个动作，不直接碰 MeshManager。
 
 import (
 	"errors"
@@ -33,7 +33,7 @@ func (c *Controller) StartMesh() (MeshStatus, error) {
 		}
 		return status, err
 	}
-	c.log("内嵌组网已启动："+status.VirtualIP, "mesh", "INFO")
+	c.log("EasyTier 虚拟组网已启动："+status.VirtualIP, "mesh", "INFO")
 	return status, nil
 }
 
@@ -46,7 +46,7 @@ func (c *Controller) StopMesh() (MeshStatus, error) {
 	if err != nil {
 		return status, err
 	}
-	c.log("内嵌组网已停止", "mesh", "INFO")
+	c.log("EasyTier 虚拟组网已停止", "mesh", "INFO")
 	return status, nil
 }
 

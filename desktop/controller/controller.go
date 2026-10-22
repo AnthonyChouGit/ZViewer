@@ -1161,7 +1161,7 @@ func (c *Controller) verifyCli(pid, port int) error {
 func (c *Controller) Shutdown() error {
 	// 组网节点独立于主服务，单独收一次。
 	if _, err := c.mesh.Stop(); err != nil {
-		c.log("停止内嵌组网失败："+err.Error(), "mesh", "WARN")
+		c.log("停止EasyTier 虚拟组网失败："+err.Error(), "mesh", "WARN")
 	}
 	// stopBackend 会一并回收 FRP、隧道与 CLI 进程。
 	_, err := c.Stop()

@@ -1,6 +1,6 @@
 package controller
 
-// 内嵌组网进程管理：托管 easytier-core，并用 easytier-cli 读回节点状态。
+// EasyTier 虚拟组网进程管理：托管 easytier-core，并用 easytier-cli 读回节点状态。
 //
 // 进程同样走 ZViewer.ProcessHost.exe，GUI 退出后由 Job Object 一并回收；
 // 面板只经由 Go 命令读取状态（前端 CSP 禁止直连本地端口）。
@@ -225,9 +225,9 @@ func (m *MeshManager) Start(cfg MeshConfig, secret string) (MeshStatus, error) {
 		m.mu.Unlock()
 		m.startPolling(proc, rpc)
 		if node.IPv4 != "" {
-			m.log("内嵌组网已就绪："+virtualIPv4(node.IPv4), "mesh", "INFO")
+			m.log("EasyTier 虚拟组网已就绪："+virtualIPv4(node.IPv4), "mesh", "INFO")
 		} else {
-			m.log("内嵌组网已启动，等待其他设备接入", "mesh", "INFO")
+			m.log("EasyTier 虚拟组网已启动，等待其他设备接入", "mesh", "INFO")
 		}
 		m.update()
 		return m.Snapshot(), nil
@@ -273,7 +273,7 @@ func (m *MeshManager) watchExit(proc *Proc) {
 	}
 	m.mu.Unlock()
 	if !intentional {
-		m.log(fmt.Sprintf("内嵌组网进程已退出（%d）", code), "mesh", "WARN")
+		m.log(fmt.Sprintf("EasyTier 虚拟组网进程已退出（%d）", code), "mesh", "WARN")
 	}
 	m.update()
 }

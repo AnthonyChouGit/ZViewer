@@ -1,6 +1,6 @@
 package controller
 
-// 内嵌组网：EasyTier 免 TUN 模式的配置模型、校验与 TOML 生成。
+// EasyTier 虚拟组网：EasyTier 免 TUN 模式的配置模型、校验与 TOML 生成。
 //
 // 设计取舍（实测来自 easytier-core 2.6.4）：
 //   - 免管理员：flags.no_tun = true 且必须同时 bind_device = false，

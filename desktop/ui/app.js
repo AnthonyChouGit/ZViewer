@@ -37,7 +37,7 @@
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.info}</svg>`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = selector => document.querySelector(selector);
-  const titles = { overview: '服务总览', connect: '连接方式', frp: 'FRP 穿透', cert: '证书与域名', cli: '高画质代理', mesh: '内嵌组网', logs: '运行日志', settings: '应用设置' };
+  const titles = { overview: '服务总览', connect: '连接方式', frp: 'FRP 穿透', cert: '证书与域名', cli: '高画质代理', mesh: 'EasyTier 虚拟组网', logs: '运行日志', settings: '应用设置' };
   let prefs = { closeToTray: true, remember: true };
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem('zviewer-ui-prefs') || '{}') }; } catch { /* Use safe defaults if storage is unavailable. */ }
   const state = {
@@ -82,7 +82,7 @@
       ]
     },
     mesh: {
-      title: '内嵌组网教程',
+      title: 'EasyTier 虚拟组网教程',
       caption: '虚拟 IP 直连',
       sections: [
         {
@@ -377,7 +377,7 @@
         <div class="cli-embed-hint">启动代理 → 扫码登录 → 连接服务器</div>
       </section></div>`;
   }
-  // 内嵌组网：本机按 EasyTier 协议入网，外部设备用虚拟 IP 访问本机端口。
+  // EasyTier 虚拟组网：本机按 EasyTier 协议入网，外部设备用虚拟 IP 访问本机端口。
   // 免账号、免管理员（no_tun），所以面板只暴露网络名称、密钥、对端地址与监听端口。
   function mesh() {
     const live = Boolean(state.live), meshLabels = { stopped: '未入网', starting: '入网中', running: '已入网', stopping: '正在退出', error: '异常' };
@@ -397,7 +397,7 @@
     const secretValue = state.meshSecretDraft || '';
     const peerRows = peers.map(peer => `<div class="check-item">${icon(peer.self ? 'monitor' : 'server')}<div><strong>${esc(peer.hostname || peer.ipv4)}${peer.self ? '（本机）' : ''}</strong><br>${esc(peer.ipv4)} · ${peer.self ? '本机' : peer.direct ? '直连' : '中继'}${peer.self || peer.latency === '-' || !peer.latency ? '' : ` · ${esc(peer.latency)} ms`}${peer.tunnel && peer.tunnel !== '-' ? ` · ${esc(peer.tunnel)}` : ''}</div></div>`).join('');
     const emptyPeers = `<div class="empty">还没有其他设备加入。把网络名称与密钥发给朋友，他们装 EasyTier 客户端加入后就会出现在这里。</div>`;
-    return heading('内嵌组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
+    return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
       `<div class="form-layout"><section class="panel">
         <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>入网参数</h2><p class="cli-caption">免账号 · 免管理员权限</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
         <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>监听端口</span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
@@ -452,7 +452,7 @@
       `<p class="connect-hint">如果你有 IPv4 公网地址，那么应该不需要我教你其他的了。</p>`;
     const v6Actions = `${button(v6 ? '重新检测' : '检测 IPv6', 'probe-ipv6', 'refresh')}${v6?.ok ? `<button class="btn" data-copy="${esc(v6Url)}">${icon('copy')}复制地址</button>` : ''}`;
 
-    // 内嵌组网卡片：入网后直接给出虚拟 IP 的访问地址，未入网时说清下一步动作。
+    // EasyTier 虚拟组网卡片：入网后直接给出虚拟 IP 的访问地址，未入网时说清下一步动作。
     const meshReport = live ? state.server?.mesh : null;
     const meshOnline = meshReport?.state === 'running' && Boolean(meshReport?.virtualIp);
     const meshWaiting = meshReport?.state === 'running' && !meshOnline;
@@ -510,10 +510,10 @@
         })
       }${
         connectCard({
-          name: 'mesh', title: '内嵌组网', copy: '本机直接加入虚拟局域网，外部设备按虚拟 IP 访问。',
+          name: 'mesh', title: 'EasyTier 虚拟组网', copy: '本机直接加入虚拟局域网，外部设备按虚拟 IP 访问。',
           status: meshStatus, tone: meshOnline ? 'green' : '',
           body: meshBody,
-          actions: `<button class="btn primary" data-nav="mesh">${icon('arrow')}配置内嵌组网</button>`
+          actions: `<button class="btn primary" data-nav="mesh">${icon('arrow')}配置 EasyTier</button>`
         })
       }${
         connectCard({

@@ -1,4 +1,4 @@
-﻿# 下载并校验构建分发包需要的第三方工具：FRP 与 EasyTier（内嵌组网）。
+﻿# 下载并校验构建分发包需要的第三方工具：FRP 与 EasyTier（虚拟组网）。
 # 缓存位于 desktop/.runtime/tools，重复构建命中缓存时仍校验 SHA-256。
 $ErrorActionPreference = 'Stop'
 $desktopDir = Split-Path -Parent $PSScriptRoot
@@ -36,7 +36,7 @@ foreach ($name in 'frps.exe','frps.toml') {
 }
 Write-Output 'Pinned FRP archive verified'
 
-# EasyTier：内嵌组网用免 TUN 模式，只要有 core + cli，另带 Packet.dll / WinDivert64.sys
+# EasyTier：虚拟组网用免 TUN 模式，只要有 core + cli，另带 Packet.dll / WinDivert64.sys
 # （缺了 core 启动会报 packet.dll 找不到）与 wintun.dll（TUN 兜底时才会用到）。
 $etVersion = '2.6.4'
 $etArchive = Join-Path $toolsDir "easytier-windows-x86_64-v$etVersion.zip"

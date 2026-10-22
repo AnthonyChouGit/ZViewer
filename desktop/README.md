@@ -1,6 +1,6 @@
 # ZViewer Windows 桌面控制台
 
-原生桌面控制台，管理现有 Windows 运行包，保留服务端网页。壳层是 Go + 系统 WebView2（Wails v2），分发目录只有一个 `ZViewerDesktop.exe`，不需要安装运行时，也没有 Electron。支持系统托盘、端口配置持久化、localhost HTTPS、自建 FRP、内嵌组网（EasyTier 免 TUN）和 ZViewerCLI 哔哩哔哩高画质代理；CLI 设置、扫码登录与连接操作直接在窗口右侧完成。
+原生桌面控制台，管理现有 Windows 运行包，保留服务端网页。壳层是 Go + 系统 WebView2（Wails v2），分发目录只有一个 `ZViewerDesktop.exe`，不需要安装运行时，也没有 Electron。支持系统托盘、端口配置持久化、localhost HTTPS、自建 FRP、EasyTier 虚拟组网（免 TUN）和 ZViewerCLI 哔哩哔哩高画质代理；CLI 设置、扫码登录与连接操作直接在窗口右侧完成。
 
 ## 双击打开 GUI
 
@@ -15,7 +15,7 @@
 | GUI 入口                 | 运行目录中的 `ZViewerDesktop.exe`              |
 | 进程监管宿主                 | 同目录 `assets/ZViewer.ProcessHost.exe`     |
 | 后端、LiveKit、FRP、CLI 与网页 | `runtime/` 内的程序与 `runtime/frontend/dist` |
-| 内嵌组网组件                 | `runtime/mesh/`（easytier-core / easytier-cli） |
+| EasyTier 虚拟组网组件          | `runtime/mesh/`（easytier-core / easytier-cli） |
 | 后端环境与业务数据              | `runtime/.env`、`runtime/config`          |
 | GUI 设置、证书、FRP 凭据与日志    | `%APPDATA%/ZViewerDesktop`               |
 | ZViewerCLI 自身的登录配置     | `%USERPROFILE%/.zviewer/config.json`     |
@@ -146,13 +146,13 @@ IPv6 直连：打开页面时由程序经外部接口（`v6.ident.me` 等仅解�
 
 自建 FRP：自己的 VPS 上运行 frps，本机 frpc 连接该服务器，控制台生成并导出 `frpc.toml`（`frps.toml` 按官方文档在 VPS 上自建）。端口、域名与带宽自管，需自行在安全组与系统防火墙放行映射端口。
 
-虚拟局域网：内置“内嵌组网”，本机直接加入虚拟网络，其他设备按虚拟 IP 访问，详见下一节。
+虚拟局域网：内置「EasyTier 虚拟组网」（左侧栏“高级 → EasyTier 虚拟组网”），本机直接加入虚拟网络，其他设备按虚拟 IP 访问，详见下一节。
 
 Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解析其输出的 `trycloudflare.com` 临时地址，停止隧道后地址失效。程序不内置 `cloudflared`，需自行下载后放入运行包目录或加入 PATH，未找到时按钮只提供下载入口。快速隧道地址随机、随会话失效；固定域名请改用 Cloudflare 命名隧道，需要一张外国银行卡。
 
-## 内嵌组网
+## EasyTier 虚拟组网
 
-包内自带 [EasyTier](https://github.com/EasyTier/EasyTier) 2.6.4（`runtime/mesh/`），以 `no_tun` 方式运行：不需要管理员权限、不创建虚拟网卡、不需要任何账号。本机加入虚拟网络后，网络内其他设备可以用虚拟 IP 访问本机的网页、推流与语音端口；本机本身不能主动访问其他节点。
+入口在左侧栏“高级 → EasyTier 虚拟组网”。包内自带 [EasyTier](https://github.com/EasyTier/EasyTier) 2.6.4（`runtime/mesh/`），以 `no_tun` 方式运行：不需要管理员权限、不创建虚拟网卡、不需要任何账号。本机加入虚拟网络后，网络内其他设备可以用虚拟 IP 访问本机的网页、推流与语音端口；本机本身不能主动访问其他节点。
 
 组网只需要一组网络名称与网络密钥，两者在同一个网络里必须一致。点“生成新的网络名与密钥”会自动填好并保存，复制“入网说明”发给对方即可。
 

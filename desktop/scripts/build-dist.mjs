@@ -64,7 +64,7 @@ cpSync(join(runtimeSource, 'frontend', 'dist'), join(runtime, 'frontend', 'dist'
 for (const name of ['frpc.exe']) {
   if (existsSync(join(frpDir, name))) copyFileSync(join(frpDir, name), join(runtime, name));
 }
-// 内嵌组网：壳在 runtime/mesh 里找 easytier-core / easytier-cli，缺 core 包直接报错。
+// EasyTier 虚拟组网：壳在 runtime/mesh 里找 easytier-core / easytier-cli，缺 core 包直接报错。
 requireFile(join(meshDir, 'easytier-core.exe'), '缺少组网组件，先跑 scripts/prepare-tools.ps1 或去掉 --skip-tools');
 const meshTarget = join(runtime, 'mesh');
 mkdirSync(meshTarget, { recursive: true });
