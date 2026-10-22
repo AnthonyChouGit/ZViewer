@@ -89,17 +89,15 @@
 
 首次启动自动创建 ROOT 管理员：用户名 `root`，密码 `root`。**安装后请立即修改密码。**
 
-### Windows 桌面版（GUI）
+### Windows 桌面版（GUI）（Windows用户推荐）
 
 Release 中的 `ZViewer-Windows-<版本>-x64.zip` 是原生桌面控制台（Go + 系统 WebView2），用于管理本机服务、证书、FRP 穿透与高画质代理：
 
-- 解压后双击 `ZViewerDesktop.exe`；关闭窗口默认收起到系统托盘
-- 运行包在解压目录的 `runtime/`，首次启动会在其中生成 `.env` 与 `config`
-- 分发包已内置高画质代理 CLI（`runtime/zviewer-cli-windows-amd64.exe`，与网页「下载 CLI」是同一个文件），开箱可用；换版本时替换 `frontend/public/zviewer-cli-windows-amd64.exe` 再重新打包
+- 解压后双击 `ZViewerDesktop.exe` 即可查看控制台界面，并根据其中提示进行启动
+- 内置高画质代理 CLI（`runtime/zviewer-cli-windows-amd64.exe`
+- `构建与调试方式见 `desktop/README.md`。
 
-构建与调试方式见 `desktop/README.md`。
-
-### 单文件版（推荐）
+### 单文件版
 
 从 [Releases](https://github.com/Zero-wyc/ZViewer/releases) 下载对应平台压缩包，解压后：
 
