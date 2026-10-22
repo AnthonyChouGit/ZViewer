@@ -79,7 +79,7 @@ copyFileSync(cliSource, join(runtime, 'zviewer-cli-windows-amd64.exe'));
 // 顺手带上 CLI 的 MIT 许可证（本地有源码仓库或 prepare-cli 产物时才有）。
 const cliLicense = [join(cliDir, 'LICENSE'), join(repo, '..', 'ZViewerCLI', 'LICENSE')].find((file) => existsSync(file));
 if (cliLicense) copyFileSync(cliLicense, join(distribution, 'LICENSE-ZViewerCLI.txt'));
-copyFileSync(join(desktop, 'README.md'), join(distribution, '使用说明.md'));
+// 分发包不附使用说明：操作引导在 GUI 内的教程里，README 只留在源码仓库。
 for (const [source, target] of [['LICENSE', 'LICENSE-ZViewer.txt']]) {
   const file = join(repo, source);
   if (existsSync(file)) copyFileSync(file, join(distribution, target));

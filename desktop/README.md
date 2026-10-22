@@ -81,8 +81,10 @@ zviewer-windows-x64-GUI/
   ZViewerDesktop.exe                # 唯一用户启动 EXE
   assets/ZViewer.ProcessHost.exe    # 进程监管宿主（Job Object）
   runtime/                          # 后端、LiveKit、FRP、CLI 与网页
-  许可证、使用说明与 BUILD-MANIFEST.json
+  许可证、BUILD-MANIFEST.json
 ```
+
+包内不放使用说明，操作引导由 GUI 内的教程页提供；本文件只随源码仓库维护。
 
 输出已存在时拒绝覆盖，避免破坏已有产物。构建只复制指定程序、网页、许可证和来源记录，不复制真实 `.env`、数据库、证书或登录配置。在分发包里直接运行过之后再打包，`package-release.py` 会因为出现 `runtime/.env` 或 `runtime/config` 而拒绝——这是有意设计，清理运行数据或重新 `shell:dist` 即可。
 
