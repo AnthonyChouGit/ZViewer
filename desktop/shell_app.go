@@ -229,6 +229,8 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		return config, nil
 	case "https":
 		return a.ctrl.EnableHTTPS(payloadString(payload, "domain"), payloadString(payload, "ip"))
+	case "start-http":
+		return a.ctrl.StartHTTP()
 	case "trust":
 		confirmed, err := a.confirm(
 			"信任 ZViewer 本机证书",

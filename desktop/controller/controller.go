@@ -828,6 +828,35 @@ func (c *Controller) EnableHTTPS(domain, ip string) (any, error) {
 	})
 }
 
+// StartHTTP 改为 HTTP 启动并按新协议重启服务。
+//
+// 证书与信任都保留，只是不再以 HTTPS 提供页面；随时可以再点“签发并启用
+// HTTPS”切回去（重复签发会复用同一本机 CA，已装的信任仍然有效）。
+func (c *Controller) StartHTTP() (any, error) {
+	return c.exclusive(func() (any, error) {
+		c.mu.RLock()
+		hasBackend := c.backend != nil
+		state := c.backendState
+		c.mu.RUnlock()
+		if hasBackend && state != "running" {
+			return nil, errors.New("请等待当前服务操作完成")
+		}
+		if _, err := c.store.Save(map[string]any{"https": false}, nil); err != nil {
+			return nil, err
+		}
+		if hasBackend {
+			if err := c.stopBackend(); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := c.startBackend(); err != nil {
+			return nil, err
+		}
+		c.log("已改为 HTTP 启动，证书保留，可随时切回 HTTPS", "cert", "INFO")
+		return c.Snapshot(), nil
+	})
+}
+
 // FrpConfig 生成 frpc.toml（server=true 时生成 VPS 上的 frps.toml）。
 func (c *Controller) FrpConfig(server bool) string {
 	config := c.store.Value
