@@ -99,7 +99,7 @@
         },
         {
           title: '常见情况',
-          body: '<ul><li>一直是“入网中”或“异常”：先确认监听端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li></ul>'
+          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li></ul>'
         }
       ],
       foot: '只有开着组网时其他设备才能按虚拟 IP 访问；停止组网后地址立即失效。'
@@ -414,7 +414,7 @@
     return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
       `<div class="form-layout"><section class="panel">
         <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>入网参数</h2><p class="cli-caption">免账号 · 免管理员权限</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
-        <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>监听端口</span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
+        <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>组网监听端口 <small>EasyTier 节点间通信</small></span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
         <label class="field"><span>网络密钥 <small>加密保存</small></span><input id="mesh-secret" type="password" value="${esc(secretValue)}" placeholder="${state.server?.meshSecretSaved ? '已保存，留空沿用' : '与本网络其他设备一致'}" autocomplete="off"></label>
         <label class="field"><span>对端地址 <small>一行一个，可留空</small></span><textarea id="mesh-peers" class="codebox config-editor mesh-peers-editor" spellcheck="false" autocomplete="off" placeholder="tcp://1.2.3.4:11010">${esc((c.peers || []).join('\n'))}</textarea></label>
         <div class="mesh-peer-presets"><span class="preset-label">官方节点</span>${peerChips}</div>
@@ -424,7 +424,7 @@
       </section>
       <aside class="panel"><div class="panel-heading"><h2>本机地址</h2></div>
         <p class="connect-value ${access ? '' : 'is-empty'}">${access ? `<code>${esc(access)}</code>` : waiting ? '等待设备接入' : '尚未入网'}</p>
-        <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>监听端口</span><span>${esc(saved.listenPort || 11010)}</span></div><div class="meta-line"><span>在线设备</span><span>${peers.length ? `${peers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div>${m.version ? `<div class="meta-line"><span>组网版本</span><span>${esc(m.version)}</span></div>` : ''}</div>
+        <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>组网端口</span><span>${esc(saved.listenPort || 11010)}</span></div><div class="meta-line"><span>网页端口</span><span>${esc(server.port || 3333)}</span></div><div class="meta-line"><span>在线设备</span><span>${peers.length ? `${peers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div>${m.version ? `<div class="meta-line"><span>组网版本</span><span>${esc(m.version)}</span></div>` : ''}</div>
         ${waiting && lanPeers.length ? `<div class="check-item">${icon('link')}<div><strong>让对方先连本机</strong><br>把 <code>${esc(lanPeers[0])}</code> 填进对方客户端的「对端地址」。</div></div>` : ''}
         <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
         ${m.available === false ? notice('当前运行包不含组网组件，请使用完整安装包。') : notice('本机不需要管理员权限；朋友的设备装 EasyTier 客户端后按同样的网络名称与密钥加入。')}
