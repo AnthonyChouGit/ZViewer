@@ -41,7 +41,7 @@
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem('zviewer-ui-prefs') || '{}') }; } catch { /* Use safe defaults if storage is unavailable. */ }
   const state = {
     page: 'overview', running: false, certReady: false, native: false, info: null,
-    frpTab: 'client', ipv6: null,
+    ipv6: null,
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
     events: [], prefs, updateOpen: false, updateKey: ''
@@ -131,7 +131,7 @@
         },
         {
           title: '自建 FRP',
-          body: '<p>租一台有公网 IP 的 VPS，在上面运行服务端 frps，本机运行 frpc，两端用同一密钥认证。控制台可直接生成 frps.toml 与 frpc.toml 两份配置。</p><p>端口、域名与带宽完全由自己安排，速度和稳定性取决于 VPS 线路；需要自行在安全组与系统防火墙放行映射端口，并自行运维服务器。</p>'
+          body: '<p>租一台有公网 IP 的 VPS，在上面运行服务端 frps，本机运行 frpc，两端用同一密钥认证。控制台可生成并导出本机的 frpc.toml。</p><p>端口、域名与带宽完全由自己安排，速度和稳定性取决于 VPS 线路；需要自行在安全组与系统防火墙放行映射端口，并自行运维服务器。</p>'
         },
         {
           title: '虚拟局域网',
@@ -296,10 +296,9 @@
     if (new Set(ids).size !== ids.length) return '同一协议的远端端口存在冲突，请使用不同端口。';
     return '';
   }
-  function frpConfig(server = false) {
-    if (state.live && state.frpConfigOverride) return state.frpConfigOverride(server);
+  function frpConfig() {
+    if (state.live && state.frpConfigOverride) return state.frpConfigOverride();
     const c = state.frp, token = 'auth.method = "token"\nauth.token = "{{ .Envs.FRP_TOKEN }}"';
-    if (server) return `# VPS 上的 frps.toml · 部署前设置 FRP_TOKEN\n# 此模板未包含真实密钥\nbindPort = ${validPort(c.port) ? Number(c.port) : 7000}\n${token}\ntransport.tls.force = true\n\n# 在 VPS 安全组与防火墙放行：\n# ${validPort(c.port) ? Number(c.port) : 7000}/tcp（控制端口）\n# ${Number(c.webPort)}/tcp（网页）${c.voice ? `\n# ${Number(c.voicePort)}/udp（语音）` : ''}${c.rtmp ? `\n# ${Number(c.rtmpPort)}/tcp（RTMP）` : ''}${c.tcp ? `\n# ${Number(c.tcpPort)}/tcp（TCP语音）` : ''}\n`;
     const proxy = (name, type, localPort, remotePort) => `\n[[proxies]]\nname = "zviewer-${name}"\ntype = "${type}"\nlocalIP = "127.0.0.1"\nlocalPort = ${localPort}\nremotePort = ${validPort(remotePort) ? Number(remotePort) : localPort}\n`;
     return `# 本机 frpc.toml · 部署前设置 FRP_TOKEN\n# 传输 TLS ≠ 浏览器 HTTPS\nserverAddr = ${JSON.stringify(c.host || 'YOUR_VPS_IP')}\nserverPort = ${validPort(c.port) ? Number(c.port) : 7000}\n${token}\ntransport.tls.enable = true\n${proxy('backend', 'tcp', 3333, c.webPort)}${c.voice ? proxy('voice', 'udp', 3333, c.voicePort) : ''}${c.rtmp ? proxy('rtmp', 'tcp', 3334, c.rtmpPort) : ''}${c.tcp ? proxy('voice-tcp', 'tcp', 3337, c.tcpPort) : ''}`;
   }
@@ -307,7 +306,7 @@
     const c = state.frp;
     function row(title, field, type, local, remote, checked, fixed = false) { return `<div class="mapping"><label><input class="checkbox" type="checkbox" data-frp-check="${field}" ${checked ? 'checked' : ''} ${fixed ? 'disabled' : ''}>${title}</label><span class="proto">${type}</span><code>${local}</code><span class="muted">→</span><input aria-label="${title}远端端口" type="number" min="1" max="65535" data-frp-field="${remote}" value="${esc(c[remote])}"></div>`; }
     return heading('FRP 穿透', '把本机端口转发到公网服务器。', `${tutorial('frp')}<span class="pill orange"><i></i>未连接</span>`) +
-      `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证密钥 <small>不保存明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">模板从环境变量 FRP_TOKEN 读取，页面不保存输入。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音要单独放行；改用 TCP 语音时管理端也要切换。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpConfig(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
+      `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证密钥 <small>不保存明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">模板从环境变量 FRP_TOKEN 读取，页面不保存输入。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音要单独放行；改用 TCP 语音时管理端也要切换。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">frpc.toml · 自动生成</span></div><pre class="codebox" id="frp-code">${esc(frpConfig())}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
   }
   function certPreview() {
     return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>现有 zviewer-cert.exe · localhost</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>未安装</span></div></div><div class="check-item">${icon('check')}<div><strong>仅本机可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
@@ -425,7 +424,7 @@
           name: 'server', title: '自建 FRP', copy: '在自己的 VPS 上运行 frps，端口与带宽完全自管。',
           status: live ? frpStatus : '需 VPS', tone: frpState === 'registered' ? 'green' : '',
           body: `<p class="connect-note">自己的 VPS 运行 frps，端口与带宽自管，需自行放行映射端口。</p>${linkList(connectLinks.frpSelf)}`,
-          actions: `<button class="btn primary" data-frp-open="client">${icon('arrow')}配置本机 FRP</button>`
+          actions: `<button class="btn primary" data-nav="frp">${icon('arrow')}配置本机 FRP</button>`
         })
       }${
         connectCard({
@@ -544,12 +543,11 @@
       const error = frpError();
       $('#frp-error').textContent = error;
       if (error) { toast(error); return; }
-      const server = state.frpTab === 'server';
-      download(server ? 'frps.toml' : 'frpc.toml', frpConfig(server));
-      addEvent(`已导出 ${server ? 'frps' : 'frpc'}.toml 模板，未包含输入密钥。`, 'frp');
+      download('frpc.toml', frpConfig());
+      addEvent('已导出 frpc.toml 模板，未包含输入密钥。', 'frp');
       toast('已导出，请配置 FRP_TOKEN');
     } else if (name === 'copy-frp') {
-      try { await navigator.clipboard.writeText(frpConfig(state.frpTab === 'server')); toast('已复制'); }
+      try { await navigator.clipboard.writeText(frpConfig()); toast('已复制'); }
       catch { toast('剪贴板不可用，可使用“导出配置模板”'); }
     } else if (name === 'export-logs') {
       download('zviewer-preview-events.log', '# ZViewer GUI prototype events only\n' + filteredEvents().map(e => `${e.time} ${e.level} [${e.source}] ${e.message}`).join('\n'));
@@ -600,11 +598,8 @@
     }
     const windowButton = event.target.closest('[data-window]');
     if (windowButton) { if (window.zviewerDesktop) window.zviewerDesktop.window(windowButton.dataset.window); else toast('仅桌面版可用'); return; }
-    const frpOpen = event.target.closest('[data-frp-open]');
-    if (frpOpen) { state.frpTab = frpOpen.dataset.frpOpen === 'server' ? 'server' : 'client'; navigate('frp'); return; }
     const nav = event.target.closest('[data-nav]'); if (nav) { navigate(nav.dataset.nav); return; }
     const btn = event.target.closest('[data-action]'); if (btn) { action(btn.dataset.action).catch(error => toast(`操作未完成：${error.message}`)); return; }
-    const frpTab = event.target.closest('[data-frp-tab]'); if (frpTab) { state.frpTab = frpTab.dataset.frpTab; render(); return; }
     const pref = event.target.closest('[data-pref]');
     if (pref) {
       state.prefs[pref.dataset.pref] = !state.prefs[pref.dataset.pref];
@@ -616,12 +611,12 @@
   });
   document.addEventListener('input', event => {
     const target = event.target;
-    if (target.matches('[data-frp-field]')) { state.frp[target.dataset.frpField] = target.value; const code = $('#frp-code'); if (code) code.textContent = frpConfig(state.frpTab === 'server'); const error = $('#frp-error'); if (error) error.textContent = ''; }
+    if (target.matches('[data-frp-field]')) { state.frp[target.dataset.frpField] = target.value; const code = $('#frp-code'); if (code) code.textContent = frpConfig(); const error = $('#frp-error'); if (error) error.textContent = ''; }
     if (target.id === 'log-search') { state.logSearch = target.value; if (!state.paused) refreshLogs(); }
   });
   document.addEventListener('change', event => {
     const target = event.target;
-    if (target.matches('[data-frp-check]')) { state.frp[target.dataset.frpCheck] = target.checked; const code = $('#frp-code'); if (code) code.textContent = frpConfig(state.frpTab === 'server'); }
+    if (target.matches('[data-frp-check]')) { state.frp[target.dataset.frpCheck] = target.checked; const code = $('#frp-code'); if (code) code.textContent = frpConfig(); }
     if (target.id === 'log-source') { state.logSource = target.value; if (!state.paused) refreshLogs(); }
     if (target.id === 'log-level') { state.logLevel = target.value; if (!state.paused) refreshLogs(); }
     if (target.id === 'update-proxy-url') applyProxyURL(target);

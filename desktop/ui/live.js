@@ -22,10 +22,9 @@
       `<div class="section-title"><h2>服务状态</h2><button class="text-button" data-nav="settings">监听端口 ${esc(c.port)} · 修改设置 ${icon('arrow')}</button></div><div class="service-grid">${card('ZViewer 主服务','网页与 API','server',s.backend,`${c.port} / TCP`)}${card('语音与推流','LiveKit 进程','mic',s.voice,`语音 UDP ${c.port} / RTMP ${c.rtmpPort}`,s.voicePid)}${card('FRP 穿透','frpc 代理','network',s.frp,s.frpcAvailable ? 'frpc 0.71.1' : '未找到 frpc')}</div>` +
       `<div class="bottom-grid"><section><div class="section-title"><h2>常用操作</h2><small>快捷入口</small></div><div class="setup-list"><button class="setup-row" data-nav="cert"><span class="step">${icon('lock')}</span><div><strong>签发本机 HTTPS 证书</strong><p>localhost</p></div>${icon('arrow')}</button><button class="setup-row" data-nav="frp"><span class="step">${icon('network')}</span><div><strong>配置 FRP 服务器</strong><p>VPS 地址与端口映射</p></div>${icon('arrow')}</button><button class="setup-row" data-nav="settings"><span class="step">${icon('settings')}</span><div><strong>修改监听端口</strong><p>下次启动生效</p></div>${icon('arrow')}</button></div></section><section><div class="section-title"><h2>最近活动</h2><button class="text-button" data-nav="logs">全部日志 ${icon('arrow')}</button></div><div class="activity-list">${activity()}</div></section></div><div class="footnote">${icon('info')}显示本地进程状态。</div>`;
   }
-  function frpCode(server = false) {
+  function frpCode() {
     const f = state.frp, c = state.config;
     const header = 'auth.method = "token"\nauth.token = "{{ .Envs.FRP_TOKEN }}"';
-    if (server) return `# VPS 上的 frps.toml\n# 部署前设置与本机一致的 FRP_TOKEN\nbindPort = ${Number(f.port) || 7000}\n${header}\ntransport.tls.force = true\n`;
     const proxy = (name, type, local, remote) => `\n[[proxies]]\nname = "zviewer-${name}"\ntype = "${type}"\nlocalIP = "127.0.0.1"\nlocalPort = ${local}\nremotePort = ${Number(remote)}\n`;
     return `serverAddr = ${JSON.stringify(f.host || 'YOUR_VPS_IP')}\nserverPort = ${Number(f.port) || 7000}\n${header}\ntransport.tls.enable = true\n${proxy('backend','tcp',c.port,f.webPort)}${f.voice ? proxy('voice','udp',c.port,f.voicePort) : ''}${f.rtmp ? proxy('rtmp','tcp',c.rtmpPort,f.rtmpPort) : ''}${f.tcp ? proxy('voice-tcp','tcp',c.livekitTcpPort || 3337,f.tcpPort) : ''}`;
   }
@@ -72,7 +71,7 @@
       <div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音跟随网页端口 ${esc(cfg.port)}，RTC TCP 使用 ${esc(cfg.livekitTcpPort || 3337)}，请在 VPS 放行对应端口。</p></div>
       <div class="validation" id="frp-error" role="alert"></div>
       <div class="form-actions">${button('保存配置', 'save-frp', 'check')}${button(connected ? '断开 FRP' : '连接 FRP', 'toggle-frp', 'network', 'primary')}</div></section>
-      <section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">TOML · 自动生成</span></div><div class="tabs"><button data-frp-tab="client" class="${state.frpTab === 'client' ? 'active' : ''}">本机 frpc.toml</button><button data-frp-tab="server" class="${state.frpTab === 'server' ? 'active' : ''}">VPS frps.toml</button></div><pre class="codebox" id="frp-code">${esc(frpCode(state.frpTab === 'server'))}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><span class="code-links"><button class="text-button" data-action="export-frp">${icon('download')}导出</button><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></span></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
+      <section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">frpc.toml · 自动生成</span></div><pre class="codebox" id="frp-code">${esc(frpCode())}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><span class="code-links"><button class="text-button" data-action="export-frp">${icon('download')}导出</button><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></span></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
   }
   function frpFilePanel(connected) {
     const conf = state.frpConfig, format = (conf?.format || 'toml').toUpperCase();
@@ -252,7 +251,7 @@
     } else if (action === 'frp-generate') {
       if (editorContent().trim()) { ui.toast('编辑框已有内容，清空后可以按图形配置重新生成'); return; }
       if ((state.frpConfig?.format || 'toml') !== 'toml') { ui.toast('当前是 YAML/JSON 配置，不能按图形配置填充'); return; }
-      state.frpConfigDraft = frpCode(false); ui.render();
+      state.frpConfigDraft = frpCode(); ui.render();
       ui.toast('已按图形配置生成，请核对地址、端口与密钥');
     } else if (action === 'frp-save') {
       await saveFrpConfig(); ui.render();
@@ -263,7 +262,7 @@
       ui.render();
       ui.toast('FRP 已启动，日志里可以看到每个代理的注册结果');
     }
-    else if (action === 'export-frp') await command('export',{kind:state.frpTab === 'server' ? 'frps' : 'frpc'});
+    else if (action === 'export-frp') await command('export',{kind:'frpc'});
     else if (action === 'probe-ipv6') {
       const report = await window.zviewerDesktop.command('probe-ipv6', {});
       state.ipv6 = report; ui.render();
