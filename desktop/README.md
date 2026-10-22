@@ -23,7 +23,7 @@
 
 ## 高画质代理 · ZViewerCLI
 
-内置 [Zero-wyc/ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) 0.2.1。打包时按优先级找 CLI：`desktop/zviewer-cli-windows-amd64.exe`（本地放置点，换版本直接丢这里，不进库）→ `frontend/public/zviewer-cli-windows-amd64.exe`（入库版，网页「下载 CLI」与单文件版也用它），两者同名、内容应一致，不一致时打包会提示。那份是发布版（UPX 压缩），不含桌面专属改动；需要在分发包里启用桌面嵌入式主题与本地配置接口来源保护（`desktop/patches/`）时，执行 `node scripts/prepare-cli.mjs --publish`，它会从固定提交 `101659b01a3a9248cea8b32c7eb18b6f76d842f1`（Go 1.26.9 工具链）重建并同步回 `frontend/public/`，同时生成 MIT 许可证、第三方声明与 `provenance.json`。
+内置 [Zero-wyc/ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) 0.2.1。CLI 二进制跟着单文件运行包走：`build-all` 把 `frontend/public/zviewer-cli-windows-amd64.exe` 复制到 `dist/win/frontend/dist/`，桌面打包直接取这一份复制进 `runtime/`（网页「下载 CLI」与单文件版用的也是它）。只检查文件是否存在，不校验摘要；缺失时 `shell:dist` 直接报错，不会去源码重建。那份是发布版（UPX 压缩），不含桌面专属改动；需要在分发包里启用桌面嵌入式主题与本地配置接口来源保护（`desktop/patches/`）时，先执行 `node scripts/prepare-cli.mjs --publish` 重建并同步回 `frontend/public/`，再 `node build-all.js --win` 刷新运行包。
 
 1. 在侧栏进入“高画质代理”，查看只读的“后端地址 · 自动跟随本地服务”。网页账号为可选项，填写并保存与网页端一致的账号有助于识别代理归属；也可按需调整默认代理端口 `9333`。代理仅监听本机 `127.0.0.1`。
 2. 点击“启动代理”，右侧直接显示 CLI 自带的内置设置，自动填写后端地址。如已保存网页账号，也会一同带入；账号留空仍可配置。
@@ -65,14 +65,13 @@ npm --prefix desktop run preview   # http://127.0.0.1:17839
 生成可分发目录与 ZIP：
 
 ```powershell
-npm --prefix desktop run shell:dist -- --skip-cli   # public 缺 CLI 也不重建，直接报错（CI 用这条）
-npm --prefix desktop run shell:dist                 # public 缺 CLI 时自动从源码重建并同步回去
-npm --prefix desktop run package                    # 打包成 ZIP
+npm --prefix desktop run shell:dist   # 取运行包（含 dist/win/frontend/dist 里的 CLI）装壳
+npm --prefix desktop run package      # 打包成 ZIP
 ```
 
-CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里找它），来源优先 `desktop/zviewer-cli-windows-amd64.exe`，其次 `frontend/public/zviewer-cli-windows-amd64.exe`。两处都缺时 `shell:dist` 会先尝试从源码重建（`--skip-cli` 关闭此行为），仍缺失则直接报错；也可用 `ZVIEWER_CLI_EXE=<路径>` 指定已有二进制。确实要打不含高画质代理的包时加 `--allow-missing-cli`，清单里 `cli` 记为 `null`。
+CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里找它），来源是 `dist/win/frontend/dist/zviewer-cli-windows-amd64.exe`。只检查它是否存在，不校验摘要；缺失时 `shell:dist` 直接报错——先确认 `node build-all.js --win` 生成了完整运行包（CLI 由 `frontend/public/` 随前端产物复制过去）。
 
-`.github/workflows/build.yml` 的 `build-gui` job 跑的就是这条链路：取 Windows 运行包 → `npm run shell:dist --skip-cli` → `npm run package`，产物作为 `zviewer-gui-windows-x64` artifact 与单文件版一起进 Release。
+`.github/workflows/build.yml` 的 `build-gui` job 跑的就是这条链路：取 Windows 运行包 → `npm run shell:dist` → `npm run package`，产物作为 `zviewer-gui-windows-x64` artifact 与单文件版一起进 Release。
 
 `shell:dist` 输出 `desktop/dist-gui/zviewer-windows-x64-GUI`，与命令行包同名、仅追加 `GUI`；`package` 打出同名的 `zviewer-windows-x64-GUI.zip`。结构如下（分发或移动时保留整个文件夹）：
 

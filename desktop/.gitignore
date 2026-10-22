@@ -6,8 +6,6 @@ release-*/
 dist-gui/
 exports/
 assets/ZViewer.ProcessHost.exe
-# 本地放置的 CLI 副本：入库版在 ../frontend/public/，打包时优先用这里的
-zviewer-cli-windows-amd64.exe
 *.log
 __pycache__/
 .spike/

@@ -95,7 +95,7 @@ On first startup a ROOT administrator is created automatically: username `root`,
 
 - Extract the archive and double-click `ZViewerDesktop.exe`; closing the window sends it to the system tray by default
 - The runtime lives in `runtime/` inside the extracted folder, where `.env` and `config` are created on first launch
-- The distribution already bundles the high-quality proxy CLI (`runtime/zviewer-cli-windows-amd64.exe`, with a second download copy under the web files) and works out of the box; to change versions, overwrite `runtime/zviewer-cli-windows-amd64.exe`
+- The distribution already bundles the high-quality proxy CLI (`runtime/zviewer-cli-windows-amd64.exe`, the same file served by "Download CLI" on the web) and works out of the box; to change versions, replace `frontend/public/zviewer-cli-windows-amd64.exe` and rebuild the package
 
 See `desktop/README.md` for build and debug instructions.
 
