@@ -19,10 +19,24 @@ import (
 func portAvailable(port int, host string) error {
 	listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
+		// 双栈监听要求系统启用 IPv6；未启用时给出可操作的提示，而不是笼统说端口被占用。
+		if host == "::" && !supportsIPv6() {
+			return fmt.Errorf("当前系统未启用 IPv6，无法监听所有地址；请把监听范围改成“局域网 IPv4 · 0.0.0.0”")
+		}
 		return fmt.Errorf("端口 %d 已被占用；不会停止占用它的其他程序", port)
 	}
 	_ = listener.Close()
 	return nil
+}
+
+// supportsIPv6 用一次随机端口的 bind 判断系统是否启用了 IPv6 协议栈。
+func supportsIPv6() bool {
+	listener, err := net.Listen("tcp6", "[::]:0")
+	if err != nil {
+		return false
+	}
+	_ = listener.Close()
+	return true
 }
 
 func udpAvailable(port int, host string) error {

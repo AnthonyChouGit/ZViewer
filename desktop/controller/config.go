@@ -62,7 +62,9 @@ type FrpConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		Port: 3333, RtmpPort: 3334, FlvPort: 3335, LivekitPort: 3336, LivekitTcpPort: 3337,
-		BindHost: "127.0.0.1", Https: false,
+		// 默认监听所有地址：双栈 `::` 同时覆盖回环（localhost/127.0.0.1/::1）、
+		// 局域网 IPv4 与 IPv6。仅本机使用可在“应用设置”改回 127.0.0.1。
+		BindHost: "::", Https: false,
 		CloseToTray: true, LaunchAtLogin: false, AutoStart: false, AutoCheckUpdate: true,
 		UpdateProxy: true, UpdateProxyURL: DefaultUpdateProxy,
 		Domain: "localhost", LanIP: "",
@@ -558,7 +560,7 @@ func (s *Store) Save(patch map[string]any, token *string) (Config, error) {
 	secret := s.secret
 	if token != nil && *token != "" {
 		if len(*token) > 4096 || strings.ContainsAny(*token, "\r\n\x00") {
-			return s.Value, errors.New("Token 格式无效")
+			return s.Value, errors.New("密钥格式无效")
 		}
 		secret, err = s.cipher.Encrypt(*token)
 		if err != nil {
