@@ -63,15 +63,8 @@ func (a *App) startup(ctx context.Context) {
 	go a.afterStartup()
 }
 
-// afterStartup 恢复本机信任状态，并按配置自动启动服务。
+// afterStartup 按配置自动启动服务。
 func (a *App) afterStartup() {
-	cert := a.ctrl.Certificates().Inspect()
-	if cert.Valid && cert.CA {
-		if err := exec.Command(controller.SystemTool("certutil.exe"), "-user", "-store", "Root", cert.Thumbprint).Run(); err == nil {
-			a.ctrl.SetTrusted(true)
-			a.emitUpdate()
-		}
-	}
 	if a.ctrl.Store().Value.AutoStart || os.Getenv("ZVIEWER_SHELL_AUTOSTART") == "1" {
 		if _, err := a.ctrl.Start(); err != nil {
 			a.ctrl.Log(err.Error(), "backend", "ERROR")
@@ -233,31 +226,6 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		return a.ctrl.EnableHTTPS(payloadString(payload, "domain"), payloadString(payload, "ip"))
 	case "start-http":
 		return a.ctrl.StartHTTP()
-	case "trust":
-		confirmed, err := a.confirm(
-			"信任 ZViewer 本机证书",
-			"安装到当前 Windows 用户的受信任根证书存储？\n\n安装时 Windows 还会再询问一次，请一并选择「是」。",
-		)
-		if err != nil {
-			return nil, err
-		}
-		if !confirmed {
-			return map[string]any{"canceled": true}, nil
-		}
-		if _, err := a.ctrl.Certificates().Trust(true); err != nil {
-			a.ctrl.Log("安装本机 CA 信任失败："+err.Error(), "cert", "ERROR")
-			return nil, errors.New("安装本机信任未完成，请重试并在系统提示中选择「是」")
-		}
-		a.ctrl.SetTrusted(true)
-		a.emitUpdate()
-		return map[string]any{"trusted": true}, nil
-	case "untrust":
-		if _, err := a.ctrl.Certificates().Trust(false); err != nil {
-			return nil, err
-		}
-		a.ctrl.SetTrusted(false)
-		a.emitUpdate()
-		return map[string]any{"trusted": false}, nil
 	case "open-manager":
 		if err := a.openLocalPage(true); err != nil {
 			return nil, err

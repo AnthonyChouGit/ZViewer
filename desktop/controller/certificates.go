@@ -4,7 +4,6 @@ package controller
 // 本机 CA + 域名/内网 IP 服务端证书，全部用标准库生成，不再依赖 @peculiar/x509。
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -442,47 +441,6 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	}
 	c.log(fmt.Sprintf("已签发 %s 的本地 HTTPS 证书，%s，有效期 365 天", target, detail), "cert", "INFO")
 	return c.Inspect(), nil
-}
-
-// Trusted 检查本机 CA 是否已在当前用户的受信任根证书存储里。
-//
-// 结论取自系统证书存储，而不是内存标记：GUI 重启后仍能正确显示状态，
-// 用户在系统里手动删除信任也能反映出来。
-func (c *Certificates) Trusted() bool {
-	info := c.Inspect()
-	if !info.Valid || !info.CA || strings.TrimSpace(info.Thumbprint) == "" {
-		return false
-	}
-	// 启动路径上会调用一次，加超时避免 certutil 异常时卡住界面。
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, SystemTool("certutil.exe"), "-user", "-store", "Root", info.Thumbprint)
-	hideWindow(cmd)
-	return cmd.Run() == nil
-}
-
-// Trust 安装或撤销当前用户对本地 CA 的信任。
-func (c *Certificates) Trust(installed bool) (map[string]any, error) {
-	info := c.Inspect()
-	if !info.Valid || !info.CA {
-		return nil, errors.New("请先签发有效本地证书")
-	}
-	var cmd *exec.Cmd
-	if installed {
-		cmd = exec.Command(SystemTool("certutil.exe"), "-user", "-addstore", "Root", c.Paths().CA)
-	} else {
-		cmd = exec.Command(SystemTool("certutil.exe"), "-user", "-delstore", "Root", info.Thumbprint)
-	}
-	hideWindow(cmd)
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("证书信任操作失败：%w", err)
-	}
-	if installed {
-		c.log("已安装当前用户的本机 CA 信任", "cert", "INFO")
-	} else {
-		c.log("已撤销当前用户的本机 CA 信任", "cert", "INFO")
-	}
-	return map[string]any{"trusted": installed, "fingerprint": info.Fingerprint}, nil
 }
 
 func fileExists(path string) bool {

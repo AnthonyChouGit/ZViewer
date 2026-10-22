@@ -106,7 +106,7 @@
     },
     cert: {
       title: '证书配置教程',
-      caption: '本机 CA · 当前用户信任',
+      caption: '本机自签 · 浏览器首次访问需手动继续',
       sections: [
         {
           title: '为什么要配置证书',
@@ -117,19 +117,11 @@
           body: '<ul><li>只对 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 生效，不包含内网 IP 与自定义域名。</li><li>不需要配置 DNS、hosts 或路由器。</li><li>证书由本机专用 CA 签发，私钥只留在当前用户配置目录。</li></ul>'
         },
         {
-          title: '安装本地 CA 有什么作用',
-          body: '<ul><li>把本地 CA 的公开证书装进「当前用户 → 受信任的根证书」存储，此后由它签发的本机证书被系统与浏览器视为可信。</li><li>浏览器地址栏不再提示证书错误，麦克风、剪贴板、Service Worker 等只在安全上下文可用的能力保持正常。</li><li>只装公开证书；CA 私钥始终留在本机配置目录，不导出、不上传。</li><li>同一页可以撤销，撤销后只是回到“未信任”状态，不影响已签发的文件。</li></ul>'
-        },
-        {
-          title: '本地 CA 的局限',
-          body: '<ul><li>只对当前 Windows 用户生效；同机其他账户与其他电脑要各自处理。</li><li>只让这一个 CA 签发的证书受信，不改变对其他网站、其他证书的判断。</li><li>只作用于读取 Windows 证书存储的浏览器（Edge、Chrome、WebView2）；Firefox 用自己的根证书库，需要在它的设置里单独导入导出的公开 CA。</li><li>证书只签给 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code>；其他设备用内网 IP 或域名访问时仍是不受信任的证书，只能手动继续访问。</li><li>属于本机自建信任，没有第三方审核；CA 私钥或含私钥的文件不能发给别人，私钥泄露后拿到它的人能在这台电脑上伪装任意 HTTPS 网站。</li><li>启用证书固定、或系统校验不读用户证书存储的客户端仍会拦截，这类情况需要换成正式证书。</li></ul>'
-        },
-        {
           title: '配置方法',
-          body: '<ol><li>点击签发按钮，程序用本机 CA 生成 localhost 证书；已有有效证书时直接复用。</li><li>安装当前用户信任，Edge、Chrome 等读取 Windows 证书存储的浏览器不再提示证书错误，可随时撤销。</li><li>在应用设置里确认“使用 HTTPS”已开启，保存并重启服务。</li><li>打开管理页面，地址为 <code>https://localhost:3333</code>。</li><li>需要 IPv6 直连时，在同一页探测本机 IPv6 后按该地址签发，再用 <code>https://[IPv6]:端口</code> 访问；监听范围需为所有地址。</li><li>其他设备访问自签证书时浏览器会提示不安全，选择“继续访问”即可。</li></ol>'
+          body: '<ol><li>点击签发按钮，程序用本机 CA 生成 localhost 证书；已有有效证书时直接复用。</li><li>在应用设置里确认“使用 HTTPS”已开启，保存并重启服务。</li><li>打开管理页面，地址为 <code>https://localhost:3333</code>；浏览器首次会提示证书不受信任，选择“继续访问”即可。</li><li>需要 IPv6 直连时，在同一页探测本机 IPv6 后按该地址签发，再用 <code>https://[IPv6]:端口</code> 访问；监听范围需为所有地址。</li><li>其他设备访问时同样会提示，选择继续即可；需要消除提示只能在各自的设备上手动信任这份证书。</li></ol>'
         }
       ],
-      foot: '本地 CA 只解决本机浏览器对 localhost 的信任，不代替公网域名证书。'
+      foot: '证书由本机 CA 签发，只保证传输加密，不会自动装进任何设备的信任列表。'
     },
     cli: {
       title: '高画质代理教程',
@@ -342,14 +334,14 @@
       `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证密钥 <small>不保存明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">模板从环境变量 FRP_TOKEN 读取，页面不保存输入。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音要单独放行；改用 TCP 语音时管理端也要切换。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">frpc.toml · 自动生成</span></div><pre class="codebox" id="frp-code">${esc(frpConfig())}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
   }
   function certPreview() {
-    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>本机 CA · 自签</span></div><div class="meta-line"><span>证书 SAN</span><span>localhost / 127.0.0.1 / ::1 / 局域网 IP</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>未安装</span></div></div><div class="check-item">${icon('check')}<div><strong>本机与局域网可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
+    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>本机 CA · 自签</span></div><div class="meta-line"><span>证书 SAN</span><span>localhost / 127.0.0.1 / ::1 / 局域网 IP</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div></div><div class="check-item">${icon('check')}<div><strong>本机与局域网可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
   }
   function cert() {
     // 演示地址：与真实探测结果同样呈现，便于验收 IPv6 区块的排版。
     const demoV6 = '2408:8207:2f1a:7c60::8a2e';
-    const v6Block = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('globe')}</span><h2>本机 IPv6</h2></div><span class="pill">演示地址</span></div><p class="wizard-copy">按本机 IPv6 地址签发证书，供 IPv6 直连访问。</p><div class="dns-example">https://[${demoV6}]:3333/admin</div><div class="check-item">${icon('globe')}<div><strong>1. 探测本机 IPv6</strong><br>${demoV6} · 演示地址</div></div><div class="check-item">${icon('lock')}<div><strong>2. 按该地址签发</strong><br>运行中的服务会重启，信任沿用本机 CA。</div></div>${notice('监听范围需设为「所有地址 · IPv4 + IPv6」，其他设备才能经 IPv6 访问。')}<div class="live-toolbar">${button('探测本机 IPv6', 'probe-ipv6', 'globe')}${button('按 IPv6 签发并启用 HTTPS', 'ipv6-cert', 'lock', 'primary')}</div>`;
-    const content = `${v6Block}<div class="panel-line"></div><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">含局域网</span></div><p class="wizard-copy">为 localhost 与局域网地址签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong></div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong></div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong></div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
-    return heading('证书与域名', '签发 IPv6 或本机证书并安装信任。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
+    const v6Block = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('globe')}</span><h2>本机 IPv6</h2></div><span class="pill">演示地址</span></div><p class="wizard-copy">按本机 IPv6 地址签发证书，供 IPv6 直连访问。</p><div class="dns-example">https://[${demoV6}]:3333/admin</div><div class="check-item">${icon('globe')}<div><strong>1. 探测本机 IPv6</strong><br>${demoV6} · 演示地址</div></div><div class="check-item">${icon('lock')}<div><strong>2. 按该地址签发</strong><br>运行中的服务会重启，仍由同一个本机 CA 签发。</div></div>${notice('监听范围需设为「所有地址 · IPv4 + IPv6」，其他设备才能经 IPv6 访问。')}<div class="live-toolbar">${button('探测本机 IPv6', 'probe-ipv6', 'globe')}${button('按 IPv6 签发并启用 HTTPS', 'ipv6-cert', 'lock', 'primary')}</div>`;
+    const content = `${v6Block}<div class="panel-line"></div><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">含局域网</span></div><p class="wizard-copy">为 localhost 与局域网地址签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong></div></div><div class="check-item">${icon('external')}<div><strong>2. 打开管理页面</strong></div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，浏览器会提示证书不受信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
+    return heading('证书与域名', '签发 IPv6 或本机证书并启用 HTTPS。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
   function cli() {
     const live = Boolean(state.live), saved = state.config?.cli || { port: 9333, autoStart: false, user: '' };
@@ -585,7 +577,7 @@
     state.certReady = true;
     addEvent('已演示本机证书流程，未实际执行。', 'cert');
     render();
-    modal(`<div class="big-check">${icon('check')}</div><h2>本机 HTTPS 流程已演示</h2><p>正式版本会在此复用或签发 localhost 证书、引导安装信任，再启用 HTTPS 并打开管理页面。</p><div class="dns-example">https://localhost:3333</div><p>本次未签发证书、安装信任或启动后端。</p><div class="modal-actions">${button('知道了', 'close-modal', 'check', 'primary')}</div>`);
+    modal(`<div class="big-check">${icon('check')}</div><h2>本机 HTTPS 流程已演示</h2><p>正式版本会在此复用或签发 localhost 证书，再启用 HTTPS 并打开管理页面。</p><div class="dns-example">https://localhost:3333</div><p>本次未签发证书、未修改系统证书存储，也未启动后端。</p><div class="modal-actions">${button('知道了', 'close-modal', 'check', 'primary')}</div>`);
   }
   async function action(name) {
     if (name === 'toggle-run') setRunning(!state.running);

@@ -30,11 +30,6 @@ type Event struct {
 	Message string `json:"message"`
 }
 
-type CertificateView struct {
-	CertInfo
-	Trusted bool `json:"trusted"`
-}
-
 type RuntimeFiles struct {
 	Backend bool `json:"backend"`
 	Cert    bool `json:"cert"`
@@ -59,7 +54,7 @@ type Snapshot struct {
 	TokenSaved bool         `json:"tokenSaved"`
 	// MeshSecretSaved 只表示组网密钥有密文，界面据此显示「已保存，留空沿用」。
 	MeshSecretSaved bool            `json:"meshSecretSaved"`
-	Certificate     CertificateView `json:"certificate"`
+	Certificate     CertInfo        `json:"certificate"`
 	Events          []Event         `json:"events"`
 	Root            string          `json:"root"`
 	FrpcAvailable   bool            `json:"frpcAvailable"`
@@ -106,7 +101,6 @@ type Controller struct {
 	tunnelMessage string
 	tunnelExe     string
 	active        *Config
-	trusted       bool
 	frpRegistered map[string]bool
 	voiceKey      string
 	voiceSecret   string
@@ -160,8 +154,6 @@ func New(opts Options) (*Controller, error) {
 	c.voiceKey = hex.EncodeToString(key)
 	c.voiceSecret = hex.EncodeToString(secret)
 	c.certs = NewCertificates(c.dir, c.log)
-	// 信任状态以系统证书存储为准，否则每次重启 GUI 都会退回「尚未安装信任」。
-	c.trusted = c.certs.Trusted()
 	c.cli = NewCliProxy(c.root, opts.CliExecutable, c.hostExe, c.kill, c.verifyCli, c.log, c.emit)
 	c.mesh = NewMeshManager(c.root, filepath.Join(c.dir, "mesh"), c.hostExe, c.kill, c.log, c.emit)
 	c.log("桌面控制台已就绪；配置将在下次启动自动读取", "console", "INFO")
@@ -254,7 +246,6 @@ func (c *Controller) Snapshot() Snapshot {
 		clone := c.active.Clone()
 		active = &clone
 	}
-	trusted := c.trusted
 	livekid := processPid(c.livekit)
 	backendPid := processPid(c.backend)
 	frpPid := processPid(c.frp)
@@ -271,7 +262,7 @@ func (c *Controller) Snapshot() Snapshot {
 		Update:          c.UpdateReport(),
 		TokenSaved:      c.store.HasToken(),
 		MeshSecretSaved: c.store.HasMeshSecret(),
-		Certificate:     CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
+		Certificate:     c.certs.Inspect(),
 		Events:          events,
 		Root:            c.root,
 		FrpcAvailable:   fileExists(c.frpc),
@@ -309,18 +300,6 @@ func (c *Controller) WebURL() string {
 }
 
 func (c *Controller) ManagementURL() string { return c.WebURL() + "admin" }
-
-func (c *Controller) SetTrusted(value bool) {
-	c.mu.Lock()
-	c.trusted = value
-	c.mu.Unlock()
-}
-
-func (c *Controller) Trusted() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.trusted
-}
 
 // Save 保存前端提交的配置补丁。
 func (c *Controller) Save(patch map[string]any, token *string) (Config, error) {
