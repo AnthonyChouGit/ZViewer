@@ -169,12 +169,26 @@ func randomSerial() (*big.Int, error) {
 	return rand.Int(rand.Reader, limit)
 }
 
+// SystemTool 返回 System32 下系统程序的绝对路径。
+//
+// 不能直接用 "whoami.exe"：PATH 里 Git/MSYS 的同名 coreutils 会抢先命中，
+// 参数不兼容导致一律失败（开发机很常见）。SystemRoot 缺失时回落裸名字。
+func SystemTool(name string) string {
+	if root := os.Getenv("SystemRoot"); root != "" {
+		candidate := filepath.Join(root, "System32", name)
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return name
+}
+
 // protect 收紧 TLS 目录权限：只有当前用户与 SYSTEM 可访问。
 func (c *Certificates) protect() error {
 	if !isWindows() {
 		return nil
 	}
-	out, err := exec.Command("whoami.exe", "/user", "/fo", "csv", "/nh").Output()
+	out, err := exec.Command(SystemTool("whoami.exe"), "/user", "/fo", "csv", "/nh").Output()
 	if err != nil {
 		return fmt.Errorf("无法确认当前 Windows 用户，停止保存私钥")
 	}
@@ -182,7 +196,7 @@ func (c *Certificates) protect() error {
 	if match == "" {
 		return errors.New("无法确认当前 Windows 用户，停止保存私钥")
 	}
-	cmd := exec.Command("icacls.exe", c.dir, "/inheritance:r", "/grant:r",
+	cmd := exec.Command(SystemTool("icacls.exe"), c.dir, "/inheritance:r", "/grant:r",
 		"*"+match+":(OI)(CI)F", "*S-1-5-18:(OI)(CI)F")
 	hideWindow(cmd)
 	if err := cmd.Run(); err != nil {
@@ -273,6 +287,44 @@ func subjectKeyID(public *rsa.PublicKey) []byte {
 	return sum[:]
 }
 
+// certIPs 组装证书的 IP SAN：回环 + 本机局域网 IPv4 + 调用方显式传入的地址。
+//
+// 局域网地址每次签发时现取（lanIPv4s），让 https://192.168.x.x:端口 在其它设备上
+// 也能通过证书校验；显式传入的地址用于 IPv6 直连。
+func certIPs(extra string) []net.IP {
+	list := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	list = append(list, lanIPv4s()...)
+	if parsed := net.ParseIP(strings.TrimSpace(extra)); parsed != nil {
+		list = append(list, parsed)
+	}
+	seen := make(map[string]bool, len(list))
+	out := make([]net.IP, 0, len(list))
+	for _, candidate := range list {
+		key := candidate.String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, candidate)
+	}
+	return out
+}
+
+// mergeIPs 把 extra 里尚未出现的地址追加进 base，保持原有顺序。
+func mergeIPs(base, extra []net.IP) []net.IP {
+	seen := make(map[string]bool, len(base)+len(extra))
+	out := make([]net.IP, 0, len(base)+len(extra))
+	for _, ip := range append(append([]net.IP{}, base...), extra...) {
+		key := ip.String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, ip)
+	}
+	return out
+}
+
 // Ensure 签发（或复用）覆盖目标域名与 IP 的服务端证书。
 func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	if !IsHostname(domain) || net.ParseIP(domain) != nil {
@@ -281,19 +333,31 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	if ip != "" && net.ParseIP(ip) == nil {
 		return CertInfo{}, errors.New("证书域名或 IP 无效")
 	}
+	// 证书覆盖：回环 + 本机局域网 IPv4 + 调用方传入的地址（IPv6 走这里）。
+	targets := certIPs(ip)
 	paths := c.Paths()
 	info := c.Inspect()
 	if info.Valid {
 		if raw, err := os.ReadFile(paths.Cert); err == nil {
 			if cert, err := parseCertificate(raw); err == nil {
 				covered := cert.VerifyHostname(domain) == nil
-				if ip != "" {
-					covered = covered && cert.VerifyHostname(ip) == nil
+				for _, target := range targets {
+					if cert.VerifyHostname(target.String()) != nil {
+						covered = false
+						break
+					}
 				}
 				if covered {
 					return info, nil
 				}
 			}
+		}
+	}
+	// 重签时保留旧证书里的地址：启动路径只传 config.LanIP，若直接按当前目标重签，
+	// 之前单独签发过的 IPv6 会被丢掉。旧地址失效时多留一条 SAN 不影响校验。
+	if raw, err := os.ReadFile(paths.Cert); err == nil {
+		if old, err := parseCertificate(raw); err == nil {
+			targets = mergeIPs(targets, old.IPAddresses)
 		}
 	}
 	if err := os.MkdirAll(c.dir, 0o700); err != nil {
@@ -319,14 +383,7 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	if domain != "localhost" {
 		dns = append(dns, domain)
 	}
-	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
-	if ip != "" && ip != "127.0.0.1" && ip != "::1" {
-		parsed := net.ParseIP(ip)
-		if parsed == nil {
-			return CertInfo{}, fmt.Errorf("不是合法的 IP 地址：%s", ip)
-		}
-		ips = append(ips, parsed)
-	}
+	ips := targets
 	template := &x509.Certificate{
 		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: domain, Organization: []string{"ZViewer Desktop"}},
@@ -373,7 +430,17 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	if ip != "" {
 		target = domain + " / " + ip
 	}
-	c.log(fmt.Sprintf("已签发 %s 的本地 HTTPS 证书，有效期 365 天", target), "cert", "INFO")
+	lan := 0
+	for _, targetIP := range targets {
+		if v4 := targetIP.To4(); v4 != nil && v4.IsPrivate() {
+			lan++
+		}
+	}
+	detail := fmt.Sprintf("%d 个地址", len(targets))
+	if lan > 0 {
+		detail += fmt.Sprintf("，含 %d 个局域网 IPv4", lan)
+	}
+	c.log(fmt.Sprintf("已签发 %s 的本地 HTTPS 证书，%s，有效期 365 天", target, detail), "cert", "INFO")
 	return c.Inspect(), nil
 }
 
@@ -389,7 +456,7 @@ func (c *Certificates) Trusted() bool {
 	// 启动路径上会调用一次，加超时避免 certutil 异常时卡住界面。
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "certutil.exe", "-user", "-store", "Root", info.Thumbprint)
+	cmd := exec.CommandContext(ctx, SystemTool("certutil.exe"), "-user", "-store", "Root", info.Thumbprint)
 	hideWindow(cmd)
 	return cmd.Run() == nil
 }
@@ -402,9 +469,9 @@ func (c *Certificates) Trust(installed bool) (map[string]any, error) {
 	}
 	var cmd *exec.Cmd
 	if installed {
-		cmd = exec.Command("certutil.exe", "-user", "-addstore", "Root", c.Paths().CA)
+		cmd = exec.Command(SystemTool("certutil.exe"), "-user", "-addstore", "Root", c.Paths().CA)
 	} else {
-		cmd = exec.Command("certutil.exe", "-user", "-delstore", "Root", info.Thumbprint)
+		cmd = exec.Command(SystemTool("certutil.exe"), "-user", "-delstore", "Root", info.Thumbprint)
 	}
 	hideWindow(cmd)
 	if err := cmd.Run(); err != nil {

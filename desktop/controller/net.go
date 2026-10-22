@@ -3,6 +3,7 @@ package controller
 // 网络探测：端口占用检查、后端健康检查、LiveKit 就绪检查、CLI 健康检查。
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +39,38 @@ func supportsIPv6() bool {
 	}
 	_ = listener.Close()
 	return true
+}
+
+// lanIPv4s 返回本机可用于局域网访问的 IPv4 地址（私有网段，按数值排序去重）。
+//
+// 网卡地址随 DHCP 与虚拟网卡增减，证书签发时现取而不是读配置：
+// 配置里的 lanIp 只是历史上手动填过的值，可能早已失效。
+// 排除 169.254/16（APIPA）与回环；100.64/10（CGNAT，Tailscale 等）不算私有网段，也不会进来。
+func lanIPv4s() []net.IP {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	out := make([]net.IP, 0, 4)
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip := ipNet.IP.To4()
+		if ip == nil || !ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+		key := ip.String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, ip)
+	}
+	sort.Slice(out, func(i, j int) bool { return bytes.Compare(out[i], out[j]) < 0 })
+	return out
 }
 
 func udpAvailable(port int, host string) error {

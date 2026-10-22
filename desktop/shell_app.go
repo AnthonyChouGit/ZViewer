@@ -67,7 +67,7 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) afterStartup() {
 	cert := a.ctrl.Certificates().Inspect()
 	if cert.Valid && cert.CA {
-		if err := exec.Command("certutil.exe", "-user", "-store", "Root", cert.Thumbprint).Run(); err == nil {
+		if err := exec.Command(controller.SystemTool("certutil.exe"), "-user", "-store", "Root", cert.Thumbprint).Run(); err == nil {
 			a.ctrl.SetTrusted(true)
 			a.emitUpdate()
 		}
