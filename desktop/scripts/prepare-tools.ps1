@@ -30,4 +30,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $toolsDir 'frp_0.71.1_windows_amd64\
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($frpArchive,$toolsDir)
 }
+# 分发包只带客户端：缓存里也删掉服务端，避免误把 frps 打进包里。
+foreach ($name in 'frps.exe','frps.toml') {
+    Remove-Item -LiteralPath (Join-Path $toolsDir "frp_0.71.1_windows_amd64\$name") -Force -ErrorAction SilentlyContinue
+}
 Write-Output 'Pinned FRP archive verified'

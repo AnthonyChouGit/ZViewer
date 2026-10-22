@@ -1,4 +1,4 @@
-// 组装可分发目录：原生壳 + 进程监管宿主 + 运行包 + CLI/FRP 与许可证。
+// 组装可分发目录：原生壳 + 进程监管宿主 + 运行包 + CLI / frpc（仅客户端）与许可证。
 // 产物默认 desktop/dist-gui/zviewer-windows-x64-GUI，可用 ZVIEWER_OUT_DIR 改写。
 // 目录名与命令行包一致，仅追加 GUI 后缀，使同一次发布里两个包一眼可辨。
 //
@@ -60,7 +60,7 @@ for (const name of ['zviewer-backend.exe', 'livekit-server.exe']) {
   copyFileSync(join(runtimeSource, name), join(runtime, name));
 }
 cpSync(join(runtimeSource, 'frontend', 'dist'), join(runtime, 'frontend', 'dist'), { recursive: true });
-for (const name of ['frpc.exe', 'frps.exe']) {
+for (const name of ['frpc.exe']) {
   if (existsSync(join(frpDir, name))) copyFileSync(join(frpDir, name), join(runtime, name));
 }
 copyFileSync(join(desktop, 'assets', 'ZViewer.ProcessHost.exe'), join(distribution, 'assets', 'ZViewer.ProcessHost.exe'));
@@ -103,7 +103,6 @@ const tracked = [
   'runtime/zviewer-backend.exe',
   'runtime/livekit-server.exe',
   'runtime/frpc.exe',
-  'runtime/frps.exe',
   'runtime/zviewer-cli-windows-amd64.exe'
 ];
 const CLI_ENTRY = 'runtime/zviewer-cli-windows-amd64.exe';

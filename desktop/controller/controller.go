@@ -857,14 +857,11 @@ func (c *Controller) StartHTTP() (any, error) {
 	})
 }
 
-// FrpConfig 生成 frpc.toml（server=true 时生成 VPS 上的 frps.toml）。
-func (c *Controller) FrpConfig(server bool) string {
+// FrpConfig 生成 frpc.toml；桌面版只做客户端，服务端 frps 由用户自行在 VPS 上部署。
+func (c *Controller) FrpConfig() string {
 	config := c.store.Value
 	f := config.Frp
 	token := "auth.method = \"token\"\nauth.token = \"{{ .Envs.FRP_TOKEN }}\""
-	if server {
-		return fmt.Sprintf("# 设置环境变量 FRP_TOKEN 后运行 frps\nbindPort = %d\n%s\ntransport.tls.force = true\n", f.Port, token)
-	}
 	proxy := func(name, kind string, local, remote int) string {
 		return fmt.Sprintf("\n[[proxies]]\nname = \"zviewer-%s\"\ntype = \"%s\"\nlocalIP = \"127.0.0.1\"\nlocalPort = %d\nremotePort = %d\n",
 			name, kind, local, remote)
@@ -967,7 +964,7 @@ func (c *Controller) StartFrp() (any, error) {
 			return nil, err
 		}
 		if !custom {
-			if err := Atomic(file, c.FrpConfig(false)); err != nil {
+			if err := Atomic(file, c.FrpConfig()); err != nil {
 				return nil, err
 			}
 			expected = 1
@@ -1174,9 +1171,7 @@ func (c *Controller) Export(kind string) (string, []byte, error) {
 			}
 			return filepath.Base(path), raw, nil
 		}
-		return "frpc.toml", []byte(c.FrpConfig(false)), nil
-	case "frps":
-		return "frps.toml", []byte(c.FrpConfig(true)), nil
+		return "frpc.toml", []byte(c.FrpConfig()), nil
 	case "logs":
 		c.mu.RLock()
 		events := make([]Event, len(c.events))
