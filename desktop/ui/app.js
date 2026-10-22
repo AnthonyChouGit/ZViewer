@@ -3,6 +3,7 @@
   const paths = {
     grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     network: '<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v6M5 17v-4h14v4"/>',
+    mesh: '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="m6.5 6.5 3.3 3.3m4.4 0 3.3-3.3m-11 11 3.3-3.3m4.4 0 3.3 3.3"/>',
     shield: '<path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
     terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/>',
     settings: '<path d="m9 3-1 3-3 1-2 4 2 3v4l4 2 3-1 3 1 4-2v-4l2-3-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/>',
@@ -36,7 +37,7 @@
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.info}</svg>`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = selector => document.querySelector(selector);
-  const titles = { overview: '服务总览', connect: '连接方式', frp: 'FRP 穿透', cert: '证书与域名', cli: '高画质代理', logs: '运行日志', settings: '应用设置' };
+  const titles = { overview: '服务总览', connect: '连接方式', frp: 'FRP 穿透', cert: '证书与域名', cli: '高画质代理', mesh: '内嵌组网', logs: '运行日志', settings: '应用设置' };
   let prefs = { closeToTray: true, remember: true };
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem('zviewer-ui-prefs') || '{}') }; } catch { /* Use safe defaults if storage is unavailable. */ }
   const state = {
@@ -44,6 +45,7 @@
     ipv6: null,
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
+    meshDraft: null, meshSecretDraft: '',
     events: [], prefs, updateOpen: false, updateKey: ''
   };
   function clock() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
@@ -78,6 +80,29 @@
           body: '<p>GitHub 仓库：<a href="https://github.com/fatedier/frp" data-external="https://github.com/fatedier/frp">github.com/fatedier/frp</a></p><p>官方文档：<a href="https://gofrp.org/zh-cn/docs/" data-external="https://gofrp.org/zh-cn/docs/">gofrp.org/zh-cn/docs</a></p>'
         }
       ]
+    },
+    mesh: {
+      title: '内嵌组网教程',
+      caption: '虚拟 IP 直连',
+      sections: [
+        {
+          title: '组网做什么',
+          body: '<p>把本机接入一个虚拟局域网，网络内的设备可以直接用虚拟 IP 访问本机端口。</p><p>本机只提供访问，不会主动访问其他节点；朋友的设备装 EasyTier 客户端后加入同一网络即可。</p>'
+        },
+        {
+          title: '开始前需要什么',
+          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。双方都在 NAT 后面时必须有中转节点，自建 VPS 或公共节点都行。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
+        },
+        {
+          title: '怎么用',
+          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址，保存并入网。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
+        },
+        {
+          title: '常见情况',
+          body: '<ul><li>一直是“入网中”或“异常”：先确认监听端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li></ul>'
+        }
+      ],
+      foot: '只有开着组网时其他设备才能按虚拟 IP 访问；停止组网后地址立即失效。'
     },
     cert: {
       title: '证书配置教程',
@@ -352,9 +377,47 @@
         <div class="cli-embed-hint">启动代理 → 扫码登录 → 连接服务器</div>
       </section></div>`;
   }
+  // 内嵌组网：本机按 EasyTier 协议入网，外部设备用虚拟 IP 访问本机端口。
+  // 免账号、免管理员（no_tun），所以面板只暴露网络名称、密钥、对端地址与监听端口。
+  function mesh() {
+    const live = Boolean(state.live), meshLabels = { stopped: '未入网', starting: '入网中', running: '已入网', stopping: '正在退出', error: '异常' };
+    const saved = state.config?.mesh || { enabled: false, networkName: '', peers: [], listenPort: 11010 };
+    const m = state.server?.mesh || { state: 'stopped', available: true, peers: [], virtualIp: '', message: '' };
+    const draft = state.meshDraft || {};
+    const c = { ...saved, ...draft };
+    const running = ['starting', 'running'].includes(m.state);
+    const online = m.state === 'running' && Boolean(m.virtualIp);
+    // DHCP 要等有对端接入才分配地址，所以「运行中但没有虚拟 IP」是正常中间状态。
+    const waiting = m.state === 'running' && !online;
+    const lanPeers = Array.isArray(m.lanPeers) ? m.lanPeers : [];
+    const server = state.server?.active || state.config || { https: false, port: 3333 };
+    const access = online ? `${server.https ? 'https' : 'http'}://${m.virtualIp}:${server.port}/` : '';
+    const peers = m.peers || [];
+    const status = live ? meshLabels[m.state] || '未入网' : '界面预览';
+    const secretValue = state.meshSecretDraft || '';
+    const peerRows = peers.map(peer => `<div class="check-item">${icon(peer.self ? 'monitor' : 'server')}<div><strong>${esc(peer.hostname || peer.ipv4)}${peer.self ? '（本机）' : ''}</strong><br>${esc(peer.ipv4)} · ${peer.self ? '本机' : peer.direct ? '直连' : '中继'}${peer.self || peer.latency === '-' || !peer.latency ? '' : ` · ${esc(peer.latency)} ms`}${peer.tunnel && peer.tunnel !== '-' ? ` · ${esc(peer.tunnel)}` : ''}</div></div>`).join('');
+    const emptyPeers = `<div class="empty">还没有其他设备加入。把网络名称与密钥发给朋友，他们装 EasyTier 客户端加入后就会出现在这里。</div>`;
+    return heading('内嵌组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
+      `<div class="form-layout"><section class="panel">
+        <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>入网参数</h2><p class="cli-caption">免账号 · 免管理员权限</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
+        <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>监听端口</span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
+        <label class="field"><span>网络密钥 <small>加密保存</small></span><input id="mesh-secret" type="password" value="${esc(secretValue)}" placeholder="${state.server?.meshSecretSaved ? '已保存，留空沿用' : '与本网络其他设备一致'}" autocomplete="off"></label>
+        <label class="field"><span>对端地址 <small>一行一个，可留空</small></span><textarea id="mesh-peers" class="codebox config-editor mesh-peers-editor" spellcheck="false" autocomplete="off" placeholder="tcp://1.2.3.4:11010">${esc((c.peers || []).join('\n'))}</textarea></label>
+        <span class="field-note">填一台双方都能连到的节点地址（自建 VPS 或公共节点）。双方都在 NAT 后面时，必须至少有一台中转节点，否则彼此发现不了。</span>
+        <div class="validation" id="mesh-error" role="alert">${esc(m.message || '')}</div>
+        <div class="form-actions">${button('保存','mesh-save','check')}${button('生成新的网络名与密钥','mesh-generate','refresh')}${button(running ? '停止组网' : '保存并入网','mesh-toggle','mesh','primary')}</div>
+      </section>
+      <aside class="panel"><div class="panel-heading"><h2>本机地址</h2></div>
+        <p class="connect-value ${access ? '' : 'is-empty'}">${access ? `<code>${esc(access)}</code>` : waiting ? '等待设备接入' : '尚未入网'}</p>
+        <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>监听端口</span><span>${esc(saved.listenPort || 11010)}</span></div><div class="meta-line"><span>在线设备</span><span>${peers.length ? `${peers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div>${m.version ? `<div class="meta-line"><span>组网版本</span><span>${esc(m.version)}</span></div>` : ''}</div>
+        ${waiting && lanPeers.length ? `<div class="check-item">${icon('link')}<div><strong>让对方先连本机</strong><br>把 <code>${esc(lanPeers[0])}</code> 填进对方客户端的「对端地址」。</div></div>` : ''}
+        <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
+        ${m.available === false ? notice('当前运行包不含组网组件，请使用完整安装包。') : notice('本机不需要管理员权限；朋友的设备装 EasyTier 客户端后按同样的网络名称与密钥加入。')}
+      </aside></div>
+      <section class="panel"><div class="section-title"><h2>在线设备</h2><small>${peers.length ? `${peers.length} 台` : '等待加入'}</small></div><div>${peerRows || emptyPeers}</div></section>`;
+  }
   const connectLinks = {
-    frpProvider: [
-      ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
+    frpProvider: [      ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
       ['OpenFrp', 'openfrp.net', 'https://www.openfrp.net/'],
       ['cpolar', 'cpolar.com', 'https://www.cpolar.com/'],
       ['ngrok', 'ngrok.com', 'https://ngrok.com/']
@@ -362,11 +425,6 @@
     frpSelf: [
       ['frp 下载', 'github.com/fatedier/frp', 'https://github.com/fatedier/frp/releases'],
       ['frp 官方文档', 'gofrp.org', 'https://gofrp.org/zh-cn/docs/']
-    ],
-    lan: [
-      ['ZeroTier', 'zerotier.com', 'https://www.zerotier.com/'],
-      ['Tailscale', 'tailscale.com', 'https://tailscale.com/'],
-      ['EasyTier', 'easytier.cn', 'https://easytier.cn/']
     ],
     tunnel: [
       ['cloudflared 下载', 'github.com/cloudflare', 'https://github.com/cloudflare/cloudflared/releases/latest'],
@@ -393,6 +451,19 @@
         : `<p class="connect-value is-empty">没有</p><p class="connect-note">${esc(v6.reason || '没有探测到公网 IPv6。')}</p>`) +
       `<p class="connect-hint">如果你有 IPv4 公网地址，那么应该不需要我教你其他的了。</p>`;
     const v6Actions = `${button(v6 ? '重新检测' : '检测 IPv6', 'probe-ipv6', 'refresh')}${v6?.ok ? `<button class="btn" data-copy="${esc(v6Url)}">${icon('copy')}复制地址</button>` : ''}`;
+
+    // 内嵌组网卡片：入网后直接给出虚拟 IP 的访问地址，未入网时说清下一步动作。
+    const meshReport = live ? state.server?.mesh : null;
+    const meshOnline = meshReport?.state === 'running' && Boolean(meshReport?.virtualIp);
+    const meshWaiting = meshReport?.state === 'running' && !meshOnline;
+    const meshUrl = meshOnline ? `${config.https ? 'https' : 'http'}://${meshReport.virtualIp}:${port}/` : '';
+    const meshStatus = !live ? '免账号' : meshOnline ? '已入网' : meshWaiting ? '等待接入' : meshReport?.state === 'starting' ? '入网中' : meshReport?.available === false ? '缺少组件' : '未入网';
+    const meshLan = Array.isArray(meshReport?.lanPeers) ? meshReport.lanPeers[0] : '';
+    const meshBody = meshUrl
+      ? `<p class="connect-value"><code>${esc(meshUrl)}</code></p><p class="connect-note">其他设备加入同一网络后，用这个地址访问本机。</p>`
+      : meshWaiting
+        ? `<p class="connect-value is-empty">等待设备接入</p><p class="connect-note">${meshLan ? `把 <code>${esc(meshLan)}</code> 填进对方客户端的「对端地址」即可。` : '有其他设备接入后自动分配虚拟 IP。'}</p>`
+        : `<p class="connect-value is-empty">${esc(meshReport?.message || (live ? '未入网' : '免账号、免管理员'))}</p><p class="connect-note">本机的服务不需要公网 IP，其他设备加入同一虚拟网络后按虚拟 IP 访问。</p>`;
 
     const frpState = live ? state.server.frp : '';
     const frpLabels = { registered: '已连通', connecting: '连接中', error: '异常' };
@@ -439,10 +510,10 @@
         })
       }${
         connectCard({
-          name: 'link', title: '虚拟局域网', copy: '让外网设备与本机加入同一虚拟网络，再用虚拟 IP 访问。',
-          status: '需客户端',
-          body: `<p class="connect-note">每台设备装同一款软件、加入同一网络，用虚拟 IP 访问本机。</p>${linkList(connectLinks.lan)}`,
-          actions: `<button class="btn" data-nav="settings">${icon('settings')}调整监听范围</button>`
+          name: 'mesh', title: '内嵌组网', copy: '本机直接加入虚拟局域网，外部设备按虚拟 IP 访问。',
+          status: meshStatus, tone: meshOnline ? 'green' : '',
+          body: meshBody,
+          actions: `<button class="btn primary" data-nav="mesh">${icon('arrow')}配置内嵌组网</button>`
         })
       }${
         connectCard({
@@ -489,7 +560,7 @@
     pageView.hidden = state.page === 'cli'; cliView.hidden = state.page !== 'cli';
     $('#crumb').textContent = titles[state.page];
     document.querySelectorAll('[data-page]').forEach(a => { const active = a.dataset.page === state.page; a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-    const markup = (state.live && state.views ? state.views : { overview, connect, frp, cert, cli, logs, settings })[state.page]();
+    const markup = (state.live && state.views ? state.views : { overview, connect, frp, cert, cli, mesh, logs, settings })[state.page]();
     // Both containers stay attached. Hiding the CLI view preserves its browsing context across navigation.
     if (frame && !state.cliEmbedUrl) frame.remove();
     else if (frame && frame.getAttribute('src') !== state.cliEmbedUrl) frame.setAttribute('src', state.cliEmbedUrl);
@@ -650,7 +721,7 @@
       navToggle.setAttribute('title', collapsed ? '展开导航' : '折叠导航');
     });
   }
-  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, logs, settings, updateModal, syncUpdate }, refreshLogs, syncWorkspace };
+  window.ZViewerUI = { state, icon, esc, heading, button, notice, tutorial, render, navigate, toast, modal, preview: { overview, connect, frp, cert, cli, mesh, logs, settings, updateModal, syncUpdate }, refreshLogs, syncWorkspace };
   render();
   if (window.zviewerDesktop) {
     window.zviewerDesktop.info().then(info => {

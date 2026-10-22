@@ -731,6 +731,8 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
   white-space: pre; overflow: auto;
 }
 .config-editor:focus { border-color: var(--accent); outline: none; }
+/* 组网对端地址：一行一个地址，不需要整份配置那么高 */
+.mesh-peers-editor { min-height: 84px; max-height: 160px; white-space: pre-wrap; }
 .frp-mode { margin-top: 4px; }
 .dns-example {
   margin: 12px 0; padding: 10px 12px;

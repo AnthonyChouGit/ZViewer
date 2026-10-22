@@ -1,6 +1,6 @@
 # ZViewer Windows 桌面控制台
 
-原生桌面控制台，管理现有 Windows 运行包，保留服务端网页。壳层是 Go + 系统 WebView2（Wails v2），分发目录只有一个 `ZViewerDesktop.exe`，不需要安装运行时，也没有 Electron。支持系统托盘、端口配置持久化、localhost HTTPS、自建 FRP 和 ZViewerCLI 哔哩哔哩高画质代理；CLI 设置、扫码登录与连接操作直接在窗口右侧完成。
+原生桌面控制台，管理现有 Windows 运行包，保留服务端网页。壳层是 Go + 系统 WebView2（Wails v2），分发目录只有一个 `ZViewerDesktop.exe`，不需要安装运行时，也没有 Electron。支持系统托盘、端口配置持久化、localhost HTTPS、自建 FRP、内嵌组网（EasyTier 免 TUN）和 ZViewerCLI 哔哩哔哩高画质代理；CLI 设置、扫码登录与连接操作直接在窗口右侧完成。
 
 ## 双击打开 GUI
 
@@ -15,6 +15,7 @@
 | GUI 入口                 | 运行目录中的 `ZViewerDesktop.exe`              |
 | 进程监管宿主                 | 同目录 `assets/ZViewer.ProcessHost.exe`     |
 | 后端、LiveKit、FRP、CLI 与网页 | `runtime/` 内的程序与 `runtime/frontend/dist` |
+| 内嵌组网组件                 | `runtime/mesh/`（easytier-core / easytier-cli） |
 | 后端环境与业务数据              | `runtime/.env`、`runtime/config`          |
 | GUI 设置、证书、FRP 凭据与日志    | `%APPDATA%/ZViewerDesktop`               |
 | ZViewerCLI 自身的登录配置     | `%USERPROFILE%/.zviewer/config.json`     |
@@ -119,7 +120,7 @@ npm --prefix desktop run check
 
 本机模式启用 UDP 回环监听，使 localhost 与 FRP 的回环转发可达；公布公网地址时保留媒体转发所需的网卡。网页/信令监听范围不限制 LiveKit RTC TCP 的底层网卡监听。程序不修改系统防火墙、路由器、hosts 或 DNS。
 
-正式版配置位于 `%APPDATA%/ZViewerDesktop/settings.json`。FRP 密钥由当前用户 DPAPI 加密，换电脑或用户后需重新填写。登录启动默认关闭；入口 EXE 只显示界面，服务由界面按钮启动。
+正式版配置位于 `%APPDATA%/ZViewerDesktop/settings.json`。FRP 密钥与组网密钥分别由当前用户 DPAPI 加密，换电脑或用户后需重新填写。登录启动默认关闭；入口 EXE 只显示界面，服务由界面按钮启动。
 
 关闭窗口默认收起到系统托盘，头像图标可恢复；右键菜单提供服务启停、打开网页端、日志与退出。第二次启动恢复已有窗口。选择“退出并停止受管服务”会停止受管 CLI、FRP、后端和独立 LiveKit，不按端口强杀其他程序。
 
@@ -145,9 +146,21 @@ IPv6 直连：打开页面时由程序经外部接口（`v6.ident.me` 等仅解�
 
 自建 FRP：自己的 VPS 上运行 frps，本机 frpc 连接该服务器，控制台生成并导出 `frpc.toml`（`frps.toml` 按官方文档在 VPS 上自建）。端口、域名与带宽自管，需自行在安全组与系统防火墙放行映射端口。
 
-虚拟局域网：列出 ZeroTier、Tailscale、EasyTier。每台设备都要安装同一款软件并加入同一网络，再用虚拟 IP 访问，网页与信令监听范围需改为局域网 IPv4 或所有地址。
+虚拟局域网：内置“内嵌组网”，本机直接加入虚拟网络，其他设备按虚拟 IP 访问，详见下一节。
 
 Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解析其输出的 `trycloudflare.com` 临时地址，停止隧道后地址失效。程序不内置 `cloudflared`，需自行下载后放入运行包目录或加入 PATH，未找到时按钮只提供下载入口。快速隧道地址随机、随会话失效；固定域名请改用 Cloudflare 命名隧道，需要一张外国银行卡。
+
+## 内嵌组网
+
+包内自带 [EasyTier](https://github.com/EasyTier/EasyTier) 2.6.4（`runtime/mesh/`），以 `no_tun` 方式运行：不需要管理员权限、不创建虚拟网卡、不需要任何账号。本机加入虚拟网络后，网络内其他设备可以用虚拟 IP 访问本机的网页、推流与语音端口；本机本身不能主动访问其他节点。
+
+组网只需要一组网络名称与网络密钥，两者在同一个网络里必须一致。点“生成新的网络名与密钥”会自动填好并保存，复制“入网说明”发给对方即可。
+
+双方都在 NAT 后面时必须有中转节点，否则彼此发现不了。在“对端地址”里填一台双方都能连到的节点（自建 VPS 上跑同版本 easytier，或可用的公共节点），一行一个，例如 `tcp://1.2.3.4:11010`。组网监听端口默认 11010，不能在 VPS 与系统防火墙上被占用或拦截。
+
+对方的设备需要安装 EasyTier 客户端（Windows / macOS / Android 等官方发行版），填入同样的网络名称与密钥加入网络，然后打开 `http://<虚拟IP>:<网页端口>/`。网页端口就是“应用设置”里的端口，默认 3333。
+
+组网密钥由当前用户 DPAPI 加密保存在 `settings.json`，与 FRP 密钥互不影响。勾选过“入网”后，打开控制台会自动入网；点“停止组网”会关闭自动入网，虚拟 IP 立即失效。组网节点独立于主服务，只停主服务不会让它退出。
 
 ## 自建 FRP
 
@@ -193,6 +206,19 @@ Cloudflare Tunnel：使用 `cloudflared` 的快速隧道，由程序启动并解
 
 - `DestroyWindow` 只能由创建窗口的线程调用，退出时用 `PostMessage(WM_CLOSE)` 让托盘线程自己收尾；函数导出名是 `DestroyWindow`，没有 `W` 后缀。
 - 唤醒主窗口时先走 Wails 的 `WindowShow`，再用原生 `ShowWindow` + 置顶翻转 + 前台线程挂靠兜底，否则后台进程调用 `SetForegroundWindow` 会被前台锁静默拒绝。
+
+## 第三方组件与许可
+
+分发包聚合了几个独立的可执行文件，各自保留原许可证，均未修改二进制：
+
+| 组件 | 版本 | 许可证 | 分发包内文件 |
+| --- | --- | --- | --- |
+| [frp](https://github.com/fatedier/frp) 客户端 | 0.71.1 | Apache-2.0 | `runtime/frpc.exe`、`LICENSE-FRP.txt` |
+| [EasyTier](https://github.com/EasyTier/EasyTier) | 2.6.4 | LGPL-3.0 | `runtime/mesh/`、`LICENSE-EasyTier.txt` |
+| [ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) | 0.2.1 | MIT | `runtime/zviewer-cli-windows-amd64.exe`、`LICENSE-ZViewerCLI.txt` |
+| [LiveKit](https://github.com/livekit/livekit) server | 见运行包 | Apache-2.0 | `runtime/livekit-server.exe` |
+
+EasyTier 为 LGPL-3.0：本项目按原样聚合分发其官方发布包中的未修改二进制，未做任何链接或修改；对应源码可从 <https://github.com/EasyTier/EasyTier/tree/v2.6.4> 获取，许可证全文随包提供。需要替换该组件时，用自己的构建产物覆盖 `runtime/mesh/` 下的同名文件即可。
 
 ## 上游贡献
 

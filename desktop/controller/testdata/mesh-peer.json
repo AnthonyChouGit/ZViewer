@@ -1,0 +1,30 @@
+[
+  {
+    "cidr": "10.126.126.1/24",
+    "ipv4": "10.126.126.1",
+    "hostname": "zvt-host",
+    "cost": "Local",
+    "lat_ms": "-",
+    "loss_rate": "-",
+    "rx_bytes": "-",
+    "tx_bytes": "-",
+    "tunnel_proto": "-",
+    "nat_type": "Symmetric",
+    "id": "58308917",
+    "version": "2.6.4-8428a89d"
+  },
+  {
+    "cidr": "10.126.126.2/24",
+    "ipv4": "10.126.126.2",
+    "hostname": "zvt-visitor",
+    "cost": "p2p",
+    "lat_ms": "0.09",
+    "loss_rate": "0.0%",
+    "rx_bytes": "2.75 kB",
+    "tx_bytes": "2.97 kB",
+    "tunnel_proto": "tcp",
+    "nat_type": "SymmetricEasyInc",
+    "id": "844508919",
+    "version": "2.6.4-8428a89d"
+  }
+]

@@ -1,0 +1,97 @@
+{
+  "peer_id": 58308917,
+  "ipv4_addr": "10.126.126.1/24",
+  "proxy_cidrs": [],
+  "hostname": "zvt-host",
+  "stun_info": {
+    "udp_nat_type": 6,
+    "tcp_nat_type": 6,
+    "last_update_time": 1792681013,
+    "public_ip": [
+      "112.49.81.235",
+      "2409:8a34:856:47d0:d0cc:5ecc:cf0a:169c"
+    ],
+    "min_port": 20431,
+    "max_port": 20441
+  },
+  "inst_id": "72b794d9-aea1-45fc-af60-132221642458",
+  "listeners": [
+    "ring://72b794d9-aea1-45fc-af60-132221642458",
+    "tcp://0.0.0.0:21210",
+    "tcp://[::]:21210",
+    "udp://0.0.0.0:21210",
+    "udp://[::]:21210"
+  ],
+  "config": "hostname = \"zvt-host\"\ninstance_name = \"zviewer\"\ninstance_id = \"72b794d9-aea1-45fc-af60-132221642458\"\nipv4 = \"10.126.126.1/24\"\ndhcp = true\nlisteners = [\n    \"tcp://0.0.0.0:21210\",\n    \"udp://0.0.0.0:21210\",\n]\n\n[network_identity]\nnetwork_name = \"zvt-check-9f2c\"\nnetwork_secret = \"zvtcheck9f2c3a7b1d5e\"\n\n[flags]\nbind_device = false\nno_tun = true\n",
+  "version": "2.6.4-8428a89d",
+  "feature_flag": {
+    "is_public_server": false,
+    "avoid_relay_data": false,
+    "kcp_input": true,
+    "no_relay_kcp": false,
+    "support_conn_list_sync": true,
+    "quic_input": true,
+    "no_relay_quic": false,
+    "is_credential_peer": false,
+    "need_p2p": false,
+    "disable_p2p": false,
+    "ipv6_public_addr_provider": false
+  },
+  "ip_list": {
+    "public_ipv4": {
+      "addr": 1882280427
+    },
+    "interface_ipv4s": [
+      {
+        "addr": 3232243461
+      },
+      {
+        "addr": 2852041247
+      },
+      {
+        "addr": 2852049731
+      },
+      {
+        "addr": 2852025235
+      },
+      {
+        "addr": 3232300801
+      },
+      {
+        "addr": 3232253953
+      },
+      {
+        "addr": 2852018862
+      }
+    ],
+    "public_ipv6": {
+      "part1": 604604980,
+      "part2": 139872208,
+      "part3": 3503054540,
+      "part4": 3473544860
+    },
+    "interface_ipv6s": [
+      {
+        "part1": 604604980,
+        "part2": 139872208,
+        "part3": 0,
+        "part4": 2919
+      },
+      {
+        "part1": 604604980,
+        "part2": 139872208,
+        "part3": 109609441,
+        "part4": 1445121129
+      },
+      {
+        "part1": 604604980,
+        "part2": 139872208,
+        "part3": 3503054540,
+        "part4": 3473544860
+      }
+    ],
+    "listeners": []
+  },
+  "public_ipv6_addr": null,
+  "ipv6_public_addr_prefix": null
+}

@@ -43,24 +43,27 @@ type RuntimeFiles struct {
 }
 
 type Snapshot struct {
-	Config        Config          `json:"config"`
-	Active        *Config         `json:"active"`
-	WebURL        string          `json:"webUrl"`
-	Backend       string          `json:"backend"`
-	Voice         string          `json:"voice"`
-	Frp           string          `json:"frp"`
-	Cli           CliSnapshot     `json:"cli"`
-	Tunnel        TunnelReport    `json:"tunnel"`
-	Update        UpdateReport    `json:"update"`
-	Pid           *int            `json:"pid"`
-	VoicePid      *int            `json:"voicePid"`
-	FrpPid        *int            `json:"frpPid"`
-	TokenSaved    bool            `json:"tokenSaved"`
-	Certificate   CertificateView `json:"certificate"`
-	Events        []Event         `json:"events"`
-	Root          string          `json:"root"`
-	FrpcAvailable bool            `json:"frpcAvailable"`
-	Runtime       RuntimeFiles    `json:"runtime"`
+	Config     Config       `json:"config"`
+	Active     *Config      `json:"active"`
+	WebURL     string       `json:"webUrl"`
+	Backend    string       `json:"backend"`
+	Voice      string       `json:"voice"`
+	Frp        string       `json:"frp"`
+	Cli        CliSnapshot  `json:"cli"`
+	Mesh       MeshStatus   `json:"mesh"`
+	Tunnel     TunnelReport `json:"tunnel"`
+	Update     UpdateReport `json:"update"`
+	Pid        *int         `json:"pid"`
+	VoicePid   *int         `json:"voicePid"`
+	FrpPid     *int         `json:"frpPid"`
+	TokenSaved bool         `json:"tokenSaved"`
+	// MeshSecretSaved 只表示组网密钥有密文，界面据此显示「已保存，留空沿用」。
+	MeshSecretSaved bool            `json:"meshSecretSaved"`
+	Certificate     CertificateView `json:"certificate"`
+	Events          []Event         `json:"events"`
+	Root            string          `json:"root"`
+	FrpcAvailable   bool            `json:"frpcAvailable"`
+	Runtime         RuntimeFiles    `json:"runtime"`
 }
 
 type Options struct {
@@ -86,6 +89,7 @@ type Controller struct {
 	store *Store
 	certs *Certificates
 	cli   *CliProxy
+	mesh  *MeshManager
 
 	mu            sync.RWMutex
 	events        []Event
@@ -159,6 +163,7 @@ func New(opts Options) (*Controller, error) {
 	// 信任状态以系统证书存储为准，否则每次重启 GUI 都会退回「尚未安装信任」。
 	c.trusted = c.certs.Trusted()
 	c.cli = NewCliProxy(c.root, opts.CliExecutable, c.hostExe, c.kill, c.verifyCli, c.log, c.emit)
+	c.mesh = NewMeshManager(c.root, filepath.Join(c.dir, "mesh"), c.hostExe, c.kill, c.log, c.emit)
 	c.log("桌面控制台已就绪；配置将在下次启动自动读取", "console", "INFO")
 	return c, nil
 }
@@ -259,15 +264,17 @@ func (c *Controller) Snapshot() Snapshot {
 	out := Snapshot{
 		Config: config, Active: active,
 		WebURL: c.WebURL(), Backend: backend, Voice: voice, Frp: frp,
-		Cli: c.cli.Snapshot(),
-		Pid: backendPid, VoicePid: livekid, FrpPid: frpPid,
-		Tunnel:        c.tunnelReport(),
-		Update:        c.UpdateReport(),
-		TokenSaved:    c.store.HasToken(),
-		Certificate:   CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
-		Events:        events,
-		Root:          c.root,
-		FrpcAvailable: fileExists(c.frpc),
+		Cli:  c.cli.Snapshot(),
+		Mesh: c.mesh.Snapshot(),
+		Pid:  backendPid, VoicePid: livekid, FrpPid: frpPid,
+		Tunnel:          c.tunnelReport(),
+		Update:          c.UpdateReport(),
+		TokenSaved:      c.store.HasToken(),
+		MeshSecretSaved: c.store.HasMeshSecret(),
+		Certificate:     CertificateView{CertInfo: c.certs.Inspect(), Trusted: trusted},
+		Events:          events,
+		Root:            c.root,
+		FrpcAvailable:   fileExists(c.frpc),
 		Runtime: RuntimeFiles{
 			Backend: fileExists(filepath.Join(c.root, "zviewer-backend.exe")),
 			Cert:    true,
@@ -1152,6 +1159,10 @@ func (c *Controller) verifyCli(pid, port int) error {
 }
 
 func (c *Controller) Shutdown() error {
+	// 组网节点独立于主服务，单独收一次。
+	if _, err := c.mesh.Stop(); err != nil {
+		c.log("停止内嵌组网失败："+err.Error(), "mesh", "WARN")
+	}
 	// stopBackend 会一并回收 FRP、隧道与 CLI 进程。
 	_, err := c.Stop()
 	return err

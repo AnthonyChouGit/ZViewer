@@ -20,6 +20,7 @@ const pkg = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'));
 const flags = new Set(process.argv.slice(2));
 const tools = join(desktop, '.runtime', 'tools');
 const frpDir = join(tools, 'frp_0.71.1_windows_amd64');
+const meshDir = join(tools, 'easytier');
 const cliDir = join(tools, 'zviewer-cli');
 const runtimeSource = process.env.ZVIEWER_RUNTIME_ROOT || join(repo, 'dist', 'win');
 // CLI 固定从运行包的网页目录取：build-all 会把 frontend/public 的
@@ -63,6 +64,13 @@ cpSync(join(runtimeSource, 'frontend', 'dist'), join(runtime, 'frontend', 'dist'
 for (const name of ['frpc.exe']) {
   if (existsSync(join(frpDir, name))) copyFileSync(join(frpDir, name), join(runtime, name));
 }
+// 内嵌组网：壳在 runtime/mesh 里找 easytier-core / easytier-cli，缺 core 包直接报错。
+requireFile(join(meshDir, 'easytier-core.exe'), '缺少组网组件，先跑 scripts/prepare-tools.ps1 或去掉 --skip-tools');
+const meshTarget = join(runtime, 'mesh');
+mkdirSync(meshTarget, { recursive: true });
+for (const name of ['easytier-core.exe', 'easytier-cli.exe', 'Packet.dll', 'WinDivert64.sys', 'wintun.dll']) {
+  if (existsSync(join(meshDir, name))) copyFileSync(join(meshDir, name), join(meshTarget, name));
+}
 copyFileSync(join(desktop, 'assets', 'ZViewer.ProcessHost.exe'), join(distribution, 'assets', 'ZViewer.ProcessHost.exe'));
 
 // CLI 固定放进 runtime/：壳只从运行包里找它，缺了就等于没有高画质代理。
@@ -77,6 +85,9 @@ for (const [source, target] of [['LICENSE', 'LICENSE-ZViewer.txt']]) {
   if (existsSync(file)) copyFileSync(file, join(distribution, target));
 }
 if (existsSync(join(frpDir, 'LICENSE'))) copyFileSync(join(frpDir, 'LICENSE'), join(distribution, 'LICENSE-FRP.txt'));
+// EasyTier 是 LGPL-3.0，聚合分发未修改的二进制必须带上许可证全文。
+const meshLicense = join(meshDir, 'LICENSE-EasyTier.txt');
+if (existsSync(meshLicense)) copyFileSync(meshLicense, join(distribution, 'LICENSE-EasyTier.txt'));
 // 首次启动由壳自己生成独立 JWT 密钥，分发包里只放样例，绝不带真实 .env。
 rmSync(join(runtime, '.env'), { force: true });
 writeFileSync(join(runtime, '.env.example'), '# 不含任何真实凭据。桌面端首次启动时生成独立密钥。\nPORT=3333\nHOST=127.0.0.1\nNODE_ENV=production\n');
@@ -103,6 +114,8 @@ const tracked = [
   'runtime/zviewer-backend.exe',
   'runtime/livekit-server.exe',
   'runtime/frpc.exe',
+  'runtime/mesh/easytier-core.exe',
+  'runtime/mesh/easytier-cli.exe',
   'runtime/zviewer-cli-windows-amd64.exe'
 ];
 const CLI_ENTRY = 'runtime/zviewer-cli-windows-amd64.exe';
@@ -125,6 +138,7 @@ const manifest = {
   signed: false,
   iconEmbedded: true,
   frp: '0.71.1',
+  mesh: '2.6.4',
   cli: cliMeta(cliSource),
   fileCount: walk(distribution).length,
   files

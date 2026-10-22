@@ -77,6 +77,8 @@ func (a *App) afterStartup() {
 			a.ctrl.Log(err.Error(), "backend", "ERROR")
 		}
 	}
+	// 组网与主服务解耦：即使主服务没自动启动，配过自动入网的也会自己起来。
+	go a.ctrl.AutoStartMesh()
 	go a.checkUpdatesPeriodically()
 }
 
@@ -278,6 +280,29 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 			return nil, err
 		}
 		return map[string]any{"url": url}, nil
+	case "mesh-start":
+		return a.ctrl.StartMesh()
+	case "mesh-stop":
+		return a.ctrl.StopMesh()
+	case "mesh-save":
+		var secret *string
+		if text := payloadString(payload, "networkSecret"); text != "" {
+			secret = &text
+		}
+		config, err := a.ctrl.SaveMesh(payloadConfig(payload), secret)
+		if err != nil {
+			return nil, err
+		}
+		a.emitUpdate()
+		return config, nil
+	case "mesh-generate":
+		return a.ctrl.NewMeshCredentials(), nil
+	case "mesh-invite":
+		text, err := a.ctrl.MeshInvite()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"text": text}, nil
 	case "frp-start":
 		return a.ctrl.StartFrp()
 	case "frp-stop":

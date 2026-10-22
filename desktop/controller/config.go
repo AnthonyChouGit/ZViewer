@@ -21,23 +21,24 @@ import (
 
 // Config 对应 config.cjs 的 defaults。
 type Config struct {
-	Port            int       `json:"port"`
-	RtmpPort        int       `json:"rtmpPort"`
-	FlvPort         int       `json:"flvPort"`
-	LivekitPort     int       `json:"livekitPort"`
-	LivekitTcpPort  int       `json:"livekitTcpPort"`
-	BindHost        string    `json:"bindHost"`
-	Https           bool      `json:"https"`
-	CloseToTray     bool      `json:"closeToTray"`
-	LaunchAtLogin   bool      `json:"launchAtLogin"`
-	AutoStart       bool      `json:"autoStart"`
-	AutoCheckUpdate bool      `json:"autoCheckUpdate"`
-	UpdateProxy     bool      `json:"updateProxy"`
-	UpdateProxyURL  string    `json:"updateProxyUrl"`
-	Domain          string    `json:"domain"`
-	LanIP           string    `json:"lanIp"`
-	Cli             CliConfig `json:"cli"`
-	Frp             FrpConfig `json:"frp"`
+	Port            int        `json:"port"`
+	RtmpPort        int        `json:"rtmpPort"`
+	FlvPort         int        `json:"flvPort"`
+	LivekitPort     int        `json:"livekitPort"`
+	LivekitTcpPort  int        `json:"livekitTcpPort"`
+	BindHost        string     `json:"bindHost"`
+	Https           bool       `json:"https"`
+	CloseToTray     bool       `json:"closeToTray"`
+	LaunchAtLogin   bool       `json:"launchAtLogin"`
+	AutoStart       bool       `json:"autoStart"`
+	AutoCheckUpdate bool       `json:"autoCheckUpdate"`
+	UpdateProxy     bool       `json:"updateProxy"`
+	UpdateProxyURL  string     `json:"updateProxyUrl"`
+	Domain          string     `json:"domain"`
+	LanIP           string     `json:"lanIp"`
+	Cli             CliConfig  `json:"cli"`
+	Frp             FrpConfig  `json:"frp"`
+	Mesh            MeshConfig `json:"mesh"`
 }
 
 type CliConfig struct {
@@ -76,6 +77,7 @@ func DefaultConfig() Config {
 		Cli: CliConfig{Port: 9333, AutoStart: false, User: ""},
 		Frp: FrpConfig{Host: "", Port: 7000, AdvertiseIP: "", Voice: true, Rtmp: true, Tcp: false,
 			WebPort: 3333, VoicePort: 3333, RtmpPort: 3334, TcpPort: 3337, Mode: "form", Format: "toml"},
+		Mesh: DefaultMeshConfig(),
 	}
 }
 
@@ -168,7 +170,11 @@ func frpMapOf(value any) map[string]any {
 }
 
 // Validate 校验并归一化配置，错误文案与前端提示保持一致。
-func Validate(input map[string]any) (Config, error) {
+func Validate(input map[string]any) (Config, error) { return validateConfig(input, false) }
+
+// validateConfig 的 meshSecretPresent 表示当前用户已有可用的组网密钥密文；
+// 只有「启用组网」才要求密钥，避免旧配置在没有密钥时整份校验失败。
+func validateConfig(input map[string]any, meshSecretPresent bool) (Config, error) {
 	target := DefaultConfig()
 	base := toMap(target)
 	for key, value := range input {
@@ -382,6 +388,12 @@ func Validate(input map[string]any) (Config, error) {
 		frp.Format = normalized
 	}
 	target.Frp = frp
+
+	mesh, err := NormalizeMesh(frpMapOf(base["mesh"]), DefaultMeshConfig(), meshSecretPresent, reserved)
+	if err != nil {
+		return target, err
+	}
+	target.Mesh = mesh
 	return target, nil
 }
 
@@ -469,18 +481,20 @@ type Cipher interface {
 	Decrypt(string) (string, error)
 }
 
-// Store 负责 settings.json 的读写与 Token 加密。
+// Store 负责 settings.json 的读写与密钥加密。
 type Store struct {
-	file   string
-	cipher Cipher
-	Value  Config
-	secret string
+	file       string
+	cipher     Cipher
+	Value      Config
+	secret     string
+	meshSecret string
 }
 
 type savedSettings struct {
-	Schema   int            `json:"schema"`
-	Config   map[string]any `json:"config"`
-	FrpToken string         `json:"frpToken"`
+	Schema     int            `json:"schema"`
+	Config     map[string]any `json:"config"`
+	FrpToken   string         `json:"frpToken"`
+	MeshSecret string         `json:"meshSecret"`
 }
 
 // NewStore 读取现有配置；不存在的字段按默认值补齐。
@@ -507,12 +521,13 @@ func NewStore(dir, root string, cipher Cipher) (*Store, error) {
 				}
 			}
 		}
-		value, err := Validate(config)
+		value, err := validateConfig(config, saved.MeshSecret != "")
 		if err != nil {
 			return nil, err
 		}
 		store.Value = value
 		store.secret = saved.FrpToken
+		store.meshSecret = saved.MeshSecret
 		return store, nil
 	}
 	if !os.IsNotExist(err) {
@@ -582,8 +597,9 @@ func (s *Store) Save(patch map[string]any, token *string) (Config, error) {
 	}
 	merged["cli"] = cli
 	merged["frp"] = frp
+	merged["mesh"] = mergeMeshMap(s.Value.Mesh, patch["mesh"])
 
-	value, err := Validate(merged)
+	value, err := validateConfig(merged, s.meshSecret != "")
 	if err != nil {
 		return s.Value, err
 	}
@@ -597,17 +613,71 @@ func (s *Store) Save(patch map[string]any, token *string) (Config, error) {
 			return s.Value, err
 		}
 	}
-	payload, err := json.MarshalIndent(map[string]any{"schema": 2, "config": value, "frpToken": secret}, "", "  ")
-	if err != nil {
-		return s.Value, err
-	}
-	if err := Atomic(s.file, string(payload)); err != nil {
+	if err := s.persist(value, secret, s.meshSecret); err != nil {
 		return s.Value, err
 	}
 	s.Value = value
 	s.secret = secret
 	return value, nil
 }
+
+// mergeMeshMap 合并组网补丁：前端可以只提交被改动的一项。
+func mergeMeshMap(current MeshConfig, patch any) map[string]any {
+	out := toMap(current)
+	for key, value := range frpMapOf(patch) {
+		out[key] = value
+	}
+	return out
+}
+
+// persist 整份写回 settings.json；三份密文各自独立，缺一不可。
+func (s *Store) persist(config Config, frpToken, meshSecret string) error {
+	payload, err := json.MarshalIndent(map[string]any{
+		"schema": 2, "config": config, "frpToken": frpToken, "meshSecret": meshSecret,
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return Atomic(s.file, string(payload))
+}
+
+// SaveMesh 保存组网配置与密钥；secret 为 nil 表示沿用已保存的密钥。
+func (s *Store) SaveMesh(input map[string]any, secret *string) (Config, error) {
+	merged := toMap(s.Value)
+	merged["mesh"] = mergeMeshMap(s.Value.Mesh, input)
+	pending := s.meshSecret
+	if secret != nil {
+		if err := MeshSecretValid(*secret); err != nil {
+			return s.Value, err
+		}
+		encrypted, err := s.cipher.Encrypt(*secret)
+		if err != nil {
+			return s.Value, err
+		}
+		pending = encrypted
+	}
+	value, err := validateConfig(merged, pending != "")
+	if err != nil {
+		return s.Value, err
+	}
+	if err := s.persist(value, s.secret, pending); err != nil {
+		return s.Value, err
+	}
+	s.Value = value
+	s.meshSecret = pending
+	return value, nil
+}
+
+// MeshSecret 解密已保存的组网密钥。
+func (s *Store) MeshSecret() (string, error) {
+	if s.meshSecret == "" {
+		return "", nil
+	}
+	return s.cipher.Decrypt(s.meshSecret)
+}
+
+// HasMeshSecret 只判断是否存在密文，不触发解密。
+func (s *Store) HasMeshSecret() bool { return s.meshSecret != "" }
 
 // Token 解密已保存的 FRP Token。
 func (s *Store) Token() (string, error) {
