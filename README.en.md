@@ -54,16 +54,20 @@ Project docs: [docx.zviewer.zero251.xyz](https://docx.zviewer.zero251.xyz)
 ## Table of Contents
 
 - [Features](#features)
+- [ZViewerCLI](#zviewercli)
 - [Installation & Startup](#installation--startup)
+  - [Windows Desktop (GUI)](#windows-desktop-gui)
+  - [Single-File Build (Recommended)](#single-file-build-recommended)
   - [Interactive Menu](#interactive-menu)
+  - [From Source](#from-source)
+  - [Ports](#ports)
 - [Docker Deployment](#docker-deployment)
 - [Deployment Configuration](#deployment-configuration)
+  - [Environment Variables](#environment-variables)
+  - [Voice Transport](#voice-transport)
+- [Windows Desktop Console (Optional)](#windows-desktop-console-optional)
 
 ---
-
-## Docker Upgrade Notice (required reading for v4.3.6 and below)
-
-> **Docker users on v4.3.6 or lower**: do **not** upgrade through the admin panel's "One-click Update" (Settings → Basic). Redeploy with the latest docker compose file instead.
 
 ## Features
 
@@ -72,7 +76,7 @@ Project docs: [docx.zviewer.zero251.xyz](https://docx.zviewer.zero251.xyz)
 - **Format compatibility**: MKV / AVI / TS / WMV, DTS / AC3 / EAC3 and other formats that browsers cannot play natively
 - **Playback modes**: CLI local proxy (high quality, no server traffic), server DASH relay, MP4 direct link (up to 720P) — switch on demand
 - **Danmaku & subtitles**: Bilibili official / DandanPlay / local XML·JSON (multiple tracks); SRT / ASS / SSA / VTT / SMI / SUB
-- **Interaction & streaming**: comments, voice chat, WebRTC screen sharing, OBS push
+- **Interaction & streaming**: comments, voice chat (UDP / TCP picked automatically, no manual switch), WebRTC screen sharing, OBS push
 - **Listen together**: NetEase Cloud Music × Bilibili; playlists auto-filled with recommendations, one-click favorites into both folders, MV lyrics page background
 - **Personalization**: Material You dynamic theme, custom theme colors and backgrounds, glassmorphism, independent danmaku and subtitle font sizes
 - **Operations**: one-click auto update; Docker / single-file builds ready out of the box
@@ -157,11 +161,15 @@ Supported commands: `start` / `backend` / `stop` / `restart` / `status` / `logs`
 | -------- | ------------------------------------------------------------ |
 | 3333/tcp | Unified entry: HTTP/HTTPS API, WebSocket, frontend pages, `/live` FLV proxy |
 | 3333/udp | LiveKit voice chat                                             |
-| 3334     | OBS push                                                     |
-| 3337/tcp | Voice ICE/TCP fallback (on by default; used automatically when UDP is blocked) |
+| 3334/tcp | OBS push                                                     |
+| 3335/tcp | HTTP-FLV pull (internal, proxied through `/live` on 3333 — do not expose)        |
+| 3336/tcp | LiveKit HTTP/signaling (internal, reverse-proxied through `/rtc` on 3333 — do not expose)    |
+| 3337/tcp | Voice ICE/TCP direct (on by default; the browser switches to it automatically when UDP is blocked) |
 | 3338/tcp | Voice TURN/TLS relay (optional, enabled by the three certificate variables)      |
 
 ## Docker Deployment
+
+> **Docker users on v4.3.6 or lower**: do **not** upgrade through the admin panel's "One-click Update" (Settings → Basic). Redeploy with the latest docker compose file instead.
 
 ```bash
 docker run -d \
@@ -171,6 +179,7 @@ docker run -d \
   -p 3333:3333/udp \
   -p 3334:3334 \
   -p 3337:3337 \
+  -p 3338:3338 \
   -v zviewer-data:/app/config \
   zerowyc0721/zviewer:latest
 ```
@@ -185,7 +194,7 @@ services:
       - "3333:3333"      # API + WebSocket + frontend + /live FLV proxy + /rtc voice signaling proxy
       - "3333:3333/udp"  # LiveKit WebRTC media transport
       - "3334:3334"      # RTMP push (OBS)
-      - "3337:3337"      # Voice ICE/TCP fallback (on by default)
+      - "3337:3337"      # Voice ICE/TCP direct (on by default)
       - "3338:3338"      # Voice TURN/TLS relay (optional, enabled with all three cert vars)
     volumes:
       - zviewer-data:/app/config
@@ -216,7 +225,7 @@ services:
 | `LIVEKIT_EXTERNAL`       | `1` uses an external LiveKit and skips the bundled one               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE advertised address; set the public IP manually for complex NAT or no outbound internet       | empty (automatic STUN)             |
 | `LIVEKIT_BIND`           | LiveKit HTTP/signaling listen address (affects 3336 only, not media ports) | empty (dual-stack, all addresses) |
-| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP fallback port (on by default; set `0` to disable)        | `3337`                  |
+| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP direct port (on by default; set `0` to disable the listener and keep UDP only) | `3337`                  |
 | `LIVEKIT_RTC_ADVERTISE_INTERNAL_IP` | Advertise both external and internal IP candidates (`advertise_internal_ip`); `false` disables | `true` |
 | `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION` | Skip the external IP self-ping check (enable when NAT blocks self-ping) | unset |
 | `LIVEKIT_TURN_TLS_PORT`  | TURN/TLS relay port (separate from 3337, both can run at once)       | `3338`                  |
@@ -226,11 +235,12 @@ services:
 
 ### Voice Transport
 
-- Two channels are open by default: `3333/udp` (low-latency direct) and `3337/tcp` (ICE/TCP fallback). ICE prefers UDP when it works and falls back to `3337/tcp` automatically when UDP is blocked by an ISP, corporate firewall, or proxy — no manual switch needed
-- There is no channel switch: the server publishes both UDP and ICE/TCP candidates and the browser's ICE picks automatically, so nothing needs toggling in the admin panel. To turn the 3337 listener off entirely (open only the UDP port), set `LIVEKIT_RTC_TCP_PORT=0`. The value must be an explicit 0 — leaving it unset/deleted makes LiveKit fall back to its default 7881, which is never port-mapped, so clients only get candidates that can never connect
+- No channel switch: the server publishes both `3333/udp` (low-latency direct) and `3337/tcp` (ICE/TCP direct) candidates and the browser's ICE picks automatically — UDP direct > TCP direct > TURN relay. When UDP is blocked by an ISP, corporate firewall or proxy, the browser switches to 3337 on its own; nothing needs toggling in the admin panel
+- To turn the 3337 listener off entirely (open only the UDP port), set `LIVEKIT_RTC_TCP_PORT=0`. The value must be an explicit 0 — leaving it unset/deleted makes LiveKit fall back to its default 7881, which is never port-mapped, so clients only get candidates that can never connect
 - Private and public networks both work: `advertise_internal_ip` is on by default, advertising the mapped external IP alongside the local interface IP. In bridge networking the local IP is the container's 172.x and is unreachable from LAN clients; for LAN direct connections use host networking (drop the compose `ports` section, add `network_mode: host`) and narrow the interfaces with `rtc.interfaces.includes: [eth0]` in `LIVEKIT_CONFIG`. Add `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION=true` when NAT blocks self-ping
 - Once all three `LIVEKIT_TURN_*` variables are set, a TURN/TLS relay is also opened on 3338/tcp (a CA-issued certificate is required; this penetrates proxies and multi-layer NAT best). 3337 and 3338 are two independent channels that can coexist, and the client picks automatically: UDP direct > TCP direct > TURN relay
 - When STUN discovery fails on a pure intranet or unusual NAT, set `LIVEKIT_NODE_IP` to the server's public IP
+- Troubleshooting: the voice panel shows "connecting media…" while the media path is down and gives a network hint after 10 seconds. Joining a room successfully but hearing nothing usually means media never connected (a proxy TUN or firewall is dropping UDP) — try turning the proxy / VPN off first
 
 **Direct connections from both LAN and WAN (host networking recommended)**
 

@@ -54,16 +54,20 @@
 ## 目录
 
 - [功能一览](#功能一览)
+- [ZViewerCLI](#zviewercli)
 - [安装与启动](#安装与启动)
+  - [Windows 桌面版（GUI）](#windows-桌面版gui)
+  - [单文件版（推荐）](#单文件版推荐)
   - [交互菜单](#交互菜单)
+  - [源码](#源码)
+  - [端口](#端口)
 - [Docker 部署](#docker-部署)
 - [部署配置](#部署配置)
+  - [环境变量](#环境变量)
+  - [语音传输](#语音传输)
+- [Windows 桌面控制台（可选）](#windows-桌面控制台可选)
 
 ---
-
-## Docker 用户升级提示（v4.3.6 以下必读）
-
-> **v4.3.6 以下版本使用 Docker 部署的用户**：请**不要**通过管理面板「基础设置 → 一键更新」升级，请按最新 docker compose 重新部署。
 
 ## 功能一览
 
@@ -72,7 +76,7 @@
 - **格式兼容**：MKV / AVI / TS / WMV、DTS / AC3 / EAC3 等浏览器不原生支持的格式
 - **播放模式**：CLI 本地代理（高画质、不耗服务器流量）、服务器 DASH 转发、MP4 直链（最高 720P），按需切换
 - **弹幕与字幕**：B 站官方 / DandanPlay / 本地 XML·JSON（可多轨）；SRT / ASS / SSA / VTT / SMI / SUB
-- **互动与推流**：评论、语音聊天、WebRTC 屏幕共享、OBS 推流
+- **互动与推流**：评论、语音聊天（UDP / TCP 通道自动择优，无需手动切换）、WebRTC 屏幕共享、OBS 推流
 - **一起听**：网易云音乐 × 哔哩哔哩，歌单自动补位推荐、双收藏夹一键收藏、MV 歌词页背景
 - **个性化**：Material You 动态主题、自定义主题色与背景、玻璃拟态、弹幕字幕字号独立调节
 - **运维**：一键自动更新，Docker / 单文件版开箱即用
@@ -155,11 +159,15 @@ npm start               # 启动
 | -------- | ------------------------------------------------------------ |
 | 3333/tcp | 统一入口：HTTP/HTTPS API、WebSocket、前端页面、`/live` FLV 代理 |
 | 3333/udp | LiveKit 语音聊天                                             |
-| 3334     | OBS 推流                                                     |
-| 3337/tcp | 语音 ICE/TCP 回退（默认开启，UDP 被拦时自动改走此端口）             |
+| 3334/tcp | OBS 推流                                                     |
+| 3335/tcp | HTTP-FLV 拉流（内部，经 3333 的 `/live` 代理，无需对外开放）        |
+| 3336/tcp | LiveKit HTTP/信令（内部，经 3333 的 `/rtc` 反代，无需对外开放）    |
+| 3337/tcp | 语音 ICE/TCP 直连（默认开启，UDP 被拦时浏览器自动改走此端口）      |
 | 3338/tcp | 语音 TURN/TLS 中继（可选，配齐证书三项即启用）                    |
 
 ## Docker 部署
+
+> **v4.3.6 以下版本使用 Docker 部署的用户**：请**不要**通过管理面板「基础设置 → 一键更新」升级，请按最新 docker compose 重新部署。
 
 ```bash
 docker run -d \
@@ -169,6 +177,7 @@ docker run -d \
   -p 3333:3333/udp \
   -p 3334:3334 \
   -p 3337:3337 \
+  -p 3338:3338 \
   -v zviewer-data:/app/config \
   zerowyc0721/zviewer:latest
 ```
@@ -183,7 +192,7 @@ services:
       - "3333:3333"      # API + WebSocket + 前端页面 + /live FLV 代理 + /rtc 语音信令反代
       - "3333:3333/udp"  # LiveKit WebRTC 媒体传输
       - "3334:3334"      # RTMP 推流（OBS）
-      - "3337:3337"      # 语音 ICE/TCP 回退（默认开启）
+      - "3337:3337"      # 语音 ICE/TCP 直连（默认开启，UDP 被拦时浏览器自动改走）
       - "3338:3338"      # 语音 TURN/TLS 中继（可选，配齐证书三项即启用）
     volumes:
       - zviewer-data:/app/config
@@ -214,7 +223,7 @@ services:
 | `LIVEKIT_EXTERNAL`       | `1` 时使用外置 LiveKit，跳过内嵌               | `0`                     |
 | `LIVEKIT_NODE_IP`        | ICE 广播地址；NAT 复杂或无出网环境可手动指定公网 IP       | 空（自动 STUN）             |
 | `LIVEKIT_BIND`           | LiveKit HTTP/信令监听地址（仅影响 3336，媒体端口不受影响） | 空（双栈全地址）              |
-| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 回退端口（默认开启；设 `0` 关闭回退）       | `3337`                  |
+| `LIVEKIT_RTC_TCP_PORT`   | ICE/TCP 直连端口（默认开启；设 `0` 关闭该监听，仅保留 UDP）       | `3337`                  |
 | `LIVEKIT_RTC_ADVERTISE_INTERNAL_IP` | 内外网双 IP 候选（`advertise_internal_ip`），`false` 关闭 | `true`         |
 | `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION` | 跳过外部 IP 自 ping 校验（NAT 不允许自 ping 时开启） | 未设置        |
 | `LIVEKIT_TURN_TLS_PORT`  | TURN/TLS 中继端口（与 3337 分开，可同时开启）       | `3338`                  |
@@ -224,11 +233,12 @@ services:
 
 ### 语音传输
 
-- 默认同时开启两条通道：`3333/udp`（低延迟直连）与 `3337/tcp`（ICE/TCP 回退）。UDP 可用时 ICE 优先走 UDP，被运营商/企业防火墙或代理拦截时自动回退 `3337/tcp`，无需手工切换
-- 通道不设开关：服务端同时发布 UDP 与 ICE/TCP 候选，浏览器 ICE 自动择优，无需在管理端切换。要彻底关闭 3337 监听（只想开放 UDP 端口）时设 `LIVEKIT_RTC_TCP_PORT=0`，实现上必须显式写 0——若把该变量留空或删除，LiveKit 会回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选
+- 通道不设开关：服务端同时发布 `3333/udp`（低延迟直连）与 `3337/tcp`（ICE/TCP 直连）两条候选，浏览器 ICE 自动择优——UDP 直连 > TCP 直连 > TURN 中继；UDP 被运营商 / 企业防火墙或代理拦截时自动改走 3337，管理端不提供也不需要切换
+- 想彻底关闭 3337 监听（只开放 UDP 端口）时设 `LIVEKIT_RTC_TCP_PORT=0`。必须显式写 0——留空或删除会让 LiveKit 回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选
 - 内外网双通：默认开启 `advertise_internal_ip`，同时广播映射后的外网 IP 与本地网卡 IP，内网与外网用户各自选中可达的那条。bridge 网络下本地 IP 是容器 172.x，对局域网客户端不可达；需要内网直连时改用 host 网络（去掉 compose 的 `ports` 段、加 `network_mode: host`），并用 `LIVEKIT_CONFIG` 的 `rtc.interfaces.includes: [eth0]` 限定网卡。NAT 不允许自 ping 时再加 `LIVEKIT_RTC_SKIP_EXTERNAL_IP_VALIDATION=true`
 - 配齐 `LIVEKIT_TURN_*` 三项时，还会在 3338/tcp 开启 TURN/TLS 中继（需正式证书，穿透代理/多层 NAT 能力最强）。3337 与 3338 是两条独立通道，可并存，客户端自动择优：UDP 直连 > TCP 直连 > TURN 中继
 - 纯内网 / 特殊 NAT 环境 STUN 探测失败时，用 `LIVEKIT_NODE_IP` 指定服务器公网 IP
+- 排障：语音面板在媒体通道未建立时显示「媒体连接中…」，超过 10 秒会给出网络提示。进房成功但没声音，通常是媒体通道没通（代理 TUN 或防火墙吞掉 UDP），可先关掉代理 / VPN 再试
 
 **内网与外网同时直连（推荐 host 网络）**
 
