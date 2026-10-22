@@ -192,6 +192,9 @@ func Validate(input map[string]any) (Config, error) {
 		}
 		*spec.dst = value
 	}
+	// LiveKit 信令端口固定为主项目的 HTTP_PORT（3336），面板只读展示、不再接受修改；
+	// 旧配置里存过其他值的，加载或保存时一并收回这个值。
+	target.LivekitPort = 3336
 	seen := map[int]bool{}
 	for _, spec := range ports {
 		if seen[*spec.dst] {
