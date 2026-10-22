@@ -733,6 +733,38 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .config-editor:focus { border-color: var(--accent); outline: none; }
 /* 组网对端地址：一行一个地址，不需要整份配置那么高 */
 .mesh-peers-editor { min-height: 84px; max-height: 160px; white-space: pre-wrap; }
+/* 官方共享节点快捷按钮：点击在 textarea 里加/删该行 */
+.mesh-peer-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 4px; }
+.preset-label { color: var(--text-tertiary); font-size: 12px; }
+.preset-chip {
+  height: 24px; padding: 0 10px;
+  border: 1px solid var(--control-stroke); border-bottom-color: var(--control-stroke-strong);
+  border-radius: var(--radius-pill);
+  background: var(--control-fill); color: var(--text-secondary); font-size: 12px;
+}
+.preset-chip:hover { background: var(--control-fill-hover); color: var(--text-primary); }
+.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-tint); color: var(--text-primary); }
+/* 在线设备：卡片网格，与上方两栏卡片留出与 form-layout 一致的间距 */
+.mesh-devices-panel { margin-top: 16px; }
+.mesh-device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.mesh-device {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; border: 1px solid var(--card-stroke); border-radius: var(--radius-card);
+  background: var(--layer-alt);
+}
+.mesh-device.is-self { border-color: var(--accent-tint-strong); }
+.mesh-device-icon {
+  flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: var(--radius-card); background: var(--accent-tint); color: var(--accent);
+}
+.mesh-device-icon svg { width: 16px; height: 16px; }
+.mesh-device-body { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.mesh-device-body strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.mesh-device-meta { color: var(--text-secondary); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.mesh-device-tag {
+  margin-left: 6px; padding: 1px 6px; border-radius: var(--radius-pill);
+  background: var(--accent-tint); color: var(--accent); font-size: 11px; font-weight: 400;
+}
 .frp-mode { margin-top: 4px; }
 .dns-example {
   margin: 12px 0; padding: 10px 12px;

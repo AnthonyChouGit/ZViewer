@@ -371,9 +371,23 @@
   }
   // EasyTier 虚拟组网：本机按 EasyTier 协议入网，外部设备用虚拟 IP 访问本机端口。
   // 免账号、免管理员（no_tun），所以面板只暴露网络名称、密钥、对端地址与监听端口。
+  // EasyTier 官方共享节点，与 controller/mesh_config.go 的 MeshPublicPeers 保持一致。
+  const MESH_OFFICIAL_PEERS = ['tcp://public.easytier.cn:11010', 'udp://public.easytier.cn:11010'];
+  // 官方节点快捷按钮：直接改 textarea 并同步草稿，不重绘，避免打断正在输入的内容。
+  function toggleMeshPeer(chip) {
+    const area = $('#mesh-peers');
+    if (!area) return;
+    const peer = chip.dataset.meshPeer;
+    const lines = area.value.split('\n').map(line => line.trim()).filter(Boolean);
+    const index = lines.indexOf(peer);
+    if (index >= 0) lines.splice(index, 1); else lines.push(peer);
+    area.value = lines.join('\n');
+    state.meshDraft = { ...(state.meshDraft || {}), peers: lines };
+    document.querySelectorAll('[data-mesh-peer]').forEach(item => item.setAttribute('aria-pressed', String(lines.includes(item.dataset.meshPeer))));
+  }
   function mesh() {
     const live = Boolean(state.live), meshLabels = { stopped: '未入网', starting: '入网中', running: '已入网', stopping: '正在退出', error: '异常' };
-    const saved = state.config?.mesh || { enabled: false, networkName: '', peers: [], listenPort: 11010 };
+    const saved = state.config?.mesh || { enabled: false, networkName: '', peers: MESH_OFFICIAL_PEERS, listenPort: 11010 };
     const m = state.server?.mesh || { state: 'stopped', available: true, peers: [], virtualIp: '', message: '' };
     const draft = state.meshDraft || {};
     const c = { ...saved, ...draft };
@@ -387,7 +401,15 @@
     const peers = m.peers || [];
     const status = live ? meshLabels[m.state] || '未入网' : '界面预览';
     const secretValue = state.meshSecretDraft || '';
-    const peerRows = peers.map(peer => `<div class="check-item">${icon(peer.self ? 'monitor' : 'server')}<div><strong>${esc(peer.hostname || peer.ipv4)}${peer.self ? '（本机）' : ''}</strong><br>${esc(peer.ipv4)} · ${peer.self ? '本机' : peer.direct ? '直连' : '中继'}${peer.self || peer.latency === '-' || !peer.latency ? '' : ` · ${esc(peer.latency)} ms`}${peer.tunnel && peer.tunnel !== '-' ? ` · ${esc(peer.tunnel)}` : ''}</div></div>`).join('');
+    const peerCard = peer => {
+      const meta = [peer.ipv4, peer.latency && peer.latency !== '-' ? `${peer.latency} ms` : ''].filter(Boolean).join(' · ');
+      const route = peer.self ? '' : peer.direct ? '直连' : '中继';
+      return `<article class="mesh-device${peer.self ? ' is-self' : ''}"><span class="mesh-device-icon">${icon(peer.self ? 'monitor' : 'server')}</span><div class="mesh-device-body"><strong>${esc(peer.hostname || peer.ipv4)}${peer.self ? '<span class="mesh-device-tag">本机</span>' : ''}</strong><span class="mesh-device-meta">${esc(meta)}</span></div>${route ? `<span class="pill ${peer.direct ? 'green' : ''}"><i></i>${route}</span>` : ''}</article>`;
+    };
+    const peerChips = MESH_OFFICIAL_PEERS.map(peer => {
+      const [scheme, host] = peer.split('://');
+      return `<button type="button" class="preset-chip" data-mesh-peer="${esc(peer)}" aria-pressed="${(c.peers || []).includes(peer)}">${esc(scheme)} · ${esc(host)}</button>`;
+    }).join('');
     const emptyPeers = `<div class="empty">还没有其他设备加入。把网络名称与密钥发给朋友，他们装 EasyTier 客户端加入后就会出现在这里。</div>`;
     return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
       `<div class="form-layout"><section class="panel">
@@ -395,7 +417,8 @@
         <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>监听端口</span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
         <label class="field"><span>网络密钥 <small>加密保存</small></span><input id="mesh-secret" type="password" value="${esc(secretValue)}" placeholder="${state.server?.meshSecretSaved ? '已保存，留空沿用' : '与本网络其他设备一致'}" autocomplete="off"></label>
         <label class="field"><span>对端地址 <small>一行一个，可留空</small></span><textarea id="mesh-peers" class="codebox config-editor mesh-peers-editor" spellcheck="false" autocomplete="off" placeholder="tcp://1.2.3.4:11010">${esc((c.peers || []).join('\n'))}</textarea></label>
-        <span class="field-note">填一台双方都能连到的节点地址（自建 VPS 或公共节点）。双方都在 NAT 后面时，必须至少有一台中转节点，否则彼此发现不了。</span>
+        <div class="mesh-peer-presets"><span class="preset-label">官方节点</span>${peerChips}</div>
+        <span class="field-note">默认填入 EasyTier 官方共享节点，可以删掉换成自建 VPS。双方都在 NAT 后面时，至少要有一台双方都能连到的中转节点。</span>
         <div class="validation" id="mesh-error" role="alert">${esc(m.message || '')}</div>
         <div class="form-actions">${button('保存','mesh-save','check')}${button('生成新的网络名与密钥','mesh-generate','refresh')}${button(running ? '停止组网' : '保存并入网','mesh-toggle','mesh','primary')}</div>
       </section>
@@ -406,7 +429,7 @@
         <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
         ${m.available === false ? notice('当前运行包不含组网组件，请使用完整安装包。') : notice('本机不需要管理员权限；朋友的设备装 EasyTier 客户端后按同样的网络名称与密钥加入。')}
       </aside></div>
-      <section class="panel"><div class="section-title"><h2>在线设备</h2><small>${peers.length ? `${peers.length} 台` : '等待加入'}</small></div><div>${peerRows || emptyPeers}</div></section>`;
+      <section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${peers.length ? 'green' : ''}"><i></i>${peers.length ? `${peers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
   }
   const connectLinks = {
     frpProvider: [      ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
@@ -637,6 +660,8 @@
   }
   $('#modal').addEventListener('close', () => { state.updateOpen = false; });
   document.addEventListener('click', event => {
+    const meshPeer = event.target.closest('[data-mesh-peer]');
+    if (meshPeer) { event.preventDefault(); toggleMeshPeer(meshPeer); return; }
     if (!event.target.closest('.tutorial')) closeTutorials();
     const tutorialToggle = event.target.closest('[data-tutorial-toggle]');
     if (tutorialToggle) {

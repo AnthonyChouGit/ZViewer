@@ -40,8 +40,17 @@ type MeshConfig struct {
 	InstanceID string `json:"instanceId"`
 }
 
+// MeshPublicPeers 是 EasyTier 官方共享节点。
+//
+// 同一台服务同时监听 TCP 与 UDP，两条都填可以在一种协议被网络拦截时自动换另一条
+// （官方文档里"提高可用性"的推荐写法）。与 app.js 的 MESH_OFFICIAL_PEERS 保持一致。
+var MeshPublicPeers = []string{
+	"tcp://public.easytier.cn:11010",
+	"udp://public.easytier.cn:11010",
+}
+
 func DefaultMeshConfig() MeshConfig {
-	return MeshConfig{ListenPort: MeshDefaultPort, Peers: []string{}}
+	return MeshConfig{ListenPort: MeshDefaultPort, Peers: append([]string{}, MeshPublicPeers...)}
 }
 
 var (
