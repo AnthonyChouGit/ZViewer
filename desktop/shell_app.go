@@ -364,12 +364,9 @@ func (a *App) openLocalPage(manager bool) error {
 		if _, err := a.ctrl.Start(); err != nil {
 			return err
 		}
-		snapshot = a.ctrl.Snapshot()
 	}
-	if snapshot.Active != nil && snapshot.Active.Https && !snapshot.Certificate.Trusted {
-		runtime.EventsEmit(a.ctx, "navigate", "cert")
-		return errors.New("HTTPS 已就绪，请先在证书页安装本机 CA 信任，再打开管理页面")
-	}
+	// 未安装本机信任也照常打开：自签证书在浏览器里只会提示一次不安全，
+	// 选择继续访问即可，不必把用户踢回证书页。
 	target := a.ctrl.WebURL()
 	if manager {
 		target = a.ctrl.ManagementURL()
