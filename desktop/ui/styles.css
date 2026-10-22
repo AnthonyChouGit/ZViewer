@@ -424,6 +424,7 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .text-button svg { width: 14px; height: 14px; }
 .text-button .icon-glyph { font-size: 12px; }
 .form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.live-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
 
 /* ---------- 表单控件 ---------- */
 .form-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }

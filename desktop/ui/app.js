@@ -312,8 +312,11 @@
     return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>现有 zviewer-cert.exe · localhost</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div><div class="meta-line"><span>浏览器信任</span><span>未安装</span></div></div><div class="check-item">${icon('check')}<div><strong>仅本机可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
   }
   function cert() {
-    const content = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">仅本机</span></div><p class="wizard-copy">为 localhost 签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong></div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong></div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong></div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
-    return heading('证书与域名', '签发 localhost 证书并安装信任。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
+    // 演示地址：与真实探测结果同样呈现，便于验收 IPv6 区块的排版。
+    const demoV6 = '2408:8207:2f1a:7c60::8a2e';
+    const v6Block = `<div class="panel-line"></div><div class="settings-subheading"><h3>本机 IPv6</h3></div><p class="wizard-copy">按本机 IPv6 地址签发证书，供 IPv6 直连访问。</p><div class="dns-example">https://[${demoV6}]:3333/admin</div><div class="check-item">${icon('globe')}<div><strong>1. 探测本机 IPv6</strong><br>${demoV6} · 演示地址</div></div><div class="check-item">${icon('lock')}<div><strong>2. 按该地址签发</strong><br>运行中的服务会重启，信任沿用本机 CA。</div></div>${notice('监听范围需设为「所有地址 · IPv4 + IPv6」，其他设备才能经 IPv6 访问。')}<div class="live-toolbar">${button('探测本机 IPv6', 'probe-ipv6', 'globe')}${button('按 IPv6 签发并启用 HTTPS', 'ipv6-cert', 'lock', 'primary')}</div>`;
+    const content = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">仅本机</span></div><p class="wizard-copy">为 localhost 签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong></div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装当前用户信任</strong></div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong></div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，不修改系统信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>${v6Block}`;
+    return heading('证书与域名', '签发本机或 IPv6 证书并安装信任。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
   function cli() {
     const live = Boolean(state.live), saved = state.config?.cli || { port: 9333, autoStart: false, user: '' };
@@ -511,7 +514,7 @@
     else if (name === 'open-manager') modal(`<h2>打开本机管理页面</h2><div class="dns-example">https://localhost:3333</div><p>服务尚未接入。正式版本会先确认服务与证书就绪，再打开默认浏览器。</p><div class="modal-actions">${button('查看本机 HTTPS', 'go-cert', 'shield')}${button('知道了', 'close-modal', '', 'primary')}</div>`);
     else if (name === 'go-cert') { $('#modal').close(); navigate('cert'); }
     else if (name === 'local-cert') localCertDemo();
-    else if (name === 'probe-ipv6') toast('仅桌面版可用');
+    else if (name === 'probe-ipv6' || name === 'ipv6-cert') toast('仅桌面版可用');
     else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('仅桌面版可用');
     else if (name === 'close-modal') $('#modal').close();
     else if (name === 'open-update') openUpdate();
