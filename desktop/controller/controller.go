@@ -932,7 +932,7 @@ func (c *Controller) StartFrp() (any, error) {
 			return nil, err
 		}
 		if token == "" {
-			return nil, errors.New("请填写并保存 FRP Token")
+			return nil, errors.New("请填写并保存 FRP 密钥")
 		}
 		c.mu.Lock()
 		c.redactions = append(c.redactions, token)

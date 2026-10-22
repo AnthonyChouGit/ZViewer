@@ -63,7 +63,7 @@ func (Dpapi) Encrypt(value string) (string, error) {
 		uintptr(unsafe.Pointer(&out)),
 	)
 	if result == 0 {
-		return "", errors.New("Windows 凭据保护不可用，Token 未保存： " + err.Error())
+		return "", errors.New("Windows 凭据保护不可用，密钥未保存： " + err.Error())
 	}
 	defer freeBlob(out)
 	return base64.StdEncoding.EncodeToString(out.bytes()), nil
@@ -72,7 +72,7 @@ func (Dpapi) Encrypt(value string) (string, error) {
 func (Dpapi) Decrypt(value string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
-		return "", errors.New("无法解密 FRP Token")
+		return "", errors.New("无法解密 FRP 密钥")
 	}
 	in := newBlob(raw)
 	var out dataBlob
@@ -83,7 +83,7 @@ func (Dpapi) Decrypt(value string) (string, error) {
 		uintptr(unsafe.Pointer(&out)),
 	)
 	if result == 0 {
-		return "", errors.New("无法解密 FRP Token")
+		return "", errors.New("无法解密 FRP 密钥")
 	}
 	defer freeBlob(out)
 	return string(out.bytes()), nil

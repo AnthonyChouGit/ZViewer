@@ -17,7 +17,7 @@ func (Dpapi) Encrypt(value string) (string, error) {
 func (Dpapi) Decrypt(value string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
-		return "", errors.New("无法解密 FRP Token")
+		return "", errors.New("无法解密 FRP 密钥")
 	}
 	return string(raw), nil
 }
