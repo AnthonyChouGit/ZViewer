@@ -23,7 +23,7 @@
 
 ## 高画质代理 · ZViewerCLI
 
-内置 [Zero-wyc/ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) 0.2.1，固定来源提交 `101659b01a3a9248cea8b32c7eb18b6f76d842f1`。CLI 从该提交源码使用固定 Go 1.26.9 工具链构建为 Windows amd64 程序，随包保留 MIT 许可证、来源记录和 SHA-256。集成版本附带本地来源保护补丁，限制配置和认证接口的跨来源访问；来源记录包含补丁信息。
+内置 [Zero-wyc/ZViewerCLI](https://github.com/Zero-wyc/ZViewerCLI) 0.2.1。打包时按优先级找 CLI：`desktop/zviewer-cli-windows-amd64.exe`（本地放置点，换版本直接丢这里，不进库）→ `frontend/public/zviewer-cli-windows-amd64.exe`（入库版，网页「下载 CLI」与单文件版也用它），两者同名、内容应一致，不一致时打包会提示。那份是发布版（UPX 压缩），不含桌面专属改动；需要在分发包里启用桌面嵌入式主题与本地配置接口来源保护（`desktop/patches/`）时，执行 `node scripts/prepare-cli.mjs --publish`，它会从固定提交 `101659b01a3a9248cea8b32c7eb18b6f76d842f1`（Go 1.26.9 工具链）重建并同步回 `frontend/public/`，同时生成 MIT 许可证、第三方声明与 `provenance.json`。
 
 1. 在侧栏进入“高画质代理”，查看只读的“后端地址 · 自动跟随本地服务”。网页账号为可选项，填写并保存与网页端一致的账号有助于识别代理归属；也可按需调整默认代理端口 `9333`。代理仅监听本机 `127.0.0.1`。
 2. 点击“启动代理”，右侧直接显示 CLI 自带的内置设置，自动填写后端地址。如已保存网页账号，也会一同带入；账号留空仍可配置。
@@ -65,12 +65,12 @@ npm --prefix desktop run preview   # http://127.0.0.1:17839
 生成可分发目录与 ZIP：
 
 ```powershell
-npm --prefix desktop run shell:dist -- --skip-cli   # 离线或已有 CLI 副本时，直接复用本机那份
-npm --prefix desktop run shell:dist                 # 首次会构建 CLI，耗时较长
+npm --prefix desktop run shell:dist -- --skip-cli   # public 缺 CLI 也不重建，直接报错（CI 用这条）
+npm --prefix desktop run shell:dist                 # public 缺 CLI 时自动从源码重建并同步回去
 npm --prefix desktop run package                    # 打包成 ZIP
 ```
 
-CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里找它）。缺少时 `shell:dist` 会直接报错，可用 `ZVIEWER_CLI_EXE=<路径>` 指定已有二进制；确实要打不含高画质代理的包时加 `--allow-missing-cli`，清单里 `cli` 记为 `null`。复用未校验副本时，`BUILD-MANIFEST.json` 会写 `verified: false` 与来源路径。
+CLI 固定落在 `runtime/zviewer-cli-windows-amd64.exe`（壳只从运行包里找它），来源优先 `desktop/zviewer-cli-windows-amd64.exe`，其次 `frontend/public/zviewer-cli-windows-amd64.exe`。两处都缺时 `shell:dist` 会先尝试从源码重建（`--skip-cli` 关闭此行为），仍缺失则直接报错；也可用 `ZVIEWER_CLI_EXE=<路径>` 指定已有二进制。确实要打不含高画质代理的包时加 `--allow-missing-cli`，清单里 `cli` 记为 `null`。
 
 `.github/workflows/build.yml` 的 `build-gui` job 跑的就是这条链路：取 Windows 运行包 → `npm run shell:dist --skip-cli` → `npm run package`，产物作为 `zviewer-gui-windows-x64` artifact 与单文件版一起进 Release。
 

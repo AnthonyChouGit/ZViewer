@@ -229,8 +229,8 @@ jobs:
 
       # shell:dist 依次：编译 ProcessHost（csc）→ 下载并校验 FRP（prepare-tools.ps1）
       # → go build 壳 → 复制 runtime、许可证 → 写 BUILD-MANIFEST.json
-      # --skip-cli：ZViewerCLI 在独立仓库，CI 不重新构建；直接复用运行包网页里那份
-      # （frontend/public 随仓库入库），并复制到 runtime/ 供壳拉起高画质代理。
+      # CLI 直接取 frontend/public 那份（与网页下载、单文件版共用同一二进制）；
+      # --skip-cli 表示它缺失时也不去 ZViewerCLI 源码重建（CI 无 Go 工具链）。
       - name: Build portable GUI
         run: npm --prefix desktop run shell:dist -- --skip-cli
 

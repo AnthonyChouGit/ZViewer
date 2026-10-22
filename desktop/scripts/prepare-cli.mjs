@@ -95,3 +95,12 @@ for(let i=0;i<licenses.length;i++) {
 fs.writeFileSync(path.join(directory,'THIRD-PARTY-NOTICES.txt'),notices.join('\n\n'));
 fs.writeFileSync(path.join(directory,'provenance.json'),JSON.stringify({repository,commit,version:'0.2.1',toolchain,platform:'windows-amd64',source:'Built from pinned upstream source with local settings security and optional desktop embedded theme patches',patch:patchInfo(),files:[{file:executable,sha256:binarySha256},{file:'LICENSE',sha256:hash(fs.readFileSync(license))},{file:'THIRD-PARTY-NOTICES.txt',sha256:hash(fs.readFileSync(path.join(directory,'THIRD-PARTY-NOTICES.txt')))}],sourceBlobs:sources},null,2)+'\n');
 console.log('Source-built ZViewerCLI v0.2.1 verified ('+commit+', '+toolchain+')');
+// --publish：把受管构建同步到 frontend/public，作为全项目唯一事实源（网页下载、
+// 单文件运行包与桌面端 runtime/ 都取这一份）。不同步的话桌面包用的是网页里那份
+// 官方 release 二进制，不含桌面嵌入式主题与本地配置接口的来源保护。
+if(process.argv.includes('--publish')) {
+  const publicCli = path.join(path.dirname(desktop),'frontend','public',executable);
+  fs.mkdirSync(path.dirname(publicCli),{recursive:true});
+  fs.copyFileSync(target,publicCli);
+  console.log('已同步到 frontend/public/'+executable+'（请提交该文件）');
+}
