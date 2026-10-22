@@ -808,7 +808,12 @@ func (c *Controller) EnableHTTPS(domain, ip string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := c.store.Save(map[string]any{"https": true, "domain": domain, "lanIp": ip}, nil); err != nil {
+		// IPv6 只进证书 SAN，不覆盖局域网 IPv4 字段（hosts 导出与 FRP 提示都按 IPv4 展示）。
+		patch := map[string]any{"https": true, "domain": domain}
+		if !strings.Contains(ip, ":") {
+			patch["lanIp"] = ip
+		}
+		if _, err := c.store.Save(patch, nil); err != nil {
 			return nil, err
 		}
 		if hasBackend {

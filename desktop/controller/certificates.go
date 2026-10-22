@@ -321,7 +321,11 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	}
 	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
 	if ip != "" && ip != "127.0.0.1" && ip != "::1" {
-		ips = append(ips, net.ParseIP(ip))
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
+			return CertInfo{}, fmt.Errorf("不是合法的 IP 地址：%s", ip)
+		}
+		ips = append(ips, parsed)
 	}
 	template := &x509.Certificate{
 		SerialNumber:          serial,
@@ -365,7 +369,11 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	if err := Atomic(paths.Cert, certText); err != nil {
 		return CertInfo{}, err
 	}
-	c.log(fmt.Sprintf("已签发 %s 的本地 HTTPS 证书，有效期 365 天", domain), "cert", "INFO")
+	target := domain
+	if ip != "" {
+		target = domain + " / " + ip
+	}
+	c.log(fmt.Sprintf("已签发 %s 的本地 HTTPS 证书，有效期 365 天", target), "cert", "INFO")
 	return c.Inspect(), nil
 }
 

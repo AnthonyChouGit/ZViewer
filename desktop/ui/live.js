@@ -39,8 +39,12 @@
   }
   function cert() {
     const s = state.server.certificate, c = state.config;
-    return heading('证书与域名', '签发 localhost 证书并安装信任。', tutorial('cert')) +
-      `<div class="form-layout"><section class="panel"><div class="panel-heading"><h2>本机 localhost</h2>${pill(s.valid ? 'running' : 'stopped')}</div><p class="wizard-copy">为 localhost 签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:${esc(c.port)}/admin</div>${notice('证书由本机 CA 签发，私钥保存在当前用户目录。')}<div class="check-item">${icon('check')}<div><strong>1. 签发证书并启用 HTTPS</strong><br>运行中的服务会重启。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装本机信任</strong><br>只装到当前用户，可撤销。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong></div></div><div class="live-toolbar">${button('签发并启用 HTTPS','local-cert','lock','primary')}${s.valid && !s.trusted ? button('安装本机信任','trust-cert','shield') : ''}${s.trusted ? button('打开管理页面','open-manager','external') : ''}</div></section><aside class="panel"><div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3>${esc(s.exists ? c.domain : 'localhost')}</h3><p>${s.valid ? `有效期至 ${esc(s.validTo)}` : '尚未签发证书'}<br>${s.trusted ? '当前用户已信任' : '当前用户尚未安装信任'}</p></div><div class="meta-list"><div class="meta-line"><span>监听端口</span><span>${esc(c.port)}</span></div><div class="meta-line"><span>HTTPS 配置</span><span>${c.https ? '已启用' : '未启用'}</span></div><div class="meta-line"><span>证书 SAN</span><span>${esc(s.san || 'localhost / 127.0.0.1 / ::1')}</span></div></div>${s.fingerprint ? `<p class="certificate-fingerprint">CA SHA-256<br>${esc(s.fingerprint)}</p>` : ''}<div class="live-toolbar">${s.valid ? button('导出公开 CA','export-ca','download') : ''}${s.trusted ? button('撤销本机信任','untrust-cert','shield') : ''}</div></aside></div>`;
+    const v6 = state.ipv6;
+    const v6Url = v6?.ok ? `https://[${v6.address}]:${esc(c.port)}/admin` : '';
+    const v6State = v6 ? (v6.ok ? v6.address : v6.reason || '未探测到公网 IPv6') : '尚未探测';
+    const v6Block = `<div class="panel-line"></div><div class="settings-subheading"><h3>本机 IPv6</h3></div><p class="wizard-copy">按本机 IPv6 地址签发证书，供 IPv6 直连访问。</p><div class="dns-example">${v6Url || '尚未探测到 IPv6'}</div><div class="check-item">${icon('globe')}<div><strong>1. 探测本机 IPv6</strong><br>${esc(v6State)}</div></div><div class="check-item">${icon('lock')}<div><strong>2. 按该地址签发</strong><br>运行中的服务会重启，信任沿用本机 CA。</div></div>${c.bindHost === '::' ? '' : notice('监听范围是「' + (c.bindHost === '0.0.0.0' ? '局域网 IPv4' : '仅本机') + '」，其他设备无法经 IPv6 访问；需在设置里改为「IPv4 / IPv6 · 双栈」。')}<div class="live-toolbar">${button(v6?.ok ? '重新探测 IPv6' : '探测本机 IPv6', 'probe-ipv6', 'globe')}${v6?.ok ? button('按 IPv6 签发并启用 HTTPS', 'ipv6-cert', 'lock', 'primary') : ''}</div>`;
+    return heading('证书与域名', '签发本机或 IPv6 证书并安装信任。', tutorial('cert')) +
+      `<div class="form-layout"><section class="panel"><div class="panel-heading"><h2>本机 localhost</h2>${pill(s.valid ? 'running' : 'stopped')}</div><p class="wizard-copy">为 localhost 签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:${esc(c.port)}/admin</div>${notice('证书由本机 CA 签发，私钥保存在当前用户目录。')}<div class="check-item">${icon('check')}<div><strong>1. 签发证书并启用 HTTPS</strong><br>运行中的服务会重启。</div></div><div class="check-item">${icon('shield')}<div><strong>2. 安装本机信任</strong><br>只装到当前用户，可撤销。</div></div><div class="check-item">${icon('external')}<div><strong>3. 打开管理页面</strong></div></div><div class="live-toolbar">${button('签发并启用 HTTPS','local-cert','lock','primary')}${s.valid && !s.trusted ? button('安装本机信任','trust-cert','shield') : ''}${s.trusted ? button('打开管理页面','open-manager','external') : ''}</div>${v6Block}</section><aside class="panel"><div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3>${esc(s.exists ? c.domain : 'localhost')}</h3><p>${s.valid ? `有效期至 ${esc(s.validTo)}` : '尚未签发证书'}<br>${s.trusted ? '当前用户已信任' : '当前用户尚未安装信任'}</p></div><div class="meta-list"><div class="meta-line"><span>监听端口</span><span>${esc(c.port)}</span></div><div class="meta-line"><span>HTTPS 配置</span><span>${c.https ? '已启用' : '未启用'}</span></div><div class="meta-line"><span>证书 SAN</span><span>${esc(s.san || 'localhost / 127.0.0.1 / ::1')}</span></div></div>${s.fingerprint ? `<p class="certificate-fingerprint">CA SHA-256<br>${esc(s.fingerprint)}</p>` : ''}<div class="live-toolbar">${s.valid ? button('导出公开 CA','export-ca','download') : ''}${s.trusted ? button('撤销本机信任','untrust-cert','shield') : ''}</div></aside></div>`;
   }
   function serviceValues() {
     return {
@@ -109,7 +113,7 @@
     if (initial) state.frp = structuredClone(snapshot.config.frp);
     if (initial || state.page === 'overview' || state.page === 'cli' && (embedChanged || cliBefore !== cliViewKey(snapshot)) || state.page === 'connect' && (tunnelBefore !== tunnelKey(snapshot) || entryBefore !== entryKey(snapshot))) ui.render();
     else if (state.page === 'logs' && !state.paused) ui.refreshLogs();
-    else if (state.page === 'connect') ensureIPv6();
+    else if (state.page === 'connect' || state.page === 'cert') ensureIPv6();
     ui.preview.syncUpdate(snapshot);
     ui.syncWorkspace?.();
     $('#footer-status').textContent = snapshot.backend === 'running' ? `本地服务运行中 · ${current().port}` : `本地服务 · ${labels[snapshot.backend]}`;
@@ -117,12 +121,13 @@
   function tunnelKey(snapshot) { const t = snapshot?.tunnel; return t ? `${t.available}|${t.state}|${t.url}` : ''; }
   // 外部访问地址由主服务端口与 HTTPS 决定，两者变化都要重绘入口卡片。
   function entryKey(snapshot) { const c = snapshot?.active || snapshot?.config || {}; return `${c.port}|${c.https}`; }
-  // 首次进入“连接方式”页时探测公网 IPv6；结果缓存在 state.ipv6，手动刷新时重新探测。
+  // 首次进入“连接方式”或“证书与域名”页时探测公网 IPv6；结果缓存在 state.ipv6，手动刷新时重新探测。
   function ensureIPv6() {
-    if (state.ipv6 !== null || ipv6Pending || ipv6Tried || state.page !== 'connect') return;
+    if (state.ipv6 !== null || ipv6Pending || ipv6Tried) return;
+    if (state.page !== 'connect' && state.page !== 'cert') return;
     ipv6Pending = true; ipv6Tried = true;
     window.zviewerDesktop.command('probe-ipv6', {})
-      .then(report => { state.ipv6 = report; if (state.page === 'connect') ui.render(); })
+      .then(report => { state.ipv6 = report; if (state.page === 'connect' || state.page === 'cert') ui.render(); })
       .catch(error => ui.toast(error.message.replace(/^.*Error: /, '')))
       .finally(() => { ipv6Pending = false; });
   }
@@ -154,6 +159,15 @@
     else if (action === 'cli-save') { await command('cli-save', cliValues()); state.cliDraft = null; ui.render(); ui.toast('代理配置已保存，内置设置会自动带入后端地址'); }
     else if (action === 'local-cert') {
       await command('https',{domain:'localhost',ip:''}); ui.render(); ui.toast('HTTPS 已就绪，请安装本机信任后打开管理页面');
+    } else if (action === 'ipv6-cert') {
+      // 证书 SAN 里追加本机 IPv6，签发后可直接用 https://[IPv6]:端口 访问。
+      let report = state.ipv6;
+      if (!report?.ok) report = await window.zviewerDesktop.command('probe-ipv6', {});
+      state.ipv6 = report;
+      if (!report?.ok || !report.address) { ui.render(); ui.toast(report?.reason || '没有探测到公网 IPv6'); return; }
+      await command('https',{domain:'localhost',ip:report.address});
+      ui.render();
+      ui.toast(`已按 IPv6 ${report.address} 签发证书` + (state.config.bindHost === '::' ? '' : '；监听范围改为「IPv4 / IPv6 · 双栈」后才能从其他设备访问'));
     } else if (action === 'trust-cert' || action === 'untrust-cert') { const result = await command(action === 'trust-cert' ? 'trust' : 'untrust'); ui.render(); ui.toast(result?.canceled ? '已取消安装信任' : result?.trusted ? '本机信任已安装，可打开管理页面' : '本机信任已撤销'); }
     else if (action === 'save-service') {
       const config = serviceValues();
@@ -174,7 +188,7 @@
     else if (action === 'export-ca') await command('export',{kind:'ca'});
     else if (action === 'open-data') await command('open-data');
   }
-  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
+  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','ipv6-cert','trust-cert','untrust-cert','save-service','save-frp','toggle-frp','export-frp','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
   function cliValues() { return { port: $('#cli-port').value, autoStart: $('#cli-auto-start').getAttribute('aria-checked') === 'true', user: $('#cli-user').value.trim() }; }
   document.addEventListener('click',event => {
     if (!state.live) return;
