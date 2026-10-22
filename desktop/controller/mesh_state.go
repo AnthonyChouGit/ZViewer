@@ -49,8 +49,10 @@ type MeshStatus struct {
 	Message  string   `json:"message"`
 }
 
-// lanIPv4s 列出本机可用于接入的局域网 IPv4（跳过回环与 169.254 链路本地地址）。
-func lanIPv4s() []string {
+// meshLanIPv4s 列出本机可用于接入的局域网 IPv4（跳过回环与 169.254 链路本地地址）。
+// 这里直接产出能拼进 tcp:// 的字符串，不复用 net.go 的同名探测：
+// 组网要的是候选对端地址，返回类型不必跟随证书模块调整。
+func meshLanIPv4s() []string {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil
@@ -198,7 +200,7 @@ func meshInvite(cfg MeshConfig, secret string, status MeshStatus, webPort int) s
 		lines = append(lines, "观看地址：http://"+ip+":"+strconv.Itoa(webPort)+"/")
 	} else {
 		// 还没分配虚拟 IP 时，对方先连到本机的监听地址，再由 DHCP 分配地址。
-		for _, address := range lanIPv4s() {
+		for _, address := range meshLanIPv4s() {
 			lines = append(lines, "接入地址："+"tcp://"+address+":"+strconv.Itoa(cfg.ListenPort))
 		}
 	}

@@ -112,7 +112,7 @@ func (m *MeshManager) lanPeersLocked() []string {
 		return m.lanPeers
 	}
 	list := []string{}
-	for _, address := range lanIPv4s() {
+	for _, address := range meshLanIPv4s() {
 		list = append(list, "tcp://"+address+":"+strconv.Itoa(m.cfg.ListenPort))
 	}
 	m.lanPeers, m.lanPort = list, m.cfg.ListenPort
