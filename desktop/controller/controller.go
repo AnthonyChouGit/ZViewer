@@ -916,36 +916,75 @@ func (c *Controller) StartFrp() (any, error) {
 		if active == nil {
 			return nil, errors.New("请先启动本地服务")
 		}
-		if active.Port != config.Port || active.RtmpPort != config.RtmpPort ||
+		// 自定义配置里可能映射任意本机端口，无法与运行中的服务端口比对，跳过这项检查。
+		custom := config.Frp.Mode == "config"
+		if !custom && (active.Port != config.Port || active.RtmpPort != config.RtmpPort ||
 			active.LivekitPort != config.LivekitPort || active.LivekitTcpPort != config.LivekitTcpPort ||
-			active.Frp.AdvertiseIP != config.Frp.AdvertiseIP {
+			active.Frp.AdvertiseIP != config.Frp.AdvertiseIP) {
 			return nil, errors.New("服务端口或语音公布地址已修改，请先重启本地服务再连接 FRP")
 		}
-		if config.Frp.Host == "" {
+		if !custom && config.Frp.Host == "" {
 			return nil, errors.New("请先保存 VPS 地址")
 		}
 		if !fileExists(c.frpc) {
 			return nil, errors.New("未找到 frpc.exe")
 		}
+		file := filepath.Join(c.dir, "frp", "frpc.toml")
+		content := ""
+		expected := 0
+		if custom {
+			file = c.FrpCustomPath()
+			raw, readErr := os.ReadFile(file)
+			if readErr != nil {
+				return nil, errors.New("请先粘贴或导入 frpc 配置文件")
+			}
+			content = string(raw)
+			if strings.TrimSpace(content) == "" {
+				return nil, errors.New("frpc 配置文件内容为空，请粘贴或导入后再连接")
+			}
+			if len(content) > MaxFrpConfigBytes {
+				return nil, errors.New("配置文件不能超过 256 KB")
+			}
+			expected = countFrpProxies(content, c.FrpConfigFormat())
+			if expected < 1 {
+				expected = 1
+			}
+		}
 		token, err := c.store.Token()
 		if err != nil {
 			return nil, err
 		}
-		if token == "" {
+		// 表单模式固定用环境变量注入密钥；自定义配置只有在引用占位符时才必须填。
+		if token == "" && (custom && strings.Contains(content, "FRP_TOKEN") || !custom) {
 			return nil, errors.New("请填写并保存 FRP 密钥")
 		}
-		c.mu.Lock()
-		c.redactions = append(c.redactions, token)
-		c.mu.Unlock()
+		if token != "" {
+			c.mu.Lock()
+			c.redactions = append(c.redactions, token)
+			c.mu.Unlock()
+		}
 		if err := c.checkFrpVersion(); err != nil {
 			return nil, err
 		}
-		file := filepath.Join(c.dir, "frp", "frpc.toml")
-		if err := Atomic(file, c.FrpConfig(false)); err != nil {
-			return nil, err
+		if !custom {
+			if err := Atomic(file, c.FrpConfig(false)); err != nil {
+				return nil, err
+			}
+			expected = 1
+			if config.Frp.Voice {
+				expected++
+			}
+			if config.Frp.Rtmp {
+				expected++
+			}
+			if config.Frp.Tcp {
+				expected++
+			}
 		}
 		env := append([]string(nil), os.Environ()...)
-		env = append(env, "FRP_TOKEN="+token)
+		if token != "" {
+			env = append(env, "FRP_TOKEN="+token)
+		}
 		verify := exec.Command(c.frpc, "verify", "-c", file)
 		verify.Env = env
 		hideWindow(verify)
@@ -956,16 +995,6 @@ func (c *Controller) StartFrp() (any, error) {
 		c.mu.Lock()
 		c.frpRegistered = map[string]bool{}
 		c.mu.Unlock()
-		expected := 1
-		if config.Frp.Voice {
-			expected++
-		}
-		if config.Frp.Rtmp {
-			expected++
-		}
-		if config.Frp.Tcp {
-			expected++
-		}
 		proc, err := startProcess("", c.frpc, []string{"-c", file}, env, filepath.Dir(file), func(line string) {
 			c.log(line, "frp", classifyLevel(line))
 			c.handleFrpLine(line, expected)
@@ -999,12 +1028,18 @@ func (c *Controller) StartFrp() (any, error) {
 			c.log(fmt.Sprintf("FRP 已退出（%d）", code), "frp", level)
 			c.emit()
 		}()
-		c.log("FRP 配置校验通过，正在连接自建 VPS", "frp", "INFO")
+		if custom {
+			c.log("FRP 配置校验通过，正在按自定义配置连接", "frp", "INFO")
+		} else {
+			c.log("FRP 配置校验通过，正在连接自建 VPS", "frp", "INFO")
+		}
 		return c.Snapshot(), nil
 	})
 }
 
-var frpSuccess = regexp.MustCompile(`\[(zviewer-[\w-]+)\].*start proxy success`)
+// 代理名不一定带 zviewer- 前缀（自定义配置来自服务商），只认紧贴
+// “start proxy success”的那个方括号，前面的日志级别标记不会被误匹配。
+var frpSuccess = regexp.MustCompile(`\[([^\[\]]+)\]\s+start proxy success`)
 
 func (c *Controller) handleFrpLine(line string, expected int) {
 	if match := frpSuccess.FindStringSubmatch(line); match != nil {
@@ -1016,7 +1051,7 @@ func (c *Controller) handleFrpLine(line string, expected int) {
 		}
 		c.mu.Unlock()
 		if size >= expected {
-			c.log("FRP 代理已注册；公网网页和语音仍需外网设备验收", "frp", "INFO")
+			c.log("FRP 代理已注册；外网访问仍需实际验收", "frp", "INFO")
 		}
 	}
 	lower := strings.ToLower(line)
@@ -1130,6 +1165,15 @@ func (c *Controller) Export(kind string) (string, []byte, error) {
 	config := c.store.Value
 	switch kind {
 	case "frpc":
+		// 自定义配置导出的就是用户手上的那份文件，不做任何重写。
+		if config.Frp.Mode == "config" {
+			path := c.FrpCustomPath()
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return "", nil, errors.New("尚未保存 FRP 配置文件")
+			}
+			return filepath.Base(path), raw, nil
+		}
 		return "frpc.toml", []byte(c.FrpConfig(false)), nil
 	case "frps":
 		return "frps.toml", []byte(c.FrpConfig(true)), nil

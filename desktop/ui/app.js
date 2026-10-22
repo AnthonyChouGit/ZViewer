@@ -614,12 +614,12 @@
   });
   document.addEventListener('input', event => {
     const target = event.target;
-    if (target.matches('[data-frp-field]')) { state.frp[target.dataset.frpField] = target.value; $('#frp-code').textContent = frpConfig(state.frpTab === 'server'); $('#frp-error').textContent = ''; }
+    if (target.matches('[data-frp-field]')) { state.frp[target.dataset.frpField] = target.value; const code = $('#frp-code'); if (code) code.textContent = frpConfig(state.frpTab === 'server'); const error = $('#frp-error'); if (error) error.textContent = ''; }
     if (target.id === 'log-search') { state.logSearch = target.value; if (!state.paused) refreshLogs(); }
   });
   document.addEventListener('change', event => {
     const target = event.target;
-    if (target.matches('[data-frp-check]')) { state.frp[target.dataset.frpCheck] = target.checked; $('#frp-code').textContent = frpConfig(state.frpTab === 'server'); }
+    if (target.matches('[data-frp-check]')) { state.frp[target.dataset.frpCheck] = target.checked; const code = $('#frp-code'); if (code) code.textContent = frpConfig(state.frpTab === 'server'); }
     if (target.id === 'log-source') { state.logSource = target.value; if (!state.paused) refreshLogs(); }
     if (target.id === 'log-level') { state.logLevel = target.value; if (!state.paused) refreshLogs(); }
     if (target.id === 'update-proxy-url') applyProxyURL(target);

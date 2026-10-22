@@ -57,6 +57,11 @@ type FrpConfig struct {
 	VoicePort   int    `json:"voicePort"`
 	RtmpPort    int    `json:"rtmpPort"`
 	TcpPort     int    `json:"tcpPort"`
+	// Mode 选择配置来源：form 由表单生成 frpc 配置，config 直接运行用户
+	// 粘贴或导入的整份配置文件。
+	Mode string `json:"mode"`
+	// Format 是自定义配置文件的格式，frpc 按扩展名识别。
+	Format string `json:"format"`
 }
 
 func DefaultConfig() Config {
@@ -70,7 +75,7 @@ func DefaultConfig() Config {
 		Domain: "localhost", LanIP: "",
 		Cli: CliConfig{Port: 9333, AutoStart: false, User: ""},
 		Frp: FrpConfig{Host: "", Port: 7000, AdvertiseIP: "", Voice: true, Rtmp: true, Tcp: false,
-			WebPort: 3333, VoicePort: 3333, RtmpPort: 3334, TcpPort: 3337},
+			WebPort: 3333, VoicePort: 3333, RtmpPort: 3334, TcpPort: 3337, Mode: "form", Format: "toml"},
 	}
 }
 
@@ -350,6 +355,28 @@ func Validate(input map[string]any) (Config, error) {
 	}
 	if len(uniqueInts(tcpPorts)) != len(tcpPorts) {
 		return target, errors.New("FRP 同一协议的远端端口不能重复")
+	}
+
+	// 自定义配置模式下，这些表单字段只作为“按图形配置填充”的素材，仍照常校验。
+	frp.Mode = "form"
+	if raw, exists := patch["mode"]; exists {
+		text, isText := asString(raw)
+		if !isText || (text != "form" && text != "config") {
+			return target, errors.New("FRP 配置方式无效")
+		}
+		frp.Mode = text
+	}
+	frp.Format = "toml"
+	if raw, exists := patch["format"]; exists {
+		text, isText := asString(raw)
+		if !isText {
+			return target, errors.New("FRP 配置文件格式无效")
+		}
+		normalized, valid := normalizeFrpFormat(text)
+		if !valid {
+			return target, errors.New("FRP 配置文件格式无效")
+		}
+		frp.Format = normalized
 	}
 	target.Frp = frp
 	return target, nil

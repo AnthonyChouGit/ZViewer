@@ -286,6 +286,21 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		}
 		a.emitUpdate()
 		return true, nil
+	case "frp-config":
+		return a.ctrl.FrpConfigFile()
+	case "frp-config-save":
+		var token *string
+		if text := payloadString(payload, "token"); text != "" {
+			token = &text
+		}
+		saved, err := a.ctrl.SaveFrpConfigFile(payloadString(payload, "content"), payloadString(payload, "format"), token)
+		if err != nil {
+			return nil, err
+		}
+		a.emitUpdate()
+		return saved, nil
+	case "frp-config-import":
+		return a.importFrpConfig()
 	case "probe-ipv6":
 		return a.ctrl.ProbeIPv6(true), nil
 	case "tunnel-start":
@@ -394,6 +409,42 @@ func (a *App) exportFile(kind string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// importFrpConfig 让用户挑一个现成的 frpc 配置文件，读入后直接成为当前配置。
+// 只读取与保存，不在这里启动 frpc：界面还需要让用户确认内容与密钥。
+func (a *App) importFrpConfig() (any, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "导入 frpc 配置文件",
+		DefaultDirectory: downloadsDir(),
+		Filters: []runtime.FileFilter{
+			{DisplayName: "frpc 配置（TOML / YAML / JSON）", Pattern: "*.toml;*.yaml;*.yml;*.json"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return map[string]any{"canceled": true}, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取配置文件：%w", err)
+	}
+	if info.Size() > controller.MaxFrpConfigBytes {
+		return nil, errors.New("配置文件不能超过 256 KB")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取配置文件：%w", err)
+	}
+	saved, err := a.ctrl.SaveFrpConfigFile(string(raw), filepath.Ext(path), nil)
+	if err != nil {
+		return nil, err
+	}
+	saved["name"] = filepath.Base(path)
+	a.emitUpdate()
+	return saved, nil
 }
 
 func (a *App) openDataDir() (bool, error) {

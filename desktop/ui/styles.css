@@ -681,6 +681,16 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   margin-top: 8px; color: var(--text-tertiary); font-size: 11px;
 }
+.code-links { display: inline-flex; align-items: center; gap: 8px; }
+/* FRP 自定义配置：直接编辑整份 frpc 配置，保留缩进与长行滚动 */
+.config-editor {
+  display: block; width: 100%; min-height: 300px; max-height: 54vh;
+  margin: 8px 0 0; resize: vertical; tab-size: 2;
+  font-family: var(--font-mono); font-size: 12px; line-height: 19px;
+  white-space: pre; overflow: auto;
+}
+.config-editor:focus { border-color: var(--accent); outline: none; }
+.frp-mode { margin-top: 4px; }
 .dns-example {
   margin: 12px 0; padding: 10px 12px;
   border: 1px solid var(--control-stroke); border-radius: var(--radius-control);
