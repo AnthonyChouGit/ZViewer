@@ -4,6 +4,7 @@ package controller
 // 本机 CA + 域名/内网 IP 服务端证书，全部用标准库生成，不再依赖 @peculiar/x509。
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -366,6 +367,23 @@ func (c *Certificates) Ensure(domain, ip string) (CertInfo, error) {
 	}
 	c.log(fmt.Sprintf("已签发 %s 的本地 HTTPS 证书，有效期 365 天", domain), "cert", "INFO")
 	return c.Inspect(), nil
+}
+
+// Trusted 检查本机 CA 是否已在当前用户的受信任根证书存储里。
+//
+// 结论取自系统证书存储，而不是内存标记：GUI 重启后仍能正确显示状态，
+// 用户在系统里手动删除信任也能反映出来。
+func (c *Certificates) Trusted() bool {
+	info := c.Inspect()
+	if !info.Valid || !info.CA || strings.TrimSpace(info.Thumbprint) == "" {
+		return false
+	}
+	// 启动路径上会调用一次，加超时避免 certutil 异常时卡住界面。
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "certutil.exe", "-user", "-store", "Root", info.Thumbprint)
+	hideWindow(cmd)
+	return cmd.Run() == nil
 }
 
 // Trust 安装或撤销当前用户对本地 CA 的信任。

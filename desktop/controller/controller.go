@@ -156,6 +156,8 @@ func New(opts Options) (*Controller, error) {
 	c.voiceKey = hex.EncodeToString(key)
 	c.voiceSecret = hex.EncodeToString(secret)
 	c.certs = NewCertificates(c.dir, c.log)
+	// 信任状态以系统证书存储为准，否则每次重启 GUI 都会退回「尚未安装信任」。
+	c.trusted = c.certs.Trusted()
 	c.cli = NewCliProxy(c.root, opts.CliExecutable, c.hostExe, c.kill, c.verifyCli, c.log, c.emit)
 	c.log("桌面控制台已就绪；配置将在下次启动自动读取", "console", "INFO")
 	return c, nil

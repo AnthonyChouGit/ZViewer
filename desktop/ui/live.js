@@ -154,7 +154,7 @@
     else if (action === 'cli-save') { await command('cli-save', cliValues()); state.cliDraft = null; ui.render(); ui.toast('代理配置已保存，内置设置会自动带入后端地址'); }
     else if (action === 'local-cert') {
       await command('https',{domain:'localhost',ip:''}); ui.render(); ui.toast('HTTPS 已就绪，请安装本机信任后打开管理页面');
-    } else if (action === 'trust-cert' || action === 'untrust-cert') { const result = await command(action === 'trust-cert' ? 'trust' : 'untrust'); ui.render(); ui.toast(result?.canceled ? '已取消安装信任' : '本机信任状态已更新'); }
+    } else if (action === 'trust-cert' || action === 'untrust-cert') { const result = await command(action === 'trust-cert' ? 'trust' : 'untrust'); ui.render(); ui.toast(result?.canceled ? '已取消安装信任' : result?.trusted ? '本机信任已安装，可打开管理页面' : '本机信任已撤销'); }
     else if (action === 'save-service') {
       const config = serviceValues();
       await command('save',{config}); serviceDraft = null; ui.render(); ui.toast('配置已保存，下次启动服务自动使用；运行中可点击重启生效');

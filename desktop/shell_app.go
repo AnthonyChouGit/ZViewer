@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -108,6 +109,37 @@ func (a *App) emitUpdate() {
 	}
 }
 
+// confirm 弹系统「是 / 否」确认框，只有选「是」才算确认。
+//
+// Wails v2 的 Windows 后端用 MessageBox 的固定按钮组渲染问询框，自定义的
+// Buttons 文案不会生效，返回值恒为 "Yes" / "No" / "Cancel"，所以判断结果必须
+// 比对 Yes，不能比对按钮文案（否则任何选择都会被当成取消）。
+func (a *App) confirm(title, message string) (bool, error) {
+	answer, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+		Type:          runtime.QuestionDialog,
+		Title:         title,
+		Message:       message,
+		DefaultButton: "No",
+	})
+	if err != nil {
+		return false, err
+	}
+	return dialogConfirmed(answer), nil
+}
+
+// dialogConfirmed 判断问询框返回值是否代表「确认」。
+//
+// 只认 Yes（以及中文系统的「是」）：Wails 的 Windows 后端固定返回
+// Yes / No / Cancel，不能拿自定义按钮文案做比较。
+func dialogConfirmed(answer string) bool {
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "yes", "是":
+		return true
+	default:
+		return false
+	}
+}
+
 func (a *App) snapshotMap() map[string]any {
 	raw, err := json.Marshal(a.ctrl.Snapshot())
 	if err != nil {
@@ -198,24 +230,19 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 	case "https":
 		return a.ctrl.EnableHTTPS(payloadString(payload, "domain"), payloadString(payload, "ip"))
 	case "trust":
-		info := a.ctrl.Certificates().Inspect()
-		answer, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-			Type:          runtime.QuestionDialog,
-			Title:         "信任 ZViewer 本机证书",
-			Message:       "安装到当前 Windows 用户的受信任根证书存储？",
-			Buttons:       []string{"取消", "安装本机 CA 信任"},
-			DefaultButton: "取消",
-			CancelButton:  "取消",
-		})
+		confirmed, err := a.confirm(
+			"信任 ZViewer 本机证书",
+			"安装到当前 Windows 用户的受信任根证书存储？\n\n安装时 Windows 还会再询问一次，请一并选择「是」。",
+		)
 		if err != nil {
 			return nil, err
 		}
-		if answer != "安装本机 CA 信任" {
+		if !confirmed {
 			return map[string]any{"canceled": true}, nil
 		}
 		if _, err := a.ctrl.Certificates().Trust(true); err != nil {
-			_ = info
-			return nil, err
+			a.ctrl.Log("安装本机 CA 信任失败："+err.Error(), "cert", "ERROR")
+			return nil, errors.New("安装本机信任未完成，请重试并在系统提示中选择「是」")
 		}
 		a.ctrl.SetTrusted(true)
 		a.emitUpdate()
