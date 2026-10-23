@@ -284,6 +284,8 @@
       state.meshSecretDraft = credentials.networkSecret;
       ui.render();
       ui.toast('已生成新的网络名称与密钥，保存并入网后才生效');
+    } else if (action === 'mesh-probe' || action === 'mesh-fill') {
+      await probePublicPeers(action === 'mesh-fill');
     } else if (action === 'mesh-invite') {
       const data = await command('mesh-invite');
       await navigator.clipboard.writeText(data.text);
@@ -299,7 +301,7 @@
     else if (action === 'export-ca') await command('export',{kind:'ca'});
     else if (action === 'open-data') await command('open-data');
   }
-  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','ipv6-cert','start-http','save-service','save-frp','toggle-frp','export-frp','frp-import','frp-save','frp-connect','frp-generate','mesh-save','mesh-toggle','mesh-generate','mesh-invite','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
+  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','ipv6-cert','start-http','save-service','save-frp','toggle-frp','export-frp','frp-import','frp-save','frp-connect','frp-generate','mesh-save','mesh-toggle','mesh-generate','mesh-invite','mesh-probe','mesh-fill','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
   function cliValues() { return { port: $('#cli-port').value, autoStart: $('#cli-auto-start').getAttribute('aria-checked') === 'true', user: $('#cli-user').value.trim() }; }
   function meshValues() {
     return {
@@ -313,6 +315,39 @@
     const secret = $('#mesh-secret')?.value || '';
     await command('mesh-save', { config: meshValues(), networkSecret: secret || undefined });
     state.meshDraft = null; state.meshSecretDraft = '';
+  }
+  // 公共对端服务器：先测一遍再谈填不填。fill=true 时把能连上的按延迟取前 4 个
+  // 合并进对端地址（用户自己填的 VPS 地址保留），不覆盖已有内容。
+  async function probePublicPeers(fill) {
+    const draft = meshValues();
+    state.meshProbe = { running: true, at: state.meshProbe?.at || '', results: state.meshProbe?.results || {} };
+    if (!fill) ui.render();
+    try {
+      const list = await command('mesh-probe');
+      const results = {};
+      for (const item of list || []) results[item.uri] = item;
+      state.meshProbe = { running: false, at: new Date().toLocaleTimeString('zh-CN', { hour12: false }), results };
+      const usable = Object.values(results).filter(item => item.state === 'ok');
+      if (!fill) {
+        ui.render();
+        ui.toast(usable.length ? `测试完成：${usable.length}/${Object.keys(results).length} 个可连接` : '公共节点都连不上，建议填自建 VPS 地址');
+        return;
+      }
+      if (!usable.length) { ui.render(); ui.toast('没有可连接的公共节点，请稍后重试或用自建 VPS'); return; }
+      const merged = [...(draft.peers || [])];
+      for (const item of usable.sort((a, b) => a.latencyMs - b.latencyMs)) {
+        if (merged.length >= 4) break;
+        if (!merged.includes(item.uri)) merged.push(item.uri);
+      }
+      const added = merged.length - (draft.peers || []).length;
+      state.meshDraft = { ...draft, peers: merged };
+      ui.render();
+      ui.toast(added ? `已填入 ${added} 个可用节点，保存并入网后生效` : '对端地址已满 4 个，先删掉一些再填');
+    } catch (error) {
+      state.meshProbe = { ...state.meshProbe, running: false };
+      ui.render();
+      throw error;
+    }
   }
   document.addEventListener('click',event => {
     if (!state.live) return;

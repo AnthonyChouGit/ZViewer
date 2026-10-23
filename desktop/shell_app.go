@@ -182,6 +182,23 @@ func payloadString(payload map[string]any, key string) string {
 	return ""
 }
 
+// payloadStrings 取字符串数组，兼容前端直接传 []string 或 JSON 解出来的 []any。
+func payloadStrings(payload map[string]any, key string) []string {
+	switch raw := payload[key].(type) {
+	case []string:
+		return raw
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if text, ok := item.(string); ok && text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 // Command 对应 preload 的 command(action, payload)。
 func (a *App) Command(action string, payload map[string]any) (any, error) {
 	if payload == nil {
@@ -265,6 +282,8 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		return config, nil
 	case "mesh-generate":
 		return a.ctrl.NewMeshCredentials(), nil
+	case "mesh-probe":
+		return a.ctrl.ProbePublicPeers(payloadStrings(payload, "peers")), nil
 	case "mesh-invite":
 		text, err := a.ctrl.MeshInvite()
 		if err != nil {

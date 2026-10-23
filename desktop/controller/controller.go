@@ -252,11 +252,14 @@ func (c *Controller) Snapshot() Snapshot {
 	c.mu.RUnlock()
 
 	config := c.store.Value
+	// 公共中继候选来自内置列表，随快照下发，界面不用再单独请求一次。
+	mesh := c.mesh.Snapshot()
+	mesh.PublicPeers = MeshPublicPeers()
 	out := Snapshot{
 		Config: config, Active: active,
 		WebURL: c.WebURL(), Backend: backend, Voice: voice, Frp: frp,
 		Cli:  c.cli.Snapshot(),
-		Mesh: c.mesh.Snapshot(),
+		Mesh: mesh,
 		Pid:  backendPid, VoicePid: livekid, FrpPid: frpPid,
 		Tunnel:          c.tunnelReport(),
 		Update:          c.UpdateReport(),

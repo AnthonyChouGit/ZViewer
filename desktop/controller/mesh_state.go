@@ -46,7 +46,9 @@ type MeshStatus struct {
 	// LanPeers 是本机在局域网里的接入地址：还没分配虚拟 IP 时，
 	// 对方可以把其中一条填进「对端地址」，先连上本机再由 DHCP 分配。
 	LanPeers []string `json:"lanPeers"`
-	Message  string   `json:"message"`
+	// PublicPeers 是内置的公共中继候选，界面据此渲染「公共对端服务器」卡片。
+	PublicPeers []string `json:"publicPeers"`
+	Message     string   `json:"message"`
 }
 
 // meshLanIPv4s 列出本机可用于接入的局域网 IPv4（跳过回环与 169.254 链路本地地址）。

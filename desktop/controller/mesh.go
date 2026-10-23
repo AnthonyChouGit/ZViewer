@@ -4,6 +4,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -93,6 +94,23 @@ func (c *Controller) MeshInvite() (string, error) {
 	}
 	config := c.store.Value
 	return meshInvite(config.Mesh, secret, c.mesh.Snapshot(), config.Port), nil
+}
+
+// ProbePublicPeers 测试公共中继节点的可用性；list 为空时测全部内置候选。
+// 结果只用于展示与「一键填写」，不会写进配置。
+func (c *Controller) ProbePublicPeers(list []string) []MeshPeerProbe {
+	if len(list) == 0 {
+		list = MeshPublicPeers()
+	}
+	results := ProbeMeshPeers(list)
+	usable := 0
+	for _, item := range results {
+		if item.State == "ok" {
+			usable++
+		}
+	}
+	c.log(fmt.Sprintf("公共对端服务器探测完成：%d/%d 可连接", usable, len(results)), "mesh", "INFO")
+	return results
 }
 
 // AutoStartMesh 在控制台启动后按配置入网；失败只记日志，不阻塞界面。

@@ -754,6 +754,21 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
   margin-left: 6px; padding: 1px 6px; border-radius: var(--radius-pill);
   background: var(--accent-tint); color: var(--accent); font-size: 11px; font-weight: 400;
 }
+/* 公共对端服务器：一行一个地址，右侧跟可用性状态 */
+.mesh-public-panel { margin-top: 16px; }
+.mesh-public-list { display: flex; flex-direction: column; gap: 6px; }
+.mesh-public-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 12px; border: 1px solid var(--card-stroke); border-radius: var(--radius-control);
+  background: var(--layer-alt);
+}
+.mesh-public-row code {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: none; padding: 0; color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 12px;
+}
+.mesh-public-row .pill { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.mesh-public-panel .form-actions { margin-top: 12px; }
 .frp-mode { margin-top: 4px; }
 .dns-example {
   margin: 12px 0; padding: 10px 12px;

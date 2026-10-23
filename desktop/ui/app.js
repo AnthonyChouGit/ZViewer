@@ -45,7 +45,7 @@
     ipv6: null,
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
-    meshDraft: null, meshSecretDraft: '',
+    meshDraft: null, meshSecretDraft: '', meshProbe: null,
     events: [], prefs, updateOpen: false, updateKey: ''
   };
   function clock() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
@@ -91,11 +91,11 @@
         },
         {
           title: '开始前需要什么',
-          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。同一局域网里填对方的本机地址；双方都在 NAT 后面时需要一台双方都能连到的中转节点，用自己的 VPS 搭一台最稳。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
+          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。同一局域网里填对方的本机地址；双方都在 NAT 后面时需要一台双方都能连到的中转节点，用自己的 VPS 搭一台最稳。</li><li>不想自己搭中转时，用本页“公共对端服务器”卡片：先测可用性，再一键填入能连上的社区节点。这些节点由社区维护，随时可能失效，也不保证速度。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
         },
         {
           title: '怎么用',
-          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址，保存并入网。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
+          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入可用节点”，保存并入网。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
         },
         {
           title: '常见情况',
@@ -373,6 +373,8 @@
   // 免账号、免管理员（no_tun），所以面板只暴露网络名称、密钥、对端地址与监听端口。
   // 不内置任何公共节点：EasyTier 官方公共节点已停服，域名解析不到，
   // 中转地址一律由用户填自己的 VPS；同一局域网内直接填对方的本机地址即可。
+  // 公共中继候选（预览版副本，真实列表来自 controller/mesh_public.go 的快照下发）。
+  const MESH_PUBLIC_PEERS = ['tcp://ros.scpsl.com.cn:11010', 'tcp://et.basd1.de:11010', 'tcp://183.230.36.171:11010', 'tcp://225284.xyz:11010', 'tcp://us01.225284.xyz:11010', 'tcp://easytier.weiai.org.cn:11010'];
   function mesh() {
     const live = Boolean(state.live), meshLabels = { stopped: '未入网', starting: '入网中', running: '已入网', stopping: '正在退出', error: '异常' };
     const saved = state.config?.mesh || { enabled: false, networkName: '', peers: [], listenPort: 11010 };
@@ -397,6 +399,23 @@
       return `<article class="mesh-device${peer.self ? ' is-self' : ''}"><span class="mesh-device-icon">${icon(peer.self ? 'monitor' : 'server')}</span><div class="mesh-device-body"><strong>${esc(peer.hostname || peer.ipv4)}${peer.self ? '<span class="mesh-device-tag">本机</span>' : ''}</strong><span class="mesh-device-meta">${esc(meta)}</span></div>${route ? `<span class="pill ${peer.direct ? 'green' : ''}"><i></i>${route}</span>` : ''}</article>`;
     };
     const emptyPeers = `<div class="empty">还没有其他设备加入。把网络名称与密钥发给朋友，他们装 EasyTier 客户端加入后就会出现在这里。</div>`;
+    // 公共中继候选：真实列表由 Go 快照下发（controller/mesh_public.go）；预览版用同一份副本，
+    // 保证两套界面一致。这里只做展示，「填入」要等用户点击后才会写进对端地址。
+    const publicPeers = live ? (Array.isArray(m.publicPeers) ? m.publicPeers : []) : MESH_PUBLIC_PEERS;
+    const probe = state.meshProbe || { running: false, at: '', results: {} };
+    const probeResults = probe.results || {};
+    const reachable = publicPeers.filter(uri => probeResults[uri]?.state === 'ok').length;
+    const probeSummary = probe.running ? '测试中' : !probe.at ? `${publicPeers.length} 个候选` : `${reachable}/${publicPeers.length} 可连接`;
+    const probeTone = probe.running || !probe.at ? '' : reachable ? 'green' : 'orange';
+    const publicRow = uri => {
+      const item = probeResults[uri];
+      const label = probe.running ? '测试中…'
+        : !item ? '未测试'
+          : item.state === 'ok' ? `${item.latencyMs} ms`
+            : item.state === 'unknown' ? '未测试' : `连不上 · ${item.reason || '无法连接'}`;
+      const tone = probe.running || !item ? '' : item.state === 'ok' ? 'green' : item.state === 'unknown' ? '' : 'orange';
+      return `<div class="mesh-public-row"><code>${esc(uri)}</code><span class="pill ${tone}"><i></i>${esc(label)}</span></div>`;
+    };
     return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
       `<div class="form-layout"><section class="panel">
         <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>入网参数</h2><p class="cli-caption">免账号 · 免管理员权限</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
@@ -414,6 +433,11 @@
         <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
         ${m.available === false ? notice('当前运行包不含组网组件，请使用完整安装包。') : notice('本机不需要管理员权限；朋友的设备装 EasyTier 客户端后按同样的网络名称与密钥加入。')}
       </aside></div>
+      <section class="panel mesh-public-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('globe')}</span><div><h2>公共对端服务器</h2><p class="cli-caption">社区维护 · 随时可能失效</p></div></div><span class="pill ${probeTone}"><i></i>${esc(probeSummary)}</span></div>
+        <div class="mesh-public-list">${publicPeers.map(publicRow).join('') || '<div class="empty">没有可用的候选节点。</div>'}</div>
+        <div class="form-actions">${button(probe.at ? '重新测试' : '测试可用性', 'mesh-probe', 'refresh')}${button('填入可用节点', 'mesh-fill', 'check', 'primary')}</div>
+        <p class="field-note">${probe.at ? `上次测试 ${esc(probe.at)} · ` : ''}「填入可用节点」只写能连上的地址，按延迟从低到高取前 4 个；填好后仍需保存并入网。</p>
+      </section>
       <section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
   }
   const connectLinks = {
@@ -594,6 +618,7 @@
     else if (name === 'go-cert') { $('#modal').close(); navigate('cert'); }
     else if (name === 'local-cert') localCertDemo();
     else if (name === 'probe-ipv6' || name === 'ipv6-cert') toast('仅桌面版可用');
+    else if (name === 'mesh-probe' || name === 'mesh-fill') toast('仅桌面版可用');
     else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('仅桌面版可用');
     else if (name === 'close-modal') $('#modal').close();
     else if (name === 'open-update') openUpdate();
