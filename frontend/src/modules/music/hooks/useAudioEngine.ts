@@ -15,6 +15,11 @@ interface UseAudioEngineOptions {
   volumeRef: MutableRefObject<number>
   /** ended 处理器的最新实现（handleEnded 随依赖重建，经 ref 间接调用） */
   endedHandlerRef: MutableRefObject<() => void>
+  /**
+   * 播放失败处理器（可选）：返回 true 表示调用方已自行处理（如私人漫游
+   * 自动跳过无法播放的曲目），引擎不再弹通用错误提示。
+   */
+  onErrorRef?: MutableRefObject<(() => boolean) | null>
   /** 预载目标（下一首；null 表示无需预载）——顺序/随机规则由调用方决定 */
   peekNextSong: () => MusicQueueItem | null
   /** 队列条目 → 音频流地址（B站 条目取已解析缓存） */
@@ -60,6 +65,7 @@ export interface AudioEngine {
 export function useAudioEngine({
   volumeRef,
   endedHandlerRef,
+  onErrorRef,
   peekNextSong,
   buildUrl,
   currentKey,
@@ -133,6 +139,8 @@ export function useAudioEngine({
         el.error?.code,
         el.error?.message
       )
+      // 调用方优先处理（私人漫游换源失败时自动跳过该曲续播）
+      if (onErrorRef?.current?.() === true) return
       message.error('音频加载失败，请稍后重试或切换其他曲目')
     },
   }))

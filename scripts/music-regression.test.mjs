@@ -48,6 +48,35 @@ test('FM requests deduplicate and filter repeated/current/history songs', async 
   assert.deepEqual(fm.getState().pool.map((s) => s.songId), [3, 4]);
 });
 
+test('FM dedupe only avoids recently played songs, not the whole history', async () => {
+  fm.getState().reset();
+  fm.getState().setHistory(Array.from({ length: 15 }, (_, i) => song(i + 1)));
+  await fetchPersonalFmPool(async () => [
+    { id: 1, name: 'long ago' },
+    { id: 14, name: 'just played' },
+    { id: 100, name: 'new' },
+  ]);
+  // 最近窗口（最近 12 首）回避；更早听过的可以再次推荐，避免会话越久
+  // 越容易被历史挡成零候选而停播
+  assert.deepEqual(fm.getState().pool.map((s) => s.songId), [1, 100]);
+});
+
+test('FM exhaustion repeats a recent song instead of stopping playback', async () => {
+  fm.getState().reset();
+  fm.getState().activate('room', song(1));
+  fm.getState().setHistory([song(2)]);
+  const played = [];
+  await advancePersonalFm('room', 'ncm:1', {
+    refill: (opts) =>
+      fetchPersonalFmPool(async () => [{ id: 2, name: 'already heard' }], opts),
+    enqueue: async () => {},
+    play: (s) => played.push(s.songId),
+    isCurrent: () => true,
+  });
+  assert.deepEqual(played, [2]);
+  assert.equal(fm.getState().activeKey, 'ncm:2');
+});
+
 test('mode changes invalidate old responses and use current mode/submode with fallback', async () => {
   fm.getState().reset();
   const wait = deferred();

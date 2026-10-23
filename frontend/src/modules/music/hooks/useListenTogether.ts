@@ -9,7 +9,7 @@ import {
   fetchPersonalFmPool,
   usePersonalFmStore,
 } from '../personal-fm'
-import type { FmSongItem } from '../personal-fm'
+import type { FetchFmPoolOptions, FmSongItem } from '../personal-fm'
 import {
   ROOM_MEDIA_TEARDOWN_EVENT,
   type RoomMediaTeardownDetail,
@@ -88,6 +88,13 @@ const HOST_HEARTBEAT_INTERVAL_MS = 2000
 
 /** B站 相关推荐一次加入的条数上限（手动「自动推荐」与列表末尾自动扩展均为前 3 条） */
 const BILI_RECOMMEND_LIMIT = 3
+
+/**
+ * 私人漫游自动续播失败后的重试退避间隔（毫秒）：
+ * 候选补拉返回空批次、入队 ack 超时等瞬时问题不应让漫游停在暂停态，
+ * 按 2s / 5s / 10s 退避重试三次后再提示。
+ */
+const FM_ADVANCE_RETRY_DELAYS = [2000, 5000, 10000]
 
 /** /api/stream/bilibili/related 返回的相关推荐条目 */
 interface BiliRelatedItem {
@@ -384,6 +391,11 @@ export function useListenTogether({
   const [volume, setVolumeState] = useState(loadPersistedVolume)
   const volumeAdjustedRef = useRef(false)
   const fmPlayRequestRef = useRef(0)
+  /**
+   * 音频加载失败处理器（私人漫游遇到无法播放的曲目时自动跳过）。
+   * 引擎在固定的事件处理器里经 ref 调用，避免事件绑定期依赖调用方闭包。
+   */
+  const audioErrorHandlerRef = useRef<(() => boolean) | null>(null)
 
   // ===== Refs =====
   /**
@@ -419,6 +431,7 @@ export function useListenTogether({
   const { audioRef, getAudio, playSource, stopAll, dispose } = useAudioEngine({
     volumeRef,
     endedHandlerRef,
+    onErrorRef: audioErrorHandlerRef,
     peekNextSong,
     buildUrl,
     currentKey,
@@ -609,12 +622,27 @@ export function useListenTogether({
   )
 
   const fmAdvancingRef = useRef(false)
+  /** tryFmContinue 的 latest-ref（重试定时器/音频失败回调经 ref 复用同一实现） */
+  const tryFmContinueRef = useRef<() => boolean>(() => false)
+  /** 自动续播失败后的重试定时器与连续失败次数（补拉空批次/入队失败的瞬时自愈） */
+  const fmRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fmAdvanceFailuresRef = useRef(0)
+  /** 最近一次「坏曲自动跳过」的时间戳（滚动窗口限流，防止在坏源之间空转） */
+  const fmSkipTimesRef = useRef<number[]>([])
+  /** 自动续播失败的重试退避间隔（毫秒）；用尽后停止重试并提示 */
+  const cancelFmRetry = useCallback(() => {
+    if (fmRetryTimerRef.current) {
+      clearTimeout(fmRetryTimerRef.current)
+      fmRetryTimerRef.current = null
+    }
+    fmAdvanceFailuresRef.current = 0
+  }, [])
   const refillFm = useCallback(
-    () =>
+    (options?: FetchFmPoolOptions) =>
       fetchPersonalFmPool(async (url) => {
         const { data } = await apiGet<{ data?: FmSongItem[] }>(url)
         return Array.isArray(data?.data) ? data.data : []
-      }),
+      }, options),
     []
   )
   const enqueueFm = useCallback(
@@ -677,7 +705,9 @@ export function useListenTogether({
       return false
     if (fmAdvancingRef.current) return true
     fmAdvancingRef.current = true
-    void advancePersonalFm(targetRoom, state.currentKey, {
+    // 本轮续播的起点曲目：入队确认期间会话校验、失败重试都以它为准
+    const fromKey = state.currentKey
+    void advancePersonalFm(targetRoom, fromKey, {
       refill: refillFm,
       enqueue: (song) => enqueueFm(song, targetRoom),
       play: (song) => {
@@ -688,16 +718,87 @@ export function useListenTogether({
       isCurrent: () =>
         roomIdRef.current === targetRoom &&
         isHostRef.current &&
-        useMusicStore.getState().currentKey === state.currentKey,
+        useMusicStore.getState().currentKey === fromKey,
     })
+      .then(() => {
+        fmAdvanceFailuresRef.current = 0
+      })
       .catch((err: unknown) => {
-        message.error(err instanceof Error ? err.message : '漫游续播失败')
+        // 会话已失效（切歌/离房/换模式/用户暂停）：不再重试，避免把播放复活
+        const latest = usePersonalFmStore.getState()
+        if (
+          !isHostRef.current ||
+          roomIdRef.current !== targetRoom ||
+          latest.activeKey !== fromKey
+        ) {
+          fmAdvanceFailuresRef.current = 0
+          return
+        }
+        const attempt = fmAdvanceFailuresRef.current
+        if (attempt >= FM_ADVANCE_RETRY_DELAYS.length) {
+          fmAdvanceFailuresRef.current = 0
+          message.error(err instanceof Error ? err.message : '漫游续播失败')
+          return
+        }
+        // 候选补拉偶尔返回空批次、入队 ack 偶尔超时：退避后重试同一首的
+        // 续播，而不是把漫游停在暂停态（用户看到的就是「自动播几首后停了」）
+        fmAdvanceFailuresRef.current = attempt + 1
+        if (fmRetryTimerRef.current) clearTimeout(fmRetryTimerRef.current)
+        fmRetryTimerRef.current = setTimeout(() => {
+          fmRetryTimerRef.current = null
+          tryFmContinueRef.current()
+        }, FM_ADVANCE_RETRY_DELAYS[attempt])
       })
       .finally(() => {
         fmAdvancingRef.current = false
       })
     return true
   }, [enqueueFm, playFmItem, refillFm])
+
+  useEffect(() => {
+    tryFmContinueRef.current = tryFmContinue
+  }, [tryFmContinue])
+
+  /**
+   * 音频加载失败（无版权 / 需要 VIP / 直链失效等）：私人漫游自动续播时
+   * 跳过该曲继续下一首。此前这种失败只会弹一次错误提示，`ended` 永不触发，
+   * FM 就永久停在失败曲目上——正是「播几首后不再继续」的另一条路径。
+   * 返回 true 表示已接管（引擎不再弹通用错误提示）。
+   */
+  const handleFmPlayError = useCallback((): boolean => {
+    if (!isHostRef.current) return false
+    // 已有续播在途：跳过会与本次续播打架，交回引擎的通用提示
+    if (fmAdvancingRef.current) return false
+    const fm = usePersonalFmStore.getState()
+    const state = useMusicStore.getState()
+    // 只接管私人漫游会话内的曲目；普通队列曲目仍走引擎的通用提示
+    if (fm.activeKey == null || fm.activeKey !== state.currentKey) return false
+    const now = Date.now()
+    fmSkipTimesRef.current = fmSkipTimesRef.current.filter(
+      (ts) => now - ts < 60_000
+    )
+    if (fmSkipTimesRef.current.length >= 4) {
+      // 短时间内连续多首无法播放：停止自动跳过，避免在坏源之间空转
+      cancelFmRetry()
+      usePersonalFmStore.getState().deactivate()
+      message.error('连续多首漫游歌曲无法播放，已停止自动续播')
+      return true
+    }
+    const skipped = usePersonalFmStore.getState().current
+    // 有候选可续 → 直接换下一首（当前失败曲由续播流程记入历史）；
+    // 没有候选则不消耗跳过额度，交回引擎的通用错误提示
+    if (!tryFmContinueRef.current()) return false
+    fmSkipTimesRef.current.push(now)
+    message.info(`「${skipped?.name ?? '当前歌曲'}」无法播放，已自动跳过`)
+    return true
+  }, [cancelFmRetry])
+
+  useEffect(() => {
+    audioErrorHandlerRef.current = handleFmPlayError
+    return () => {
+      audioErrorHandlerRef.current = null
+    }
+  }, [handleFmPlayError])
 
   const playFmSong = useCallback(
     async (song: NcmSong) => {
@@ -852,6 +953,8 @@ export function useListenTogether({
     if (!hasControl()) return
     if (useMusicStore.getState().currentKey == null) return
     if (fmAdvancingRef.current) usePersonalFmStore.getState().invalidate()
+    // 用户手动播放/暂停：取消排队中的漫游续播重试（避免稍后自己跳下一首）
+    cancelFmRetry()
     const audio = getAudio()
     const wantPlay = audio.paused
     if (wantPlay) {
@@ -868,7 +971,7 @@ export function useListenTogether({
         positionSec: audio.currentTime,
       })
     }
-  }, [getAudio, broadcastSyncState, hasControl])
+  }, [getAudio, broadcastSyncState, hasControl, cancelFmRetry])
 
   /**
    * 下一首（按播放模式计算目标）。按顺序播放已到末尾时不再回绕到列表
@@ -1052,6 +1155,8 @@ export function useListenTogether({
       const audio = getAudio()
       switch (action) {
         case 'pause':
+          // 观众申请暂停：取消排队中的漫游续播重试
+          cancelFmRetry()
           audio.pause()
           broadcastSyncState({
             isPlaying: false,
@@ -1092,7 +1197,15 @@ export function useListenTogether({
         }
       }
     },
-    [getAudio, switchSong, broadcastSyncState, seek, playSong, next]
+    [
+      getAudio,
+      switchSong,
+      broadcastSyncState,
+      seek,
+      playSong,
+      next,
+      cancelFmRetry,
+    ]
   )
 
   /**
@@ -1917,12 +2030,13 @@ export function useListenTogether({
   //（store 不在此重置，由 Task 6 的离开房间流程统一调用 reset）
   useEffect(() => {
     return () => {
+      cancelFmRetry()
       usePersonalFmStore.getState().reset()
       dispose()
       resetShuffle()
       pendingControlRef.current = null
     }
-  }, [dispose, resetShuffle])
+  }, [dispose, resetShuffle, cancelFmRetry])
 
   // 房间关闭 / 断连媒体停止（RoomPage 收到 room-closed / disconnect 后
   // dispatch，见 lib/mediaTeardown）：音频与预加载元素都走后端代理，
@@ -1933,13 +2047,14 @@ export function useListenTogether({
       const detail = (e as CustomEvent<RoomMediaTeardownDetail>).detail
       const full = detail?.full ?? true
       fmPlayRequestRef.current++
+      cancelFmRetry()
       usePersonalFmStore.getState().deactivate()
       stopAll(full)
     }
     window.addEventListener(ROOM_MEDIA_TEARDOWN_EVENT, handleTeardown)
     return () =>
       window.removeEventListener(ROOM_MEDIA_TEARDOWN_EVENT, handleTeardown)
-  }, [stopAll])
+  }, [stopAll, cancelFmRetry])
 
   // 当前播放的队列条目（queue + currentKey 匹配；B站 本地插播条目
   // 不在房间队列中，从 store.biliItem 合并）

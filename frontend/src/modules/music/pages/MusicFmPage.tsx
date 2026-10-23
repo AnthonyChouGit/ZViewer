@@ -404,22 +404,28 @@ export function MusicFmPage({ roomId, isHost }: MusicFmPageProps) {
   // ===== 数据获取 =====
 
   /** 拉取一批 FM 候选（DEFAULT → /personal_fm；其余 → /personal/fm/mode） */
-  const fetchPool = useCallback(async (opts?: { silent?: boolean }) => {
-    setLoading(true)
-    try {
-      await fetchPersonalFmPool(async (url) => {
-        const { data } = await apiGet<{ data?: FmSongItem[] }>(url)
-        return Array.isArray(data?.data) ? data.data : []
-      })
-      const fm = usePersonalFmStore.getState()
-      setLoadFailed(!opts?.silent && fm.pool.length === 0 && !fm.current)
-    } catch (err) {
-      console.error('[MusicFmPage] 私人漫游获取失败:', err)
-      if (!opts?.silent) setLoadFailed(true)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const fetchPool = useCallback(
+    async (opts?: { silent?: boolean; allowRepeats?: boolean }) => {
+      setLoading(true)
+      try {
+        await fetchPersonalFmPool(
+          async (url) => {
+            const { data } = await apiGet<{ data?: FmSongItem[] }>(url)
+            return Array.isArray(data?.data) ? data.data : []
+          },
+          { allowRepeats: opts?.allowRepeats }
+        )
+        const fm = usePersonalFmStore.getState()
+        setLoadFailed(!opts?.silent && fm.pool.length === 0 && !fm.current)
+      } catch (err) {
+        console.error('[MusicFmPage] 私人漫游获取失败:', err)
+        if (!opts?.silent) setLoadFailed(true)
+      } finally {
+        setLoading(false)
+      }
+    },
+    []
+  )
 
   // 登录后拉取首批候选
   useEffect(() => {
@@ -458,6 +464,14 @@ export function MusicFmPage({ roomId, isHost }: MusicFmPageProps) {
     let next = pool.find((s) => s.songId !== current?.songId)
     if (!next) {
       await fetchPool({ silent: true })
+      next = usePersonalFmStore
+        .getState()
+        .pool.find((s) => s.songId !== current?.songId)
+    }
+    if (!next) {
+      // 推荐批次可能整批都是近期听过的歌：兜底允许与历史重复再拉一次，
+      // 避免手动「下一首」直接走进「暂时没有新的漫游歌曲」死路
+      await fetchPool({ silent: true, allowRepeats: true })
       next = usePersonalFmStore
         .getState()
         .pool.find((s) => s.songId !== current?.songId)
