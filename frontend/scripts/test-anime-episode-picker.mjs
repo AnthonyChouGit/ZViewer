@@ -13,7 +13,7 @@ test('anime episode picker supports ordered batch selection and partial failure 
       contents: `
         import React from 'react'
         import { createRoot } from 'react-dom/client'
-        import { AnimeEpisodePicker } from './src/modules/room/components/AnimeEpisodePicker'
+        import { AnimeEpisodePicker } from './src/modules/anime-browser/AnimeEpisodePicker'
         const episodes = [1,2,3].map(n => ({id: String(n), title: 'Episode '+n, episodeNumber:n, playbackParams:{}}))
         window.batches = []; window.single = []
         createRoot(document.getElementById('root')).render(<AnimeEpisodePicker

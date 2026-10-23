@@ -33,7 +33,7 @@ import {
 import { CmsSelector } from '@/modules/cms/CmsSelector'
 import { resolveCmsEpisode, buildCmsProxyUrl } from '@/modules/cms/api'
 import type { CmsSourceMeta, CmsPlaybackParams } from '@/modules/cms/types'
-import type { AnimeEpisodeSelection } from './AnimeEpisodePicker'
+import type { AnimeEpisodeSelection } from '@/modules/anime-browser'
 import {
   buildBilibiliImageProxyUrl,
   getBilibiliLoginStatus,

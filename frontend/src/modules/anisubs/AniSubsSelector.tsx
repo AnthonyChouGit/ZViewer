@@ -1,7 +1,7 @@
 import {
   AnimeSourceBrowser,
   type AnimeSourceBrowserProps,
-} from '@/modules/room/components/AnimeSourceBrowser'
+} from '@/modules/anime-browser'
 import { getAniSubsSources, searchAniSubs, getAniSubsEpisodes } from './api'
 
 export function AniSubsSelector(props: AnimeSourceBrowserProps) {

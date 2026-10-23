@@ -1,7 +1,7 @@
 import {
   AnimeSourceBrowser,
   type AnimeSourceBrowserProps,
-} from '@/modules/room/components/AnimeSourceBrowser'
+} from '@/modules/anime-browser'
 import { getKazumiSources, searchKazumi, getKazumiEpisodes } from './api'
 
 export function KazumiSelector(props: AnimeSourceBrowserProps) {

@@ -15,7 +15,7 @@ test('shared anime browser scrolls large results, shows posters and retries fail
       contents: `
         import React from 'react'
         import { createRoot } from 'react-dom/client'
-        import { AnimeSourceBrowser } from './src/modules/room/components/AnimeSourceBrowser'
+        import { AnimeSourceBrowser } from './src/modules/anime-browser/AnimeSourceBrowser'
         const getSources=async()=>[{id:'a',name:'Fixture A'},{id:'b',name:'Fixture B'}]
         localStorage.setItem('zviewer-access-token','fixture-token')
         window.searchCalls=[]
