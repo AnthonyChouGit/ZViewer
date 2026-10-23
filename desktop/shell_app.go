@@ -282,6 +282,19 @@ func (a *App) dispatch(action string, payload map[string]any) (any, error) {
 		return config, nil
 	case "mesh-generate":
 		return a.ctrl.NewMeshCredentials(), nil
+	case "mesh-config":
+		return a.ctrl.MeshConfigFile()
+	case "mesh-config-save":
+		saved, err := a.ctrl.SaveMeshConfigFile(payloadString(payload, "content"), payloadString(payload, "format"))
+		if err != nil {
+			return nil, err
+		}
+		a.emitUpdate()
+		return saved, nil
+	case "mesh-config-import":
+		return a.importMeshConfig()
+	case "mesh-config-template":
+		return a.ctrl.MeshConfigTemplate()
 	case "mesh-probe":
 		return a.ctrl.ProbePublicPeers(payloadStrings(payload, "peers")), nil
 	case "mesh-invite":
@@ -451,6 +464,41 @@ func (a *App) importFrpConfig() (any, error) {
 		return nil, fmt.Errorf("无法读取配置文件：%w", err)
 	}
 	saved, err := a.ctrl.SaveFrpConfigFile(string(raw), filepath.Ext(path), nil)
+	if err != nil {
+		return nil, err
+	}
+	saved["name"] = filepath.Base(path)
+	a.emitUpdate()
+	return saved, nil
+}
+
+// importMeshConfig 让用户从磁盘挑一份 EasyTier TOML 直接导入并保存。
+func (a *App) importMeshConfig() (any, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "导入 EasyTier 配置文件",
+		DefaultDirectory: downloadsDir(),
+		Filters: []runtime.FileFilter{
+			{DisplayName: "EasyTier 配置（TOML）", Pattern: "*.toml"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return map[string]any{"canceled": true}, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取配置文件：%w", err)
+	}
+	if info.Size() > controller.MaxMeshConfigBytes {
+		return nil, errors.New("配置文件不能超过 256 KB")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取配置文件：%w", err)
+	}
+	saved, err := a.ctrl.SaveMeshConfigFile(string(raw), filepath.Ext(path))
 	if err != nil {
 		return nil, err
 	}

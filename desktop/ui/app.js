@@ -46,6 +46,7 @@
     frp: { host: '', port: 7000, voice: true, rtmp: true, tcp: false, webPort: 3333, voicePort: 3333, rtmpPort: 3334, tcpPort: 3337 },
     logLevel: 'all', logSource: 'all', logSearch: '', paused: false, cliDraft: null, cliEmbedUrl: '',
     meshDraft: null, meshSecretDraft: '', meshProbe: null,
+    meshConfig: null, meshConfigDraft: null, meshConfigError: '', meshPreviewMode: 'form',
     events: [], prefs, updateOpen: false, updateKey: ''
   };
   function clock() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
@@ -95,11 +96,11 @@
         },
         {
           title: '怎么用',
-          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入最快节点”，保存并入网。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
+          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入最快节点”，保存并入网。</li><li>已有现成的 EasyTier 配置时，切到“配置文件”，整份 TOML 粘贴或从磁盘导入，保存并入网即可。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
         },
         {
           title: '常见情况',
-          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li></ul>'
+          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li><li>配置文件模式只接受 TOML；启动时会强制打开 no_tun 与 bind_device，缺少 [flags] 段会自动补上。</li></ul>'
         }
       ],
       foot: '只有开着组网时其他设备才能按虚拟 IP 访问；停止组网后地址立即失效。'
@@ -375,6 +376,43 @@
   // 中转地址一律由用户填自己的 VPS；同一局域网内直接填对方的本机地址即可。
   // 公共中继候选（预览版副本，真实列表来自 controller/mesh_public.go 的快照下发）。
   const MESH_PUBLIC_PEERS = ['tcp://ros.scpsl.com.cn:11010', 'tcp://et.basd1.de:11010', 'tcp://183.230.36.171:11010', 'tcp://225284.xyz:11010', 'tcp://us01.225284.xyz:11010', 'tcp://easytier.weiai.org.cn:11010'];
+  // 组网与 FRP 一样有两种配置来源：图形配置生成 TOML，或直接运行整份 EasyTier 配置。
+  const MESH_CONFIG_PLACEHOLDER = [
+    'instance_id = &quot;留空会自动生成&quot;',
+    'hostname = &quot;my-pc&quot;',
+    'dhcp = true',
+    'listeners = [',
+    '    &quot;tcp://0.0.0.0:11010&quot;,',
+    '    &quot;udp://0.0.0.0:11010&quot;',
+    ']',
+    '',
+    '[network_identity]',
+    'network_name = &quot;zviewer-home&quot;',
+    'network_secret = &quot;你的网络密钥&quot;',
+    '',
+    '[[peer]]',
+    'uri = &quot;tcp://1.2.3.4:11010&quot;',
+    '',
+    '[flags]',
+    'no_tun = true',
+    'bind_device = false'
+  ].join('&#10;');
+  function meshMode() {
+    const value = state.live ? state.config?.mesh?.mode : state.meshPreviewMode;
+    return value === 'config' ? 'config' : 'form';
+  }
+  function meshFileContent() { return state.meshConfigDraft ?? state.meshConfig?.content ?? ''; }
+  let meshConfigPending = false;
+  // 自定义配置在页面打开时读一次；读到后重绘，编辑框就不会闪成空白。
+  function ensureMeshConfig() {
+    if (!state.live || state.meshConfig || meshConfigPending) return;
+    if (!window.zviewerDesktop?.command) return;
+    meshConfigPending = true;
+    window.zviewerDesktop.command('mesh-config', {})
+      .then(data => { state.meshConfig = data; if (state.page === 'mesh') render(); })
+      .catch(error => toast(String(error?.message || error).replace(/^.*Error: /, '')))
+      .finally(() => { meshConfigPending = false; });
+  }
   function mesh() {
     const live = Boolean(state.live), meshLabels = { stopped: '未入网', starting: '入网中', running: '已入网', stopping: '正在退出', error: '异常' };
     const saved = state.config?.mesh || { enabled: false, networkName: '', peers: [], listenPort: 11010 };
@@ -416,8 +454,11 @@
       const tone = probe.running || !item ? '' : item.state === 'ok' ? 'green' : item.state === 'unknown' ? '' : 'orange';
       return `<div class="mesh-public-row"><code>${esc(uri)}</code><span class="pill ${tone}"><i></i>${esc(label)}</span></div>`;
     };
-    return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
-      `<div class="form-layout"><section class="panel">
+    const mode = meshMode();
+    if (mode === 'config') ensureMeshConfig();
+    const conf = state.meshConfig || null;
+    const tabs = `<div class="tabs mesh-mode"><button data-mesh-mode="form" class="${mode === 'form' ? 'active' : ''}">图形配置</button><button data-mesh-mode="config" class="${mode === 'config' ? 'active' : ''}">配置文件</button></div>`;
+    const formBody = `<div class="form-layout"><section class="panel">
         <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>入网参数</h2><p class="cli-caption">免账号 · 免管理员权限</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
         <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>组网监听端口 <small>EasyTier 节点间通信</small></span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
         <label class="field"><span>网络密钥 <small>加密保存</small></span><input id="mesh-secret" type="password" value="${esc(secretValue)}" placeholder="${state.server?.meshSecretSaved ? '已保存，留空沿用' : '与本网络其他设备一致'}" autocomplete="off"></label>
@@ -437,8 +478,27 @@
         <div class="mesh-public-list">${publicPeers.map(publicRow).join('') || '<div class="empty">没有可用的候选节点。</div>'}</div>
         <div class="form-actions">${button(probe.at ? '重新测试' : '测试可用性', 'mesh-probe', 'refresh')}${button('填入最快节点', 'mesh-fill', 'check', 'primary')}</div>
         <p class="field-note">${probe.at ? `上次测试 ${esc(probe.at)} · ` : ''}「填入最快节点」会先重测一遍，只把延迟最低的那个写进对端地址；连上一个节点就能发现整个网络，需要冗余再手动加一行。</p>
+      </section>`;
+    const fileBody = `<div class="form-layout"><section class="panel">
+        <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('terminal')}</span><div><h2>EasyTier 配置文件</h2><p class="cli-caption">TOML · 原样运行</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
+        <p class="wizard-copy">粘贴或导入一份完整的 EasyTier 配置，保存后直接按它入网。</p>
+        <textarea class="codebox config-editor mesh-config-editor" id="mesh-config-editor" spellcheck="false" autocomplete="off" aria-label="EasyTier 配置文件内容" placeholder="${MESH_CONFIG_PLACEHOLDER}">${esc(meshFileContent())}</textarea>
+        <div class="code-footer"><span>${conf?.path ? '保存位置 ' + esc(conf.path) : '尚未保存'}</span><span>TOML</span></div>
+        <div class="validation" id="mesh-error" role="alert">${esc(state.meshConfigError || m.message || '')}</div>
+        <div class="form-actions">${button('导入文件','mesh-config-import','folder')}${button('按图形配置填充','mesh-config-template','refresh')}${button('保存','mesh-config-save','check')}${button(running ? '停止组网' : '保存并入网','mesh-config-connect','mesh','primary')}</div>
       </section>
-      <section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
+      <aside class="panel"><div class="panel-heading"><h2>使用说明</h2></div>
+        <div class="check-item">${icon('terminal')}<div><strong>直接粘贴</strong><br>整份 TOML 照抄即可，网络名称与密钥以文件里的为准。</div></div>
+        <div class="check-item">${icon('folder')}<div><strong>导入文件</strong><br>从磁盘选一份 .toml，保存后立即按它入网。</div></div>
+        <div class="check-item">${icon('shield')}<div><strong>免管理员运行</strong><br>启动时会强制打开 no_tun 与 bind_device = false，缺 [flags] 段会自动补上。</div></div>
+        <div class="check-item">${icon('info')}<div><strong>只支持 TOML</strong><br>EasyTier 2.6.4 只解析 TOML，YAML/JSON 会解析失败。</div></div>
+        <div class="panel-line"></div>
+        <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>在线设备</span><span>${remotePeers.length ? `${remotePeers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div></div>
+        <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
+        <p class="field-note">需要公共中转节点时切回“图形配置”，在下方卡片测速后填入对端地址。</p>
+      </aside></div>`;
+    return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) + tabs + (mode === 'config' ? fileBody : formBody) +
+      `<section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
   }
   const connectLinks = {
     frpProvider: [      ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
@@ -619,6 +679,7 @@
     else if (name === 'local-cert') localCertDemo();
     else if (name === 'probe-ipv6' || name === 'ipv6-cert') toast('仅桌面版可用');
     else if (name === 'mesh-probe' || name === 'mesh-fill') toast('仅桌面版可用');
+    else if (name === 'mesh-config-save' || name === 'mesh-config-connect' || name === 'mesh-config-import' || name === 'mesh-config-template') toast('仅桌面版可用');
     else if (name === 'tunnel-start' || name === 'tunnel-stop') toast('仅桌面版可用');
     else if (name === 'close-modal') $('#modal').close();
     else if (name === 'open-update') openUpdate();
@@ -680,6 +741,14 @@
       return;
     }
     if (event.target.closest('[data-tutorial-close]')) { closeTutorials(); return; }
+    // 预览版自己切换组网配置方式；桌面端由 live.js 拦截后写进配置。
+    const meshTab = event.target.closest('[data-mesh-mode]');
+    if (meshTab && !state.live) {
+      event.preventDefault();
+      state.meshPreviewMode = meshTab.dataset.meshMode === 'config' ? 'config' : 'form';
+      render();
+      return;
+    }
     const external = event.target.closest('[data-external]');
     if (external) {
       event.preventDefault();

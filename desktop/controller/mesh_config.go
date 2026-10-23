@@ -38,13 +38,18 @@ type MeshConfig struct {
 	ListenPort  int      `json:"listenPort"`
 	// InstanceID 落盘复用，保证重启后 peer_id 不变，虚拟 IP 也更容易沿用。
 	InstanceID string `json:"instanceId"`
+	// Mode 选择入网参数的来源：form 由面板字段生成 TOML，config 直接运行
+	// 用户粘贴或导入的整份 EasyTier 配置（存 mesh/mesh.custom.toml，不进 settings.json）。
+	Mode string `json:"mode"`
+	// Format 是自定义配置的格式。EasyTier 2.6.4 只解析 TOML，保留字段是为了以后扩展。
+	Format string `json:"format"`
 }
 
 // 默认不带任何对端地址：EasyTier 官方公共节点（public.easytier.cn / .top）已停服、
 // 域名无法解析，内置只会让每次入网都报「对端连不上」。中转节点由用户填自己的 VPS；
 // 同一局域网内直接把本机地址填给对面即可，不需要中转。
 func DefaultMeshConfig() MeshConfig {
-	return MeshConfig{ListenPort: MeshDefaultPort}
+	return MeshConfig{ListenPort: MeshDefaultPort, Mode: "form", Format: "toml"}
 }
 
 var (
@@ -135,6 +140,28 @@ func NormalizeMesh(input map[string]any, current MeshConfig, secretPresent bool,
 	}
 	target.NetworkName = name
 
+	// 配置来源：form 用面板字段生成 TOML，config 直接运行用户提供的整份配置。
+	target.Mode = "form"
+	if raw, exists := base["mode"]; exists {
+		text, isText := asString(raw)
+		if !isText || (text != "form" && text != "config") {
+			return target, errors.New("组网配置方式无效")
+		}
+		target.Mode = text
+	}
+	target.Format = "toml"
+	if raw, exists := base["format"]; exists {
+		text, isText := asString(raw)
+		if !isText {
+			return target, errors.New("组网配置文件格式无效")
+		}
+		normalized, valid := normalizeMeshFormat(text)
+		if !valid {
+			return target, errors.New("组网配置文件只支持 TOML")
+		}
+		target.Format = normalized
+	}
+
 	peers := []string{}
 	switch raw := base["peers"].(type) {
 	case nil:
@@ -213,7 +240,8 @@ func NormalizeMesh(input map[string]any, current MeshConfig, secretPresent bool,
 	}
 
 	target.Enabled = asBool(base["enabled"])
-	if target.Enabled {
+	if target.Enabled && target.Mode == "form" {
+		// 配置文件模式下网络名称与密钥都写在用户配置里，面板字段不参与。
 		if target.NetworkName == "" {
 			return target, errors.New("请先填写网络名称")
 		}

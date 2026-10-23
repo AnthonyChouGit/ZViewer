@@ -769,7 +769,9 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 }
 .mesh-public-row .pill { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .mesh-public-panel .form-actions { margin-top: 12px; }
-.frp-mode { margin-top: 4px; }
+.frp-mode, .mesh-mode { margin-top: 4px; }
+/* 组网页的整份配置：比 frpc 略矮，右边还要放说明卡 */
+.mesh-config-editor { min-height: 260px; }
 .dns-example {
   margin: 12px 0; padding: 10px 12px;
   border: 1px solid var(--control-stroke); border-radius: var(--radius-control);

@@ -81,6 +81,9 @@ func NewMeshManager(root, dir, hostExe string, kill func(*Proc, string) error,
 func (m *MeshManager) corePath() string { return filepath.Join(m.binDir, "easytier-core.exe") }
 func (m *MeshManager) cliPath() string  { return filepath.Join(m.binDir, "easytier-cli.exe") }
 
+// customPath 是配置文件模式下用户那份 TOML 的位置。
+func (m *MeshManager) customPath() string { return meshCustomPath(m.dir) }
+
 // Available 表示分出包里带了组网组件。
 func (m *MeshManager) Available() bool {
 	return fileExists(m.corePath()) && fileExists(m.cliPath())
@@ -180,6 +183,25 @@ func (m *MeshManager) Start(cfg MeshConfig, secret string) (MeshStatus, error) {
 		m.mu.Unlock()
 		return m.Snapshot(), nil
 	}
+	m.mu.Unlock()
+
+	// 配置文件模式：直接跑用户提供的 TOML。端口、名称、密钥都以文件为准，
+	// 所以端口检查与「必须填名称密钥」的校验都不适用。
+	custom := ""
+	if cfg.Mode == "config" {
+		raw, readErr := os.ReadFile(m.customPath())
+		if readErr != nil {
+			err := errors.New("请先在配置文件模式下保存 EasyTier 配置")
+			m.fail(err)
+			return m.Snapshot(), err
+		}
+		custom = meshRuntimeConfig(string(raw))
+		if port := meshListenerPort(custom); port > 0 {
+			cfg.ListenPort = port
+		}
+	}
+
+	m.mu.Lock()
 	m.state, m.cfg, m.secret = "starting", cfg, secret
 	m.node, m.peers, m.message = MeshNode{}, nil, ""
 	m.output, m.lastError = nil, ""
@@ -190,22 +212,32 @@ func (m *MeshManager) Start(cfg MeshConfig, secret string) (MeshStatus, error) {
 		m.fail(err)
 		return m.Snapshot(), err
 	}
-	if err := portAvailable(cfg.ListenPort, "0.0.0.0"); err != nil {
-		m.fail(fmt.Errorf("组网监听端口 %d 已被占用；请换一个端口", cfg.ListenPort))
-		return m.Snapshot(), fmt.Errorf("组网监听端口 %d 已被占用；请换一个端口", cfg.ListenPort)
+	basePort := cfg.ListenPort
+	if basePort <= 0 {
+		basePort = MeshDefaultPort
 	}
-	if err := udpAvailable(cfg.ListenPort, "0.0.0.0"); err != nil {
-		err = fmt.Errorf("组网监听端口 %d 已被占用；请换一个端口", cfg.ListenPort)
-		m.fail(err)
-		return m.Snapshot(), err
+	if cfg.Mode != "config" {
+		if err := portAvailable(basePort, "0.0.0.0"); err != nil {
+			m.fail(fmt.Errorf("组网监听端口 %d 已被占用；请换一个端口", basePort))
+			return m.Snapshot(), fmt.Errorf("组网监听端口 %d 已被占用；请换一个端口", basePort)
+		}
+		if err := udpAvailable(basePort, "0.0.0.0"); err != nil {
+			err = fmt.Errorf("组网监听端口 %d 已被占用；请换一个端口", basePort)
+			m.fail(err)
+			return m.Snapshot(), err
+		}
 	}
-	rpc, err := pickMeshRPCPort(cfg.ListenPort)
+	rpc, err := pickMeshRPCPort(basePort)
 	if err != nil {
 		m.fail(err)
 		return m.Snapshot(), err
 	}
 	configPath := filepath.Join(m.dir, "config.toml")
-	if err := Atomic(configPath, MeshTOML(cfg, secret, m.hostname)); err != nil {
+	content := custom
+	if cfg.Mode != "config" {
+		content = MeshTOML(cfg, secret, m.hostname)
+	}
+	if err := Atomic(configPath, content); err != nil {
 		m.fail(err)
 		return m.Snapshot(), err
 	}
@@ -557,7 +589,7 @@ func (m *MeshManager) Reconfigure(cfg MeshConfig, secret string) (MeshStatus, bo
 }
 
 func meshConfigEqual(left, right MeshConfig) bool {
-	if left.NetworkName != right.NetworkName || left.ListenPort != right.ListenPort ||
+	if left.Mode != right.Mode || left.NetworkName != right.NetworkName || left.ListenPort != right.ListenPort ||
 		left.InstanceID != right.InstanceID || len(left.Peers) != len(right.Peers) {
 		return false
 	}

@@ -286,6 +286,21 @@
       ui.toast('已生成新的网络名称与密钥，保存并入网后才生效');
     } else if (action === 'mesh-probe' || action === 'mesh-fill') {
       await probePublicPeers(action === 'mesh-fill');
+    } else if (action === 'mesh-config-save' || action === 'mesh-config-connect') {
+      await saveMeshConfig(action === 'mesh-config-connect');
+    } else if (action === 'mesh-config-import') {
+      const data = await command('mesh-config-import');
+      if (data?.canceled) return;
+      state.meshConfig = { content: data.content, path: data.path, format: data.format };
+      state.meshConfigDraft = null; state.meshConfigError = '';
+      ui.render();
+      ui.toast(`已导入 ${data.name || '配置文件'}，点「保存并入网」开始组网`);
+    } else if (action === 'mesh-config-template') {
+      if (meshConfigContent().trim()) { ui.toast('编辑框已有内容，清空后才能按图形配置生成'); return; }
+      const data = await command('mesh-config-template');
+      state.meshConfigDraft = data.content;
+      ui.render();
+      ui.toast('已按图形配置生成，请核对网络名称、密钥与对端地址');
     } else if (action === 'mesh-invite') {
       const data = await command('mesh-invite');
       await navigator.clipboard.writeText(data.text);
@@ -301,7 +316,7 @@
     else if (action === 'export-ca') await command('export',{kind:'ca'});
     else if (action === 'open-data') await command('open-data');
   }
-  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','ipv6-cert','start-http','save-service','save-frp','toggle-frp','export-frp','frp-import','frp-save','frp-connect','frp-generate','mesh-save','mesh-toggle','mesh-generate','mesh-invite','mesh-probe','mesh-fill','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
+  const actions = new Set(['toggle-run','restart','open-manager','open-web','cli-start','cli-stop','cli-open','cli-save','local-cert','ipv6-cert','start-http','save-service','save-frp','toggle-frp','export-frp','frp-import','frp-save','frp-connect','frp-generate','mesh-save','mesh-toggle','mesh-generate','mesh-invite','mesh-probe','mesh-fill','mesh-config-save','mesh-config-connect','mesh-config-import','mesh-config-template','export-logs','export-ca','open-data','probe-ipv6','tunnel-start','tunnel-stop']);
   function cliValues() { return { port: $('#cli-port').value, autoStart: $('#cli-auto-start').getAttribute('aria-checked') === 'true', user: $('#cli-user').value.trim() }; }
   function meshValues() {
     return {
@@ -356,6 +371,31 @@
       throw error;
     }
   }
+  // 配置文件模式：编辑框内容优先用草稿，保存成功后清掉草稿。
+  function meshConfigContent() { return state.meshConfigDraft ?? state.meshConfig?.content ?? ''; }
+  async function saveMeshConfig(connect) {
+    const content = meshConfigContent();
+    if (!content.trim()) { state.meshConfigError = '请先粘贴或导入 EasyTier 配置文件'; ui.render(); throw new Error('请先粘贴或导入 EasyTier 配置文件'); }
+    const saved = await command('mesh-config-save', { content, format: 'toml' });
+    state.meshConfig = { content: saved.content, path: saved.path, format: saved.format };
+    state.meshConfigDraft = null; state.meshConfigError = '';
+    // 已在运行时后端会按新配置重新入网，没起来才需要显式启动。
+    if (connect && !['starting', 'running'].includes(state.server.mesh?.state)) {
+      await command('mesh-start');
+      ui.render();
+      ui.toast('已保存并入网');
+      return;
+    }
+    ui.render();
+    ui.toast(connect ? '已按新配置重新入网' : '配置文件已保存');
+  }
+  // 切换配置方式与 FRP 一致：只写 mode，表单内容与配置文件都留着。
+  async function setMeshMode(mode) {
+    const current = state.config?.mesh?.mode === 'config' ? 'config' : 'form';
+    if (current === mode) return;
+    await command('save', { config: { mesh: { mode } } });
+    ui.render();
+  }
   document.addEventListener('click',event => {
     if (!state.live) return;
     const cliSwitch = event.target.closest('#cli-auto-start');
@@ -376,6 +416,12 @@
       if ($('#service-port')) serviceDraft = serviceValues();
       command('save',{config:{[pref.dataset.livePref]:!state.config[pref.dataset.livePref]}}).then(()=>ui.render()).catch(error=>ui.toast(error.message.replace(/^.*Error: /,''))); return;
     }
+    const meshModeBtn = event.target.closest('[data-mesh-mode]');
+    if (meshModeBtn) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      setMeshMode(meshModeBtn.dataset.meshMode).catch(error=>ui.toast(error.message.replace(/^.*Error: /,'')));
+      return;
+    }
     const frpModeBtn = event.target.closest('[data-frp-mode]');
     if (frpModeBtn) {
       event.preventDefault(); event.stopImmediatePropagation();
@@ -392,6 +438,12 @@
     if (state.live && event.target.id === 'mesh-secret') { state.meshSecretDraft = event.target.value; return; }
     if (state.live && event.target.matches('#mesh-name,#mesh-peers,#mesh-port')) { state.meshDraft = meshValues(); return; }
     if (state.live && event.target.matches('#cli-port,#cli-user')) { state.cliDraft = cliValues(); return; }
+    if (state.live && event.target.id === 'mesh-config-editor') {
+      state.meshConfigDraft = event.target.value;
+      state.meshConfigError = '';
+      const error = $('#mesh-error'); if (error) error.textContent = '';
+      return;
+    }
     if (state.live && event.target.id === 'frp-config-editor') {
       // 草稿只留在内存里，切页或收到状态推送都不会丢掉未保存的修改。
       state.frpConfigDraft = event.target.value;

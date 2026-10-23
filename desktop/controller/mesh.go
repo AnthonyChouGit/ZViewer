@@ -5,6 +5,7 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -15,11 +16,18 @@ func (c *Controller) StartMesh() (MeshStatus, error) {
 	if err != nil {
 		return c.mesh.Snapshot(), errors.New("组网密钥无法解密，请重新填写网络密钥")
 	}
-	if config.Mesh.NetworkName == "" {
-		return c.mesh.Snapshot(), errors.New("请先填写网络名称与网络密钥")
-	}
-	if err := MeshSecretValid(secret); err != nil {
-		return c.mesh.Snapshot(), errors.New("请先填写网络密钥")
+	if config.Mesh.Mode == "config" {
+		// 配置文件模式下名称与密钥都写在用户那份 TOML 里，面板字段不参与。
+		if _, statErr := os.Stat(c.MeshCustomPath()); statErr != nil {
+			return c.mesh.Snapshot(), errors.New("请先在配置文件模式下保存 EasyTier 配置")
+		}
+	} else {
+		if config.Mesh.NetworkName == "" {
+			return c.mesh.Snapshot(), errors.New("请先填写网络名称与网络密钥")
+		}
+		if err := MeshSecretValid(secret); err != nil {
+			return c.mesh.Snapshot(), errors.New("请先填写网络密钥")
+		}
 	}
 	if !config.Mesh.Enabled {
 		if _, err := c.store.SaveMesh(map[string]any{"enabled": true}, nil); err != nil {
@@ -85,15 +93,31 @@ func (c *Controller) NewMeshCredentials() map[string]any {
 
 // MeshInvite 生成可以整段发给朋友的入网说明。
 func (c *Controller) MeshInvite() (string, error) {
-	secret, err := c.store.MeshSecret()
-	if err != nil {
-		return "", errors.New("组网密钥无法解密，请重新填写网络密钥")
-	}
-	if strings.TrimSpace(secret) == "" {
-		return "", errors.New("请先填写网络密钥")
-	}
 	config := c.store.Value
-	return meshInvite(config.Mesh, secret, c.mesh.Snapshot(), config.Port), nil
+	name, secret := config.Mesh.NetworkName, ""
+	if config.Mesh.Mode == "config" {
+		// 配置模式下凭据写在用户那份 TOML 里，从这里读出来。
+		raw, err := os.ReadFile(c.MeshCustomPath())
+		if err != nil {
+			return "", errors.New("请先在配置文件模式下保存 EasyTier 配置")
+		}
+		name, secret = meshIdentityFromTOML(string(raw))
+		if name == "" || secret == "" {
+			return "", errors.New("配置文件里缺少 network_name 或 network_secret")
+		}
+	} else {
+		value, err := c.store.MeshSecret()
+		if err != nil {
+			return "", errors.New("组网密钥无法解密，请重新填写网络密钥")
+		}
+		if strings.TrimSpace(value) == "" {
+			return "", errors.New("请先填写网络密钥")
+		}
+		secret = value
+	}
+	meshConfig := config.Mesh
+	meshConfig.NetworkName = name
+	return meshInvite(meshConfig, secret, c.mesh.Snapshot(), config.Port), nil
 }
 
 // ProbePublicPeers 测试公共中继节点的可用性；list 为空时测全部内置候选。
@@ -120,7 +144,8 @@ func (c *Controller) AutoStartMesh() {
 		return
 	}
 	secret, err := c.store.MeshSecret()
-	if err != nil || secret == "" {
+	// 配置文件模式下密钥写在用户那份 TOML 里，本地密钥可以为空。
+	if config.Mesh.Mode != "config" && (err != nil || secret == "") {
 		c.log("组网密钥不可用，已跳过自动入网", "mesh", "WARN")
 		return
 	}
