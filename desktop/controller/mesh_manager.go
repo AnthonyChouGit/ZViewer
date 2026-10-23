@@ -24,6 +24,10 @@ const meshReadyTimeout = 15 * time.Second
 // DHCP 要等有对端接入才分配，这不是错误。
 const meshWaitingMessage = "已加入网络，等待其他设备接入后分配虚拟 IP"
 
+// meshPeerErrorMessage 只在真的连不上对端地址时出现；一旦看见其他节点就清掉，
+// 否则首页那行红字会一直挂着。
+const meshPeerErrorMessage = "有对端地址连不上，检查地址与端口是否正确"
+
 type MeshManager struct {
 	dir      string
 	binDir   string
@@ -136,7 +140,7 @@ func (m *MeshManager) handleLine(line string) {
 		m.mu.Unlock()
 	case strings.Contains(lower, "connect to peer error"), strings.Contains(lower, "dns lookup_ip failed"):
 		m.mu.Lock()
-		m.message = "有对端地址连不上，检查地址与端口是否正确"
+		m.message = meshPeerErrorMessage
 		m.mu.Unlock()
 		m.update()
 	}
@@ -320,6 +324,16 @@ func (m *MeshManager) startPolling(proc *Proc, rpc int) {
 			if node.IPv4 != "" && m.message == meshWaitingMessage {
 				m.message = ""
 				changed = true
+			}
+			// 已经看见其他节点，说明对端地址是通的，把之前的连不上提示撤掉。
+			if m.message == meshPeerErrorMessage {
+				for index := range peers {
+					if !peers[index].Self && peers[index].IPv4 != "" {
+						m.message = ""
+						changed = true
+						break
+					}
+				}
 			}
 			m.node, m.peers = node, peers
 			m.mu.Unlock()

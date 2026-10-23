@@ -91,7 +91,7 @@
         },
         {
           title: '开始前需要什么',
-          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。双方都在 NAT 后面时必须有中转节点，自建 VPS 或公共节点都行。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
+          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。同一局域网里填对方的本机地址；双方都在 NAT 后面时需要一台双方都能连到的中转节点，用自己的 VPS 搭一台最稳。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
         },
         {
           title: '怎么用',
@@ -371,23 +371,11 @@
   }
   // EasyTier 虚拟组网：本机按 EasyTier 协议入网，外部设备用虚拟 IP 访问本机端口。
   // 免账号、免管理员（no_tun），所以面板只暴露网络名称、密钥、对端地址与监听端口。
-  // EasyTier 官方共享节点，与 controller/mesh_config.go 的 MeshPublicPeers 保持一致。
-  const MESH_OFFICIAL_PEERS = ['tcp://public.easytier.cn:11010', 'udp://public.easytier.cn:11010'];
-  // 官方节点快捷按钮：直接改 textarea 并同步草稿，不重绘，避免打断正在输入的内容。
-  function toggleMeshPeer(chip) {
-    const area = $('#mesh-peers');
-    if (!area) return;
-    const peer = chip.dataset.meshPeer;
-    const lines = area.value.split('\n').map(line => line.trim()).filter(Boolean);
-    const index = lines.indexOf(peer);
-    if (index >= 0) lines.splice(index, 1); else lines.push(peer);
-    area.value = lines.join('\n');
-    state.meshDraft = { ...(state.meshDraft || {}), peers: lines };
-    document.querySelectorAll('[data-mesh-peer]').forEach(item => item.setAttribute('aria-pressed', String(lines.includes(item.dataset.meshPeer))));
-  }
+  // 不内置任何公共节点：EasyTier 官方公共节点已停服，域名解析不到，
+  // 中转地址一律由用户填自己的 VPS；同一局域网内直接填对方的本机地址即可。
   function mesh() {
     const live = Boolean(state.live), meshLabels = { stopped: '未入网', starting: '入网中', running: '已入网', stopping: '正在退出', error: '异常' };
-    const saved = state.config?.mesh || { enabled: false, networkName: '', peers: MESH_OFFICIAL_PEERS, listenPort: 11010 };
+    const saved = state.config?.mesh || { enabled: false, networkName: '', peers: [], listenPort: 11010 };
     const m = state.server?.mesh || { state: 'stopped', available: true, peers: [], virtualIp: '', message: '' };
     const draft = state.meshDraft || {};
     const c = { ...saved, ...draft };
@@ -399,6 +387,8 @@
     const server = state.server?.active || state.config || { https: false, port: 3333 };
     const access = online ? `${server.https ? 'https' : 'http'}://${m.virtualIp}:${server.port}/` : '';
     const peers = m.peers || [];
+    // 「在线设备」只数其他设备：本机也会出现在对端列表里，算进去会永远多一台。
+    const remotePeers = peers.filter(peer => !peer.self);
     const status = live ? meshLabels[m.state] || '未入网' : '界面预览';
     const secretValue = state.meshSecretDraft || '';
     const peerCard = peer => {
@@ -406,10 +396,6 @@
       const route = peer.self ? '' : peer.direct ? '直连' : '中继';
       return `<article class="mesh-device${peer.self ? ' is-self' : ''}"><span class="mesh-device-icon">${icon(peer.self ? 'monitor' : 'server')}</span><div class="mesh-device-body"><strong>${esc(peer.hostname || peer.ipv4)}${peer.self ? '<span class="mesh-device-tag">本机</span>' : ''}</strong><span class="mesh-device-meta">${esc(meta)}</span></div>${route ? `<span class="pill ${peer.direct ? 'green' : ''}"><i></i>${route}</span>` : ''}</article>`;
     };
-    const peerChips = MESH_OFFICIAL_PEERS.map(peer => {
-      const [scheme, host] = peer.split('://');
-      return `<button type="button" class="preset-chip" data-mesh-peer="${esc(peer)}" aria-pressed="${(c.peers || []).includes(peer)}">${esc(scheme)} · ${esc(host)}</button>`;
-    }).join('');
     const emptyPeers = `<div class="empty">还没有其他设备加入。把网络名称与密钥发给朋友，他们装 EasyTier 客户端加入后就会出现在这里。</div>`;
     return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) +
       `<div class="form-layout"><section class="panel">
@@ -417,19 +403,18 @@
         <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>组网监听端口 <small>EasyTier 节点间通信</small></span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
         <label class="field"><span>网络密钥 <small>加密保存</small></span><input id="mesh-secret" type="password" value="${esc(secretValue)}" placeholder="${state.server?.meshSecretSaved ? '已保存，留空沿用' : '与本网络其他设备一致'}" autocomplete="off"></label>
         <label class="field"><span>对端地址 <small>一行一个，可留空</small></span><textarea id="mesh-peers" class="codebox config-editor mesh-peers-editor" spellcheck="false" autocomplete="off" placeholder="tcp://1.2.3.4:11010">${esc((c.peers || []).join('\n'))}</textarea></label>
-        <div class="mesh-peer-presets"><span class="preset-label">官方节点</span>${peerChips}</div>
-        <span class="field-note">默认填入 EasyTier 官方共享节点，可以删掉换成自建 VPS。双方都在 NAT 后面时，至少要有一台双方都能连到的中转节点。</span>
+        <span class="field-note">同一局域网里填对方的本机地址即可；双方都在 NAT 后面时，需要一台双方都能连到的中转节点，填自己的 VPS 地址。</span>
         <div class="validation" id="mesh-error" role="alert">${esc(m.message || '')}</div>
         <div class="form-actions">${button('保存','mesh-save','check')}${button('生成新的网络名与密钥','mesh-generate','refresh')}${button(running ? '停止组网' : '保存并入网','mesh-toggle','mesh','primary')}</div>
       </section>
       <aside class="panel"><div class="panel-heading"><h2>本机地址</h2></div>
         <p class="connect-value ${access ? '' : 'is-empty'}">${access ? `<code>${esc(access)}</code>` : waiting ? '等待设备接入' : '尚未入网'}</p>
-        <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>组网端口</span><span>${esc(saved.listenPort || 11010)}</span></div><div class="meta-line"><span>网页端口</span><span>${esc(server.port || 3333)}</span></div><div class="meta-line"><span>在线设备</span><span>${peers.length ? `${peers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div>${m.version ? `<div class="meta-line"><span>组网版本</span><span>${esc(m.version)}</span></div>` : ''}</div>
+        <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>组网端口</span><span>${esc(saved.listenPort || 11010)}</span></div><div class="meta-line"><span>网页端口</span><span>${esc(server.port || 3333)}</span></div><div class="meta-line"><span>在线设备</span><span>${remotePeers.length ? `${remotePeers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div>${m.version ? `<div class="meta-line"><span>组网版本</span><span>${esc(m.version)}</span></div>` : ''}</div>
         ${waiting && lanPeers.length ? `<div class="check-item">${icon('link')}<div><strong>让对方先连本机</strong><br>把 <code>${esc(lanPeers[0])}</code> 填进对方客户端的「对端地址」。</div></div>` : ''}
         <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
         ${m.available === false ? notice('当前运行包不含组网组件，请使用完整安装包。') : notice('本机不需要管理员权限；朋友的设备装 EasyTier 客户端后按同样的网络名称与密钥加入。')}
       </aside></div>
-      <section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${peers.length ? 'green' : ''}"><i></i>${peers.length ? `${peers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
+      <section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
   }
   const connectLinks = {
     frpProvider: [      ['樱花内网穿透', 'natfrp.com', 'https://www.natfrp.com/'],
@@ -660,8 +645,6 @@
   }
   $('#modal').addEventListener('close', () => { state.updateOpen = false; });
   document.addEventListener('click', event => {
-    const meshPeer = event.target.closest('[data-mesh-peer]');
-    if (meshPeer) { event.preventDefault(); toggleMeshPeer(meshPeer); return; }
     if (!event.target.closest('.tutorial')) closeTutorials();
     const tutorialToggle = event.target.closest('[data-tutorial-toggle]');
     if (tutorialToggle) {

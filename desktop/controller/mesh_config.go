@@ -40,17 +40,11 @@ type MeshConfig struct {
 	InstanceID string `json:"instanceId"`
 }
 
-// MeshPublicPeers 是 EasyTier 官方共享节点。
-//
-// 同一台服务同时监听 TCP 与 UDP，两条都填可以在一种协议被网络拦截时自动换另一条
-// （官方文档里"提高可用性"的推荐写法）。与 app.js 的 MESH_OFFICIAL_PEERS 保持一致。
-var MeshPublicPeers = []string{
-	"tcp://public.easytier.cn:11010",
-	"udp://public.easytier.cn:11010",
-}
-
+// 默认不带任何对端地址：EasyTier 官方公共节点（public.easytier.cn / .top）已停服、
+// 域名无法解析，内置只会让每次入网都报「对端连不上」。中转节点由用户填自己的 VPS；
+// 同一局域网内直接把本机地址填给对面即可，不需要中转。
 func DefaultMeshConfig() MeshConfig {
-	return MeshConfig{ListenPort: MeshDefaultPort, Peers: append([]string{}, MeshPublicPeers...)}
+	return MeshConfig{ListenPort: MeshDefaultPort}
 }
 
 var (
@@ -76,6 +70,17 @@ func MeshSecretValid(secret string) error {
 	return nil
 }
 
+// isRetiredMeshPeer 判断地址是不是已经停服的 EasyTier 官方公共节点。
+// 这些地址曾被作为默认值写进配置，现在域名解析不到；保留它们只会让入网一直报
+// 「对端地址连不上」，所以校验时直接丢弃，让老配置自愈。
+func isRetiredMeshPeer(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "public.easytier.cn", "public2.easytier.cn", "public.easytier.top", "public2.easytier.top":
+		return true
+	}
+	return false
+}
+
 // normalizeMeshPeer 把用户填的地址补成 EasyTier 认识的 URI；返回空串表示留空。
 func normalizeMeshPeer(raw string) (string, error) {
 	text := strings.TrimSpace(raw)
@@ -95,6 +100,9 @@ func normalizeMeshPeer(raw string) (string, error) {
 	host, port, err := net.SplitHostPort(rest)
 	if err != nil {
 		return "", errors.New("对端地址需要带端口，例如 1.2.3.4:11010")
+	}
+	if isRetiredMeshPeer(host) {
+		return "", nil
 	}
 	value, convErr := strconv.Atoi(port)
 	if convErr != nil || value < 1 || value > 65535 {

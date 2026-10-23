@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestDefaultMeshHasNoPublicPeers(t *testing.T) {
+	// EasyTier 官方公共节点已停服，默认配置不能带任何对端地址，
+	// 否则每次入网都会先报「对端地址连不上」。
+	cfg := DefaultMeshConfig()
+	if len(cfg.Peers) != 0 {
+		t.Fatalf("默认配置不应内置对端地址，得到 %v", cfg.Peers)
+	}
+	if cfg.ListenPort != MeshDefaultPort {
+		t.Fatalf("默认监听端口应为 %d，得到 %d", MeshDefaultPort, cfg.ListenPort)
+	}
+	if text := MeshTOML(cfg, "secret123", "host"); strings.Contains(text, "[[peer]]") {
+		t.Fatalf("没有对端时不应生成 [[peer]]：\n%s", text)
+	}
+}
+
+func TestNormalizeMeshDropsRetiredPublicPeers(t *testing.T) {
+	// 老配置里残留的官方公共节点地址要在校验时清掉，否则每次入网都先报连不上。
+	cfg, err := NormalizeMesh(map[string]any{
+		"networkName": "zviewer-home",
+		"peers":       []any{"tcp://public.easytier.cn:11010", "udp://public.easytier.top:11010", "tcp://1.2.3.4:11010"},
+	}, DefaultMeshConfig(), true, nil)
+	if err != nil {
+		t.Fatalf("未预期的错误：%v", err)
+	}
+	if len(cfg.Peers) != 1 || cfg.Peers[0] != "tcp://1.2.3.4:11010" {
+		t.Fatalf("应只保留自建节点，得到 %v", cfg.Peers)
+	}
+}
+
 func TestNormalizeMeshAcceptsPeerWithoutScheme(t *testing.T) {
 	cfg, err := NormalizeMesh(map[string]any{
 		"networkName": "ZViewer-Home",

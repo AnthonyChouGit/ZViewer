@@ -733,17 +733,6 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .config-editor:focus { border-color: var(--accent); outline: none; }
 /* 组网对端地址：一行一个地址，不需要整份配置那么高 */
 .mesh-peers-editor { min-height: 84px; max-height: 160px; white-space: pre-wrap; }
-/* 官方共享节点快捷按钮：点击在 textarea 里加/删该行 */
-.mesh-peer-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 4px; }
-.preset-label { color: var(--text-tertiary); font-size: 12px; }
-.preset-chip {
-  height: 24px; padding: 0 10px;
-  border: 1px solid var(--control-stroke); border-bottom-color: var(--control-stroke-strong);
-  border-radius: var(--radius-pill);
-  background: var(--control-fill); color: var(--text-secondary); font-size: 12px;
-}
-.preset-chip:hover { background: var(--control-fill-hover); color: var(--text-primary); }
-.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-tint); color: var(--text-primary); }
 /* 在线设备：卡片网格，与上方两栏卡片留出与 form-layout 一致的间距 */
 .mesh-devices-panel { margin-top: 16px; }
 .mesh-device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
