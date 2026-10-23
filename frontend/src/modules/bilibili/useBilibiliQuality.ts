@@ -14,8 +14,8 @@ import {
   resolveBangumiViaCli,
 } from './cliApi'
 import {
-  getActiveCliProxyUrl,
   getEffectivePreferMp4,
+  resolveBilibiliCliProxyDecision,
 } from '@/modules/movie-source/resolver'
 
 function qualitiesEqual(a: QualityOption[], b: QualityOption[]): boolean {
@@ -122,13 +122,7 @@ export function useBilibiliQuality(ctx: BilibiliQualityContext) {
         if (preResolved) {
           resolved = preResolved
         } else {
-          const parsePrefs = getBilibiliParseOptions(movie.id)
-          // cliOnly（仅允许CLI模式）：解析前强制校验 CLI 已连接——CLI 未连接
-          // 时服务器解析会产出裸 CDN URL，挂载后媒体流无法经本机 CLI（违反
-          // cliOnly 零媒体转发语义），直接报错阻止切换
-          const cliOnly = movie.cliOnly === true
-          const proxyUrl =
-            cliOnly || parsePrefs.cliEnabled ? getActiveCliProxyUrl() : null
+          const { cliOnly, proxyUrl } = resolveBilibiliCliProxyDecision(movie)
           if (cliOnly && !proxyUrl) {
             throw new Error(
               '该影片已开启「仅允许CLI模式」：请安装并连接 ZViewer CLI 后观看'

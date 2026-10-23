@@ -32,11 +32,9 @@ import { MovieRuntimeSettings } from './MovieRuntimeSettings'
 import {
   getEffectivePreferMp4,
   getActiveCliProxyUrl,
+  resolveBilibiliCliProxyDecision,
 } from '@/modules/movie-source/resolver'
-import {
-  useBilibiliParsePreferences,
-  getBilibiliParseOptions,
-} from '@/modules/bilibili/parseOptions'
+import { useBilibiliParsePreferences } from '@/modules/bilibili/parseOptions'
 import { useCliAgentStore } from '@/store/cliAgentStore'
 import {
   getHdrSupport,
@@ -288,12 +286,8 @@ export function MovieListPanel({
 
     setQualityLoadingId(movie.id)
     try {
-      const parsePrefs = getBilibiliParseOptions(movie.id)
       // cliOnly 时强制走 CLI 解析分支（CLI 未连接已在上方拦截）
-      const proxyUrl =
-        parsePrefs.cliEnabled || movie.cliOnly === true
-          ? getActiveCliProxyUrl()
-          : null
+      const { proxyUrl } = resolveBilibiliCliProxyDecision(movie)
       let resolved: ResolvedSource
 
       if (proxyUrl) {
@@ -464,12 +458,8 @@ export function MovieListPanel({
 
     setPageLoadingId(movie.id)
     try {
-      const parsePrefs = getBilibiliParseOptions(movie.id)
       // cliOnly 时强制走 CLI 解析分支（CLI 未连接已在上方拦截）
-      const proxyUrl =
-        parsePrefs.cliEnabled || movie.cliOnly === true
-          ? getActiveCliProxyUrl()
-          : null
+      const { proxyUrl } = resolveBilibiliCliProxyDecision(movie)
       const targetPage = movie.pages?.find((p) => p.page === page)
       let resolved: ResolvedSource
 

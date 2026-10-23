@@ -120,6 +120,25 @@ export function getActiveCliProxyUrl(): string | null {
 }
 
 /**
+ * 计算 B站 影片的 CLI 代理解析决策（纯数据，不代为抛错）。
+ *
+ * CLI 代理在服务器全局注册，getActiveCliProxyUrl 取第一个可用代理地址；
+ * cliOnly（仅允许 CLI 模式）或影片级 CLI 启用时返回该地址，否则返回 null
+ * （走服务器端解析）。cliOnly 但 CLI 未连接属于「禁止服务器转发媒体流」的
+ * 硬约束，各调用点的拦截提示文案不同，故本函数只返回决策，抛错交由调用方。
+ */
+export function resolveBilibiliCliProxyDecision(movie: Movie): {
+  cliOnly: boolean
+  proxyUrl: string | null
+  cliEnabled: boolean
+} {
+  const { cliEnabled } = getBilibiliParseOptions(movie.id)
+  const cliOnly = movie.cliOnly === true
+  const proxyUrl = cliOnly || cliEnabled ? getActiveCliProxyUrl() : null
+  return { cliOnly, proxyUrl, cliEnabled }
+}
+
+/**
  * 判断影片是否为 B站 PGC 内容（番剧 / 影视）。
  *
  * PGC 影片的 url 为 bangumi ep/ss 链接，或分集列表（pages）带 epId
@@ -279,14 +298,8 @@ export async function resolveBilibiliOnline(
     useHostCookie?: boolean
   }
 ): Promise<ResolvedMovieSource> {
-  const parsePrefs = getBilibiliParseOptions(movie.id)
-  // cliOnly（仅允许 CLI 模式）：影片级强制——本机偏好未开启 CLI 也强制启用，
-  // CLI 未连接直接抛错（服务器零媒体流量语义，禁止回退服务器转发）。
-  // 注意：解析本身仍允许走服务器（PGC ep 链接解析锚定房主 Cookie，属信令级
-  // 请求）；强制的是媒体流必须经成员本机 CLI 代理（见 toPlayerSource）。
-  const cliOnly = movie.cliOnly === true
-  const proxyUrl =
-    cliOnly || parsePrefs.cliEnabled ? getActiveCliProxyUrl() : null
+  const { cliOnly, proxyUrl, cliEnabled } =
+    resolveBilibiliCliProxyDecision(movie)
   if (cliOnly && !proxyUrl) {
     throw new Error(
       '该影片已开启「仅允许CLI模式」：请安装并连接 ZViewer CLI 后观看（此影片不经服务器转发媒体流）'
@@ -296,9 +309,9 @@ export async function resolveBilibiliOnline(
   // 返回 true，回退服务器 MP4 直链
   const effectivePreferMp4 =
     options?.preferMp4 ?? getEffectivePreferMp4(movie.id)
-  const forceDash = (parsePrefs.cliEnabled || cliOnly) && !!proxyUrl
+  const forceDash = (cliEnabled || cliOnly) && !!proxyUrl
 
-  if (parsePrefs.cliEnabled && !proxyUrl) {
+  if (cliEnabled && !proxyUrl) {
     console.warn(
       '[movie-source-resolver] CLI 已启用但本地代理未连接，回退服务器 MP4 解析'
     )
@@ -332,33 +345,17 @@ export async function resolveBilibiliOnline(
   }
 
   let resolvedSource: ResolvedMovieSource
-  if (proxyUrl) {
-    const bvid = extractBvid(movie.url)
-    if (bvid && movie.cid) {
-      const resolved = await resolveBilibiliViaCli(
-        proxyUrl,
-        bvid,
-        movie.cid,
-        requestedQn,
-        effectivePreferMp4,
-        forceDash
-      )
-      resolvedSource = mapResolvedSourceToMovieSource(resolved, movie)
-    } else {
-      const resolved = await resolveBilibiliWithOptions(
-        movie.url,
-        requestedQn,
-        onProgress,
-        {
-          preferMp4: effectivePreferMp4,
-          // PGC ep 链接无法走 CLI 的 bvid 分支，服务器 fallback 同样锚定房主
-          movieId: useHostCookie ? movie.id : undefined,
-          // UGC 多 P：按目标分 P 解析（切 P 后 movie.url 不变）
-          page: options?.page,
-        }
-      )
-      resolvedSource = mapResolvedSourceToMovieSource(resolved, movie)
-    }
+  const bvid = extractBvid(movie.url)
+  if (proxyUrl && bvid && movie.cid) {
+    const resolved = await resolveBilibiliViaCli(
+      proxyUrl,
+      bvid,
+      movie.cid,
+      requestedQn,
+      effectivePreferMp4,
+      forceDash
+    )
+    resolvedSource = mapResolvedSourceToMovieSource(resolved, movie)
   } else {
     const resolved = await resolveBilibiliWithOptions(
       movie.url,
@@ -366,7 +363,9 @@ export async function resolveBilibiliOnline(
       onProgress,
       {
         preferMp4: effectivePreferMp4,
+        // PGC ep 链接无法走 CLI 的 bvid 分支，服务器 fallback 同样锚定房主
         movieId: useHostCookie ? movie.id : undefined,
+        // UGC 多 P：按目标分 P 解析（切 P 后 movie.url 不变）
         page: options?.page,
       }
     )
