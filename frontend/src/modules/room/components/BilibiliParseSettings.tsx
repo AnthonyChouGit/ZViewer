@@ -30,9 +30,7 @@ import {
   getEffectivePreferMp4,
   isBilibiliPgcMovie,
 } from '@/modules/movie-source/resolver'
-import { useCliAgent } from '@/hooks/useCliAgent'
-import { useAuthStore } from '@/store/authStore'
-import { getApiUrl } from '@/lib/api'
+import { openCliSetupPage, useCliAgent } from '@/hooks/useCliAgent'
 import { cn } from '@/lib/utils'
 import { useSystemSettingsStore } from '@/store/systemSettingsStore'
 
@@ -177,14 +175,6 @@ export function BilibiliParseSettings({
     triggerViewerSourceReload,
   ])
   /* eslint-enable react-hooks/set-state-in-effect */
-
-  const handleOpenCliSetup = useCallback(() => {
-    const url = new URL('http://127.0.0.1:9333/')
-    url.searchParams.set('server', getApiUrl())
-    const username = useAuthStore.getState().user?.username
-    if (username) url.searchParams.set('user', username)
-    window.open(url.toString(), '_blank', 'noopener,noreferrer')
-  }, [])
 
   /** 「仅允许CLI模式」开关（仅房主可操作，随影片持久化、全房间同步生效） */
   const handleCliOnlyChange = useCallback(
@@ -405,7 +395,7 @@ export function BilibiliParseSettings({
 
             <button
               type="button"
-              onClick={handleOpenCliSetup}
+              onClick={openCliSetupPage}
               className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-md bg-[var(--md-sys-color-surface-container)] px-2 py-1 text-[10px] font-semibold text-[var(--md-sys-color-on-surface-variant)] transition-all hover:bg-[var(--md-sys-color-surface-container-highest)]"
               style={{
                 border: '1px solid var(--md-sys-color-outline)',

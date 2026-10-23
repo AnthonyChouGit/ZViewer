@@ -2,11 +2,27 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useSocket } from './useSocket'
 import { useAuthStore } from '@/store/authStore'
 import { useCliAgentStore } from '@/store/cliAgentStore'
+import { getApiUrl } from '@/lib/api'
 
 /** 本地 CLI 默认端口 */
 export const CLI_DEFAULT_PORT = 9333
 /** 本地 CLI 健康检查地址 */
 export const CLI_HEALTH_URL = `http://127.0.0.1:${CLI_DEFAULT_PORT}/health`
+
+/**
+ * 打开本地 CLI 配置页（新标签页）。
+ *
+ * 带上当前服务器地址与登录用户名：CLI 在服务器上按用户名归属注册，
+ * 配置页据此把代理绑定到当前账号。房间解析设置、观众引导覆盖层、音乐
+ * 播放设置三处入口共用，避免端口/参数构造各写一遍而漂移。
+ */
+export function openCliSetupPage(): void {
+  const url = new URL(`http://127.0.0.1:${CLI_DEFAULT_PORT}/`)
+  url.searchParams.set('server', getApiUrl())
+  const username = useAuthStore.getState().user?.username
+  if (username) url.searchParams.set('user', username)
+  window.open(url.toString(), '_blank', 'noopener,noreferrer')
+}
 /** 健康检查轮询间隔（毫秒） */
 const HEALTH_POLL_INTERVAL_MS = 5000
 

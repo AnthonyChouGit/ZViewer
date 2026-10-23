@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, MessagesSquare, MonitorSmartphone } from 'lucide-react'
-import { getApiUrl } from '@/lib/api'
-import { CLI_DEFAULT_PORT, useCliAgent } from '@/hooks/useCliAgent'
-import { useAuthStore } from '@/store/authStore'
+import { openCliSetupPage, useCliAgent } from '@/hooks/useCliAgent'
 import { DEFAULT_DANMAKU_STYLE, useDanmakuStore } from '@/store/danmakuStore'
 import {
   DanmakuAdvancedSettings,
@@ -89,14 +87,6 @@ export function PlayerSettingsModal({ onDismiss }: { onDismiss: () => void }) {
    *  MP4 直链模式固定 720P，不显示 */
   const qnSelectorVisible =
     (musicVideoCli && cliAvailable) || (!musicVideoCli && musicVideoServerDash)
-  const username = useAuthStore((s) => s.user?.username)
-  const openCliSetup = () => {
-    const url = new URL(`http://127.0.0.1:${CLI_DEFAULT_PORT}/`)
-    url.searchParams.set('server', getApiUrl())
-    if (username) url.searchParams.set('user', username)
-    window.open(url.toString(), '_blank', 'noopener,noreferrer')
-  }
-
   // ===== B站 大会员状态（分辨率选择器可见时拉取）：过滤分辨率档位——
   //       普通账号最高 1080P，会员档（4K/1080P60/高码率）仅大会员可见 =====
   const [biliVip, setBiliVip] = useState(false)
@@ -424,7 +414,7 @@ export function PlayerSettingsModal({ onDismiss }: { onDismiss: () => void }) {
                 )}
                 <button
                   type="button"
-                  onClick={openCliSetup}
+                  onClick={openCliSetupPage}
                   className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-semibold text-white/60 transition-colors hover:bg-white/10"
                   style={{ border: '0.5px solid rgba(255, 255, 255, 0.2)' }}
                 >

@@ -12,11 +12,9 @@
  * - 自动：cliAgent.available 由未连接变为已连接时自动重载。
  */
 import { ExternalLink, Lock, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRoomStore } from '@/store/roomStore'
-import { useAuthStore } from '@/store/authStore'
-import { useCliAgent } from '@/hooks/useCliAgent'
-import { getApiUrl } from '@/lib/api'
+import { openCliSetupPage, useCliAgent } from '@/hooks/useCliAgent'
 
 export function ViewerCliRequiredOverlay() {
   const movieId = useRoomStore((s) => s.viewerCliRequiredMovieId)
@@ -25,14 +23,6 @@ export function ViewerCliRequiredOverlay() {
   )
   const movie = useRoomStore((s) => s.movies.find((m) => m.id === movieId))
   const cliAgent = useCliAgent()
-
-  const handleOpenCliSetup = useCallback(() => {
-    const url = new URL('http://127.0.0.1:9333/')
-    url.searchParams.set('server', getApiUrl())
-    const username = useAuthStore.getState().user?.username
-    if (username) url.searchParams.set('user', username)
-    window.open(url.toString(), '_blank', 'noopener,noreferrer')
-  }, [])
 
   // CLI 连接后自动重载：available false→true 时触发观众端源重载，
   // ensureViewerLocalOverride 将清除标志并按 CLI 正常解析
@@ -61,7 +51,7 @@ export function ViewerCliRequiredOverlay() {
       <div className="flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
-          onClick={handleOpenCliSetup}
+          onClick={openCliSetupPage}
           className="flex items-center gap-1 rounded-md bg-[var(--md-sys-color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--md-sys-color-on-primary)] transition-opacity hover:opacity-90"
         >
           <ExternalLink className="h-3 w-3" />
