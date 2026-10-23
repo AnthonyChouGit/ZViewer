@@ -3,7 +3,7 @@ package controller
 // EasyTier 公共中继节点：内置候选列表 + 可用性探测。
 //
 // 这些节点由社区维护，随时可能下线，所以一律只作为候选展示：
-// 默认配置里不写任何对端地址，用户点「填入可用节点」才会真正落到配置。
+// 默认配置里不写任何对端地址，用户点「填入最快节点」才会真正落到配置。
 // 探测只做「到 host:port 能不能建 TCP 连接」，不做 EasyTier 握手——握手需要网络名称与
 // 密钥，公开节点不会为测试单独响应。对 tcp/ws/wss 来说，能建连就说明服务在监听，
 // 精度足够判断「这个节点还活着吗」。
@@ -12,7 +12,6 @@ import (
 	"errors"
 	"net"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,24 +137,4 @@ func meshProbeReason(err error) string {
 		return "域名解析失败"
 	}
 	return "无法连接"
-}
-
-// MeshBestPeers 从探测结果里挑出可用的节点：按延迟排序，最多 limit 个。
-// 没测过的节点不参与——「一键填写」只写已验证能连上的地址。
-func MeshBestPeers(results []MeshPeerProbe, limit int) []string {
-	usable := make([]MeshPeerProbe, 0, len(results))
-	for _, item := range results {
-		if item.State == "ok" {
-			usable = append(usable, item)
-		}
-	}
-	sort.SliceStable(usable, func(i, j int) bool { return usable[i].LatencyMs < usable[j].LatencyMs })
-	out := make([]string, 0, len(usable))
-	for _, item := range usable {
-		if len(out) >= limit {
-			break
-		}
-		out = append(out, item.URI)
-	}
-	return out
 }

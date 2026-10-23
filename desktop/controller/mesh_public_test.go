@@ -73,24 +73,6 @@ func TestProbeMeshPeerMarksUDPUnknown(t *testing.T) {
 	}
 }
 
-func TestMeshBestPeersSortsAndLimits(t *testing.T) {
-	results := []MeshPeerProbe{
-		{URI: "tcp://slow:11010", State: "ok", LatencyMs: 900},
-		{URI: "tcp://dead:11010", State: "fail", Reason: "连接超时"},
-		{URI: "tcp://fast:11010", State: "ok", LatencyMs: 20},
-		{URI: "udp://maybe:11010", State: "unknown"},
-		{URI: "tcp://mid:11010", State: "ok", LatencyMs: 120},
-	}
-	best := MeshBestPeers(results, 2)
-	want := []string{"tcp://fast:11010", "tcp://mid:11010"}
-	if len(best) != len(want) || best[0] != want[0] || best[1] != want[1] {
-		t.Fatalf("挑出的节点不对：%v", best)
-	}
-	if got := MeshBestPeers(results, 10); len(got) != 3 {
-		t.Fatalf("不可用节点不应参与填写：%v", got)
-	}
-}
-
 func TestMeshPublicPeersIsCopy(t *testing.T) {
 	list := MeshPublicPeers()
 	if len(list) == 0 {

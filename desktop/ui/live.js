@@ -316,8 +316,13 @@
     await command('mesh-save', { config: meshValues(), networkSecret: secret || undefined });
     state.meshDraft = null; state.meshSecretDraft = '';
   }
-  // 公共对端服务器：先测一遍再谈填不填。fill=true 时把能连上的按延迟取前 4 个
-  // 合并进对端地址（用户自己填的 VPS 地址保留），不覆盖已有内容。
+  // 比较两个对端地址是否同一个：忽略协议前缀与大小写，端口照旧。
+  function samePeer(a, b) {
+    const norm = value => String(value || '').trim().toLowerCase().replace(/^(tcp|udp|ws|wss):\/\//, '');
+    return norm(a) === norm(b);
+  }
+  // 公共对端服务器：先测一遍再谈填不填。fill=true 时只把延迟最低的那个写进对端地址
+  // —— 对端地址只负责首次发现，连上一个节点后整个网络就都知道了，多填只是备份。
   async function probePublicPeers(fill) {
     const draft = meshValues();
     state.meshProbe = { running: true, at: state.meshProbe?.at || '', results: state.meshProbe?.results || {} };
@@ -334,15 +339,17 @@
         return;
       }
       if (!usable.length) { ui.render(); ui.toast('没有可连接的公共节点，请稍后重试或用自建 VPS'); return; }
-      const merged = [...(draft.peers || [])];
-      for (const item of usable.sort((a, b) => a.latencyMs - b.latencyMs)) {
-        if (merged.length >= 4) break;
-        if (!merged.includes(item.uri)) merged.push(item.uri);
+      const fastest = usable.slice().sort((a, b) => a.latencyMs - b.latencyMs)[0];
+      const current = draft.peers || [];
+      if (current.some(peer => samePeer(peer, fastest.uri))) {
+        ui.render();
+        ui.toast(`最快节点已在列表里：${fastest.uri}（${fastest.latencyMs} ms）`);
+        return;
       }
-      const added = merged.length - (draft.peers || []).length;
-      state.meshDraft = { ...draft, peers: merged };
+      if (current.length >= 4) { ui.render(); ui.toast('对端地址已满 4 个，先删掉一个再填'); return; }
+      state.meshDraft = { ...draft, peers: [...current, fastest.uri] };
       ui.render();
-      ui.toast(added ? `已填入 ${added} 个可用节点，保存并入网后生效` : '对端地址已满 4 个，先删掉一些再填');
+      ui.toast(`已填入最快节点 ${fastest.uri}（${fastest.latencyMs} ms），保存并入网后生效`);
     } catch (error) {
       state.meshProbe = { ...state.meshProbe, running: false };
       ui.render();

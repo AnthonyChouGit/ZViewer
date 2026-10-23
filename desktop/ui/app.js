@@ -91,11 +91,11 @@
         },
         {
           title: '开始前需要什么',
-          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。同一局域网里填对方的本机地址；双方都在 NAT 后面时需要一台双方都能连到的中转节点，用自己的 VPS 搭一台最稳。</li><li>不想自己搭中转时，用本页“公共对端服务器”卡片：先测可用性，再一键填入能连上的社区节点。这些节点由社区维护，随时可能失效，也不保证速度。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
+          body: '<ul><li>一组网络名称与网络密钥，与本网络内其他设备保持一致；点“生成新的网络名与密钥”会自动填好并保存。</li><li>一个对端地址，用来让双方互相发现。同一局域网里填对方的本机地址；双方都在 NAT 后面时需要一台双方都能连到的中转节点，用自己的 VPS 搭一台最稳。</li><li>不想自己搭中转时，用本页“公共对端服务器”卡片：先测可用性，再一键填入最快的一个社区节点。这些节点由社区维护，随时可能失效，也不保证速度。</li><li>组网监听端口默认 11010，与本机服务端口不冲突。</li></ul>'
         },
         {
           title: '怎么用',
-          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入可用节点”，保存并入网。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
+          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入最快节点”，保存并入网。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
         },
         {
           title: '常见情况',
@@ -421,8 +421,8 @@
         <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>入网参数</h2><p class="cli-caption">免账号 · 免管理员权限</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
         <div class="form-row"><label class="field"><span>网络名称</span><input id="mesh-name" value="${esc(c.networkName || '')}" placeholder="zviewer-home" autocomplete="off" spellcheck="false" maxlength="32"></label><label class="field"><span>组网监听端口 <small>EasyTier 节点间通信</small></span><input id="mesh-port" type="number" min="1" max="65535" value="${esc(c.listenPort || 11010)}"></label></div>
         <label class="field"><span>网络密钥 <small>加密保存</small></span><input id="mesh-secret" type="password" value="${esc(secretValue)}" placeholder="${state.server?.meshSecretSaved ? '已保存，留空沿用' : '与本网络其他设备一致'}" autocomplete="off"></label>
-        <label class="field"><span>对端地址 <small>一行一个，可留空</small></span><textarea id="mesh-peers" class="codebox config-editor mesh-peers-editor" spellcheck="false" autocomplete="off" placeholder="tcp://1.2.3.4:11010">${esc((c.peers || []).join('\n'))}</textarea></label>
-        <span class="field-note">同一局域网里填对方的本机地址即可；双方都在 NAT 后面时，需要一台双方都能连到的中转节点，填自己的 VPS 地址。</span>
+        <label class="field"><span>对端地址 <small>填一个即可，可留空</small></span><textarea id="mesh-peers" class="codebox config-editor mesh-peers-editor" spellcheck="false" autocomplete="off" placeholder="tcp://1.2.3.4:11010">${esc((c.peers || []).join('\n'))}</textarea></label>
+        <span class="field-note">同一局域网里填对方的本机地址即可；双方都在 NAT 后面时，需要一台双方都能连到的中转节点，填自己的 VPS 地址。对端地址只负责首次发现，填一个能连上的就够。</span>
         <div class="validation" id="mesh-error" role="alert">${esc(m.message || '')}</div>
         <div class="form-actions">${button('保存','mesh-save','check')}${button('生成新的网络名与密钥','mesh-generate','refresh')}${button(running ? '停止组网' : '保存并入网','mesh-toggle','mesh','primary')}</div>
       </section>
@@ -435,8 +435,8 @@
       </aside></div>
       <section class="panel mesh-public-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('globe')}</span><div><h2>公共对端服务器</h2><p class="cli-caption">社区维护 · 随时可能失效</p></div></div><span class="pill ${probeTone}"><i></i>${esc(probeSummary)}</span></div>
         <div class="mesh-public-list">${publicPeers.map(publicRow).join('') || '<div class="empty">没有可用的候选节点。</div>'}</div>
-        <div class="form-actions">${button(probe.at ? '重新测试' : '测试可用性', 'mesh-probe', 'refresh')}${button('填入可用节点', 'mesh-fill', 'check', 'primary')}</div>
-        <p class="field-note">${probe.at ? `上次测试 ${esc(probe.at)} · ` : ''}「填入可用节点」只写能连上的地址，按延迟从低到高取前 4 个；填好后仍需保存并入网。</p>
+        <div class="form-actions">${button(probe.at ? '重新测试' : '测试可用性', 'mesh-probe', 'refresh')}${button('填入最快节点', 'mesh-fill', 'check', 'primary')}</div>
+        <p class="field-note">${probe.at ? `上次测试 ${esc(probe.at)} · ` : ''}「填入最快节点」会先重测一遍，只把延迟最低的那个写进对端地址；连上一个节点就能发现整个网络，需要冗余再手动加一行。</p>
       </section>
       <section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;
   }
