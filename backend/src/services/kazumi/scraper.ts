@@ -9,29 +9,11 @@ import * as xpath from 'xpath';
 import { parseDocument } from 'htmlparser2';
 import { render } from 'dom-serializer';
 import { fetchText } from '../anisubs/httpClient';
+import { toAbsoluteUrl, resolveBaseUrl, detectMediaFormat } from '../anisubs/scraper';
 import type { KazumiMediaFormat, KazumiRule } from './types';
 
 const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-export function toAbsoluteUrl(url: string, baseUrl: string): string {
-  if (!url) return url;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
-  try {
-    return new URL(url, baseUrl).href;
-  } catch {
-    return url;
-  }
-}
-
-export function resolveBaseUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.protocol}//${u.host}`;
-  } catch {
-    return url;
-  }
-}
 
 function isHttpScheme(scheme: string): boolean {
   return scheme === 'http:' || scheme === 'https:';
@@ -181,17 +163,6 @@ export function extractEpisodeNumber(name: string): number {
   if (!m) return 0;
   const n = Number(m[1] || m[2]);
   return Number.isNaN(n) ? 0 : n;
-}
-
-export function detectMediaFormat(url: string): KazumiMediaFormat {
-  const lower = url.toLowerCase().split('?')[0];
-  if (lower.endsWith('.m3u8')) return 'hls';
-  if (lower.endsWith('.flv')) return 'flv';
-  if (lower.endsWith('.mp4')) return 'mp4';
-  if (lower.includes('.m3u8')) return 'hls';
-  if (lower.includes('.flv')) return 'flv';
-  if (lower.includes('.mp4')) return 'mp4';
-  return 'unknown';
 }
 
 function findMediaUrl(html: string): string | undefined {

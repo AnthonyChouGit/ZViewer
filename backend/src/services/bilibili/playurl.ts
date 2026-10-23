@@ -7,6 +7,7 @@ import {
   QN_HDR,
   QN_DOLBY_VISION,
 } from './permission';
+import { buildQueryString } from '../../utils/url';
 
 export interface DashMediaTrack {
   baseUrl: string;
@@ -133,14 +134,6 @@ export class NoPermissionError extends Error {
 }
 
 const DEFAULT_FOURK = 1;
-
-function buildQueryString(params: Record<string, string>): string {
-  return Object.entries(params)
-    .map(
-      ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`,
-    )
-    .join('&');
-}
 
 function sortByBandwidthDesc<T extends { bandwidth: number }>(tracks?: T[]): T[] {
   if (!tracks) return [];

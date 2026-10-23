@@ -1,5 +1,6 @@
 import { bilibiliFetch } from './client';
 import { getWbiKeys, signParams, clearWbiKeyCache } from './wbi';
+import { buildQueryString } from '../../utils/url';
 
 export interface BilibiliVideoPage {
   cid: number;
@@ -112,14 +113,6 @@ interface RawSearchResponse {
   result?: RawSearchItem[];
   /** 搜索结果总数（分页用） */
   numResults?: number;
-}
-
-function buildQueryString(params: Record<string, string>): string {
-  return Object.entries(params)
-    .map(
-      ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`,
-    )
-    .join('&');
 }
 
 /**

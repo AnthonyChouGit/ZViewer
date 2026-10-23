@@ -1,5 +1,6 @@
 import { bilibiliFetch } from './client';
 import { getWbiKeys, signParams } from './wbi';
+import { buildQueryString } from '../../utils/url';
 
 export interface BangumiEpisode {
   bvid: string;
@@ -25,15 +26,6 @@ interface BangumiSeasonResult {
   episodes?: unknown[];
   main_section?: { episodes?: unknown[] };
   section?: { episodes?: unknown[] }[];
-}
-
-/** 将参数对象转为 URL 查询字符串（已编码）。 */
-function buildQueryString(params: Record<string, string>): string {
-  return Object.entries(params)
-    .map(
-      ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`,
-    )
-    .join('&');
 }
 
 function normalizeImageUrl(url: string): string {

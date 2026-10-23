@@ -25,6 +25,7 @@ import {
 } from '../services/cms';
 import { loadTvboxCmsSites } from '../services/cms/tvboxConfigLoader';
 import { createAntileechProxyHandler } from './antileech-proxy';
+import { ResolveCache } from '../utils/resolve-cache';
 
 const router = Router();
 
@@ -162,28 +163,20 @@ router.get('/detail', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-// --- 解析播放地址（6min TTL 缓存 + 单飞去重） ---
+// --- 解析播放地址（6min TTL 缓存 + 单飞去重，复用通用 ResolveCache） ---
 // 采集站解析（详情 API + 播放页抓取）较慢，拉长窗口让多人同集共享一次解析；
 // 采集直链普遍短时效但仍在几分钟以上，6min 窗口内复用一般安全
 
 const RESOLVE_CACHE_TTL_MS = 6 * 60 * 1000;
 
-interface ResolveCacheEntry {
-  result: unknown;
-  fetchedAt: number;
-}
+type CmsResolvePayload = {
+  success: true;
+  url: string;
+  headers?: Record<string, string>;
+  format?: string;
+};
 
-const resolveCache = new Map<string, ResolveCacheEntry>();
-const resolveInflight = new Map<string, Promise<unknown>>();
-
-function makeResolveCacheKey(
-  source: string,
-  vodId: string,
-  playFromIndex: number,
-  episodeIndex: number,
-): string {
-  return `${source}|${vodId}|${playFromIndex}|${episodeIndex}`;
-}
+const resolveCache = new ResolveCache<CmsResolvePayload>(RESOLVE_CACHE_TTL_MS);
 
 router.post('/resolve', async (req: AuthenticatedRequest, res: Response) => {
   const source = req.body?.source;
@@ -210,59 +203,22 @@ router.post('/resolve', async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
-  const cacheKey = makeResolveCacheKey(
-    source.trim(),
-    normalized.vodId,
-    normalized.playFromIndex,
-    normalized.episodeIndex,
-  );
+  const cacheKey = `${source.trim()}|${normalized.vodId}|${normalized.playFromIndex}|${normalized.episodeIndex}`;
 
-  const cached = resolveCache.get(cacheKey);
-  if (cached && Date.now() - cached.fetchedAt < RESOLVE_CACHE_TTL_MS) {
-    res.json(cached.result);
-    return;
-  }
-
-  const existing = resolveInflight.get(cacheKey);
-  if (existing) {
-    try {
-      res.json(await existing);
-    } catch (err) {
-      console.error('[cms] resolve error (inflight):', err);
-      res.status(502).json({
-        success: false,
-        message: err instanceof Error ? err.message : '解析播放地址失败',
-      });
-    }
-    return;
-  }
-
-  const promise = provider
-    .getPlaybackUrl(normalized)
-    .then((result) => {
+  try {
+    const payload = await resolveCache.run(cacheKey, async () => {
+      const result = await provider.getPlaybackUrl(normalized);
       if (!result) {
         throw new Error('无法解析播放地址');
       }
-      const payload = {
+      return {
         success: true,
         url: result.url,
         headers: result.headers,
         format: result.format,
       };
-      resolveCache.set(cacheKey, {
-        result: payload,
-        fetchedAt: Date.now(),
-      });
-      return payload;
-    })
-    .finally(() => {
-      resolveInflight.delete(cacheKey);
     });
-
-  resolveInflight.set(cacheKey, promise);
-
-  try {
-    res.json(await promise);
+    res.json(payload);
   } catch (err) {
     console.error('[cms] resolve error:', err);
     res.status(502).json({

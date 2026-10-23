@@ -19,12 +19,10 @@ import {
   extractText,
   extractAttr,
   extractEpisodeNumber,
-  resolveBaseUrl,
-  toAbsoluteUrl,
   resolveVideoUrl,
   normalizeEpisodeUrl,
-  detectMediaFormat,
 } from './scraper';
+import { resolveBaseUrl, toAbsoluteUrl, detectMediaFormat } from '../anisubs/scraper';
 import {
   apiSearch,
   apiChapters,

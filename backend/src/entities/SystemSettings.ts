@@ -90,14 +90,6 @@ export class SystemSettings {
   cdnAccelerate!: boolean;
 
   /**
-   * 内嵌字幕功能开关（已废弃，仅保留数据库列避免迁移）。
-   * 内嵌字幕提取已全部前端化（浏览器端 MKV demux 流式提取），
-   * 中转与直链均可用，不再需要服务器开关控制。
-   */
-  @Column({ type: 'boolean', default: true })
-  embeddedSubtitleEnabled!: boolean;
-
-  /**
    * 浏览器播放引擎（playsvideo）全局开关。
    * - true：MKV/AVI/TS 等容器或 DTS/AC3/FLAC 等音轨由浏览器端
    *   playsvideo 引擎重封装/转码播放（默认，兼容性最佳）
@@ -125,18 +117,6 @@ export class SystemSettings {
    */
   @Column({ type: 'boolean', default: false })
   roomMultiInstanceLogin!: boolean;
-
-  /**
-   * @deprecated 历史字段，运行时已不再读取（保留列只为兼容旧库，避免升级时
-   * 做数据迁移）。原先的「UDP / TCP 切换开关」已移除：LiveKit 无法禁用 UDP
-   * 候选，服务端始终同时发布 UDP 3333 与 ICE/TCP 3337，由客户端 ICE 自动择优
-   * （UDP 直连 > TCP 直连 > TURN 中继），无需人工切换。
-   * 需要彻底关闭 3337 监听（如只想开放 UDP 端口）时，用环境变量
-   * LIVEKIT_RTC_TCP_PORT=0 —— 必须显式写 0，不能删除变量：删除会让 LiveKit
-   * 回落到默认 7881，而 7881 未做端口映射，客户端只会拿到必然连不上的候选。
-   */
-  @Column({ type: 'text', default: 'tcp' })
-  voiceTransportMode!: string;
 
   /**
    * 自定义语音聊天 LiveKit 服务器地址（客户端连接地址，管理端基础设置）。

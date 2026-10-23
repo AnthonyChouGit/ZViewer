@@ -20,7 +20,6 @@ const DEFAULT_SETTINGS: Partial<SystemSettings> = {
   dashDisabled: false,
   cdnAccelerate: false,
   cdnProxyUrl: 'https://gh-proxy.com',
-  embeddedSubtitleEnabled: true,
   playsvideoEnabled: true,
   roomMultiInstanceLogin: false,
   announceAutoPopupOnUpdate: true,
