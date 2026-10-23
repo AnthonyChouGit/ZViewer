@@ -100,7 +100,7 @@
         },
         {
           title: '常见情况',
-          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li><li>配置文件模式只接受 TOML；启动时写入 no_tun = true 与 bind_device = false，缺少 [flags] 段时自动追加。</li></ul>'
+          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li><li>配置文件里没有 <code>[[peer]]</code> 段时，节点只在本机监听，其他设备发现不了。</li><li>配置文件模式只接受 TOML；启动时写入 no_tun = true 与 bind_device = false，缺少 [flags] 段时自动追加。</li></ul>'
         }
       ],
       foot: '只有开着组网时其他设备才能按虚拟 IP 访问；停止组网后地址立即失效。'
@@ -488,14 +488,14 @@
         <div class="form-actions">${button('导入文件','mesh-config-import','folder')}${button('按图形配置填充','mesh-config-template','refresh')}${button('保存','mesh-config-save','check')}${button(running ? '停止组网' : '保存并入网','mesh-config-connect','mesh','primary')}</div>
       </section>
       <aside class="panel"><div class="panel-heading"><h2>使用说明</h2></div>
-        <div class="check-item">${icon('terminal')}<div><strong>直接粘贴</strong><br>整份 TOML 粘进编辑框。网络名称与密钥取自文件，面板里的填写不参与。</div></div>
+        <div class="check-item">${icon('terminal')}<div><strong>直接粘贴</strong><br>整份 TOML 粘进编辑框。网络名称、密钥与对端地址都取自文件，面板里的填写不参与。</div></div>
         <div class="check-item">${icon('folder')}<div><strong>导入文件</strong><br>从磁盘选一份 .toml，内容读入编辑框。</div></div>
         <div class="check-item">${icon('shield')}<div><strong>启动时改写</strong><br>写入 no_tun = true 与 bind_device = false；没有 [flags] 段时自动追加。</div></div>
         <div class="check-item">${icon('info')}<div><strong>只接受 TOML</strong><br>其他格式无法保存。</div></div>
         <div class="panel-line"></div>
         <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>在线设备</span><span>${remotePeers.length ? `${remotePeers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div></div>
         <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
-        <p class="field-note">对端地址只能在“图形配置”里填，切过去用公共对端卡片测速后填入。</p>
+        <p class="field-note">对端地址写在 <code>[[peer]]</code> 段的 <code>uri</code> 里，一行一个，可写多条；公共对端卡片只在“图形配置”里。</p>
       </aside></div>`;
     return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) + tabs + (mode === 'config' ? fileBody : formBody) +
       `<section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;

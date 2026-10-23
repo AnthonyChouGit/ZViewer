@@ -334,7 +334,7 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .tutorial-section-body li strong { color: var(--text-primary); font-weight: 600; }
 .tutorial-section-body a { color: var(--accent); text-decoration: none; }
 .tutorial-section-body a:hover { text-decoration: underline; }
-.tutorial-section-body code { font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--layer-alt); color: var(--text-primary); }
+.tutorial-section-body code, .field-note code { font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--layer-alt); color: var(--text-primary); }
 .tutorial-foot { margin: 0; padding: 8px 12px 10px; border-top: 1px solid var(--divider); color: var(--text-tertiary); font-size: 11px; line-height: 1.6; }
 
 .section-title {
@@ -771,7 +771,7 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
 .mesh-public-panel .form-actions { margin-top: 12px; }
 .frp-mode, .mesh-mode { margin-top: 4px; }
 /* 组网页的整份配置：比 frpc 略矮，右边还要放说明卡 */
-.mesh-config-editor { min-height: 260px; }
+.mesh-config-editor { min-height: 300px; }
 .dns-example {
   margin: 12px 0; padding: 10px 12px;
   border: 1px solid var(--control-stroke); border-radius: var(--radius-control);

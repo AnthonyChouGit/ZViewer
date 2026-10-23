@@ -156,6 +156,44 @@ func TestMeshManagerStartsFromCustomConfig(t *testing.T) {
 	}
 }
 
+// 原版配置常带 [[peer]]：启动时对端段必须原样留给 easytier，连不上对端也不能拖死进程。
+func TestMeshManagerStartsWithPeerInCustomConfig(t *testing.T) {
+	if !isWindows() {
+		t.Skip("组网组件只有 Windows 版本")
+	}
+	core, host := meshTestBinaries(t)
+	manager := newMeshTestNode(t, core, host)
+	port := freeTCPPort(t)
+	deadPeer := freeTCPPort(t) // 没人监听，连接被拒
+	content := fmt.Sprintf("hostname = \"zviewer-peer\"\nlisteners = [\n    \"tcp://0.0.0.0:%d\",\n    \"udp://0.0.0.0:%d\",\n]\n\n[network_identity]\nnetwork_name = \"zviewer-peer\"\nnetwork_secret = \"secret-123456\"\n\n[[peer]]\nuri = \"tcp://127.0.0.1:%d\"\n", port, port, deadPeer)
+	if err := os.MkdirAll(manager.dir, 0o700); err != nil {
+		t.Fatalf("创建组网目录失败：%v", err)
+	}
+	if err := os.WriteFile(manager.customPath(), []byte(content), 0o600); err != nil {
+		t.Fatalf("写入自定义配置失败：%v", err)
+	}
+	cfg := DefaultMeshConfig()
+	cfg.Mode = "config"
+	status, err := manager.Start(cfg, "")
+	if err != nil {
+		t.Fatalf("带对端段的配置应能启动：%v（%s）", err, status.Message)
+	}
+	defer func() { _, _ = manager.Stop() }()
+	if status.State != "running" {
+		t.Fatalf("状态应为 running，得到 %q（%s）", status.State, status.Message)
+	}
+	runtime, err := os.ReadFile(filepath.Join(manager.dir, "config.toml"))
+	if err != nil {
+		t.Fatalf("读取运行时配置失败：%v", err)
+	}
+	if !strings.Contains(string(runtime), "[[peer]]") || !strings.Contains(string(runtime), fmt.Sprintf("tcp://127.0.0.1:%d", deadPeer)) {
+		t.Fatalf("运行时配置应保留对端段：\n%s", runtime)
+	}
+	if !strings.Contains(string(runtime), "no_tun = true") {
+		t.Fatalf("运行时配置缺少 no_tun：\n%s", runtime)
+	}
+}
+
 // 端到端：保存配置 → 切到配置文件模式 → 入网，走的是界面按钮的同一条链路。
 func TestControllerStartsMeshFromSavedConfig(t *testing.T) {
 	if !isWindows() {
