@@ -96,11 +96,11 @@
         },
         {
           title: '怎么用',
-          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入最快节点”，保存并入网。</li><li>已有现成的 EasyTier 配置时，切到“配置文件”，整份 TOML 粘贴或从磁盘导入，保存并入网即可。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
+          body: '<ol><li>点“生成新的网络名与密钥”，需要中转时填对端地址或点“填入最快节点”，保存并入网。</li><li>已有现成的 EasyTier 配置时，切到“配置文件”，粘贴或导入整份 TOML，再点“保存并入网”。</li><li>入网成功后本页显示虚拟 IP 与观看地址。</li><li>点“复制入网说明”，把网络名称与密钥发给朋友。</li><li>朋友在自己的设备上安装 EasyTier 客户端，用同样的网络名称与密钥加入，然后用虚拟 IP 打开本机网页。</li></ol>'
         },
         {
           title: '常见情况',
-          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li><li>配置文件模式只接受 TOML；启动时会强制打开 no_tun 与 bind_device，缺少 [flags] 段会自动补上。</li></ul>'
+          body: '<ul><li>一直是“入网中”或“异常”：先确认组网端口没被占用，再确认对端地址能从本机连上。</li><li>朋友看不到本机：核对名称与密钥是否完全一致，以及对端地址是否双方都可达。</li><li>换一组网络名与密钥就等于换一个新网络，原来加入的设备需要重新加入。</li><li>配置文件模式只接受 TOML；启动时写入 no_tun = true 与 bind_device = false，缺少 [flags] 段时自动追加。</li></ul>'
         }
       ],
       foot: '只有开着组网时其他设备才能按虚拟 IP 访问；停止组网后地址立即失效。'
@@ -115,14 +115,14 @@
         },
         {
           title: '证书覆盖哪些地址',
-          body: '<ul><li>只对 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 生效，不包含内网 IP 与自定义域名。</li><li>不需要配置 DNS、hosts 或路由器。</li><li>证书由本机专用 CA 签发，私钥只留在当前用户配置目录。</li></ul>'
+          body: '<ul><li>只对 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 生效，不包含内网 IP 与自定义域名。</li><li>不需要配置 DNS、hosts 或路由器。</li><li>私钥只留在当前用户配置目录。</li></ul>'
         },
         {
           title: '配置方法',
-          body: '<ol><li>点击签发按钮，程序用本机 CA 生成 localhost 证书；已有有效证书时直接复用。</li><li>在应用设置里确认“使用 HTTPS”已开启，保存并重启服务。</li><li>打开管理页面，地址为 <code>https://localhost:3333</code>；浏览器首次会提示证书不受信任，选择“继续访问”即可。</li><li>需要 IPv6 直连时，在同一页探测本机 IPv6 后按该地址签发，再用 <code>https://[IPv6]:端口</code> 访问；监听范围需为所有地址。</li><li>其他设备访问时同样会提示，选择继续即可；需要消除提示只能在各自的设备上手动信任这份证书。</li></ol>'
+          body: '<ol><li>点击签发按钮生成 localhost 证书；已有有效证书时直接复用。</li><li>在应用设置里确认“使用 HTTPS”已开启，保存并重启服务。</li><li>打开管理页面，地址为 <code>https://localhost:3333</code>；浏览器首次会提示证书不受信任，选择“继续访问”即可。</li><li>需要 IPv6 直连时，在同一页探测本机 IPv6 后按该地址签发，再用 <code>https://[IPv6]:端口</code> 访问；监听范围需为所有地址。</li><li>其他设备访问时同样会提示，选择继续即可；需要消除提示只能在各自的设备上手动信任这份证书。</li></ol>'
         }
       ],
-      foot: '证书由本机 CA 签发，只保证传输加密，不会自动装进任何设备的信任列表。'
+      foot: '证书只对本机回环地址有效；其他设备访问时需在该设备上手动信任这份证书。'
     },
     cli: {
       title: '高画质代理教程',
@@ -335,12 +335,12 @@
       `<div class="form-layout"><section class="panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('cloud')}</span><h2>FRP 服务器</h2></div><small>frps 节点</small></div><div class="form-row"><label class="field"><span>服务器地址 <small>VPS 或服务商</small></span><input id="frp-host" data-frp-field="host" value="${esc(c.host)}" placeholder="例如 frp.example.com" autocomplete="off" maxlength="253"></label><label class="field"><span>控制端口</span><input data-frp-field="port" aria-label="FRP 控制端口" type="number" value="${esc(c.port)}" min="1" max="65535"></label></div><label class="field"><span>认证密钥 <small>不保存明文</small></span><input id="frp-token" type="password" placeholder="与 VPS 上的 frps 保持一致" autocomplete="off"></label><span class="field-note">模板从环境变量 FRP_TOKEN 读取，页面不保存输入。</span><div class="panel-line"></div><div class="panel-heading no-margin"><h2>端口映射</h2><small>本地 → 公网 VPS</small></div><div class="mapping mapping-head"><span>服务</span><span>协议</span><span>本地</span><span></span><span>远端</span></div>${row('网页服务', 'web', 'TCP', 3333, 'webPort', true, true)}${row('UDP 语音', 'voice', 'UDP', 3333, 'voicePort', c.voice)}${row('RTMP 推流', 'rtmp', 'TCP', 3334, 'rtmpPort', c.rtmp)}${row('TCP 语音', 'tcp', 'TCP', 3337, 'tcpPort', c.tcp)}<div class="help-card"><strong>语音需单独放行</strong><p>UDP 语音要单独放行；改用 TCP 语音时管理端也要切换。</p></div><div class="validation" id="frp-error" role="alert"></div><div class="form-actions">${button('导出配置模板', 'export-frp', 'download', 'primary')}</div></section><section><div class="panel"><div class="panel-heading"><h2>配置预览</h2><span class="tag-caption">frpc.toml · 自动生成</span></div><pre class="codebox" id="frp-code">${esc(frpConfig())}</pre><div class="code-footer"><span>凭据使用环境变量占位</span><button class="text-button" data-action="copy-frp">${icon('copy')}复制</button></div><div class="path-flow"><div class="flow-item">${icon('globe')}外网设备</div><span>→</span><div class="flow-item">${icon('cloud')}VPS / frps</div><span>→</span><div class="flow-item">${icon('monitor')}本机 / frpc</div></div></div></section></div>`;
   }
   function certPreview() {
-    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>本机 CA · 自签</span></div><div class="meta-line"><span>证书 SAN</span><span>localhost / 127.0.0.1 / ::1 / 局域网 IP</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div></div><div class="check-item">${icon('check')}<div><strong>本机与局域网可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
+    return `<div class="certificate">${icon('shield')}<div class="eyebrow">证书预览</div><h3 id="cert-preview-domain">localhost</h3><p>本机访问<br>尚未签发</p></div><div class="meta-list"><div class="meta-line"><span>管理页面地址</span><span id="cert-preview-url">https://localhost:3333</span></div><div class="meta-line"><span>签发方式</span><span>本机自签</span></div><div class="meta-line"><span>证书 SAN</span><span>localhost / 127.0.0.1 / ::1 / 局域网 IP</span></div><div class="meta-line"><span>证书状态</span><span>${state.certReady ? '已演示' : '未签发'}</span></div></div><div class="check-item">${icon('check')}<div><strong>本机与局域网可用</strong></div></div><div class="check-item">${icon('lock')}<div><strong>私钥只保存在本机</strong><br>只导出公开证书。</div></div>`;
   }
   function cert() {
     // 演示地址：与真实探测结果同样呈现，便于验收 IPv6 区块的排版。
     const demoV6 = '2408:8207:2f1a:7c60::8a2e';
-    const v6Block = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('globe')}</span><h2>本机 IPv6</h2></div><span class="pill">演示地址</span></div><p class="wizard-copy">按本机 IPv6 地址签发证书，供 IPv6 直连访问。</p><div class="dns-example">https://[${demoV6}]:3333/admin</div><div class="check-item">${icon('globe')}<div><strong>1. 探测本机 IPv6</strong><br>${demoV6} · 演示地址</div></div><div class="check-item">${icon('lock')}<div><strong>2. 按该地址签发</strong><br>运行中的服务会重启，仍由同一个本机 CA 签发。</div></div>${notice('监听范围需设为「所有地址 · IPv4 + IPv6」，其他设备才能经 IPv6 访问。')}<div class="live-toolbar">${button('探测本机 IPv6', 'probe-ipv6', 'globe')}${button('按 IPv6 签发并启用 HTTPS', 'ipv6-cert', 'lock', 'primary')}</div>`;
+    const v6Block = `<div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('globe')}</span><h2>本机 IPv6</h2></div><span class="pill">演示地址</span></div><p class="wizard-copy">按本机 IPv6 地址签发证书，供 IPv6 直连访问。</p><div class="dns-example">https://[${demoV6}]:3333/admin</div><div class="check-item">${icon('globe')}<div><strong>1. 探测本机 IPv6</strong><br>${demoV6} · 演示地址</div></div><div class="check-item">${icon('lock')}<div><strong>2. 按该地址签发</strong><br>运行中的服务会重启。</div></div>${notice('监听范围需设为「所有地址 · IPv4 + IPv6」，其他设备才能经 IPv6 访问。')}<div class="live-toolbar">${button('探测本机 IPv6', 'probe-ipv6', 'globe')}${button('按 IPv6 签发并启用 HTTPS', 'ipv6-cert', 'lock', 'primary')}</div>`;
     const content = `${v6Block}<div class="panel-line"></div><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box orange">${icon('monitor')}</span><h2>本机 localhost</h2></div><span class="pill green">含局域网</span></div><p class="wizard-copy">为 localhost 与局域网地址签发证书并启用 HTTPS。</p><div class="dns-example">https://localhost:3333</div><div class="panel-line"></div><div class="check-item">${icon('check')}<div><strong>1. 检查并签发证书</strong></div></div><div class="check-item">${icon('external')}<div><strong>2. 打开管理页面</strong></div></div><div class="panel-line"></div>${notice('演示流程：不签发证书，浏览器会提示证书不受信任。')}<div class="form-actions">${state.certReady ? button('演示打开管理页面', 'open-manager', 'external') : ''}${button(state.certReady ? '重新演示' : '演示签发本机证书', 'local-cert', 'lock', 'primary')}</div>`;
     return heading('证书与域名', '签发 IPv6 或本机证书并启用 HTTPS。', tutorial('cert')) + `<div class="form-layout"><section class="panel">${content}</section><aside class="panel" id="cert-preview">${certPreview()}</aside></div>`;
   }
@@ -481,21 +481,21 @@
       </section>`;
     const fileBody = `<div class="form-layout"><section class="panel">
         <div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('terminal')}</span><div><h2>EasyTier 配置文件</h2><p class="cli-caption">TOML · 原样运行</p></div></div><span class="pill ${online && live ? 'green' : ''}"><i></i>${esc(status)}</span></div>
-        <p class="wizard-copy">粘贴或导入一份完整的 EasyTier 配置，保存后直接按它入网。</p>
+        <p class="wizard-copy">粘贴或导入完整的 EasyTier 配置，保存后按它入网。</p>
         <textarea class="codebox config-editor mesh-config-editor" id="mesh-config-editor" spellcheck="false" autocomplete="off" aria-label="EasyTier 配置文件内容" placeholder="${MESH_CONFIG_PLACEHOLDER}">${esc(meshFileContent())}</textarea>
         <div class="code-footer"><span>${conf?.path ? '保存位置 ' + esc(conf.path) : '尚未保存'}</span><span>TOML</span></div>
         <div class="validation" id="mesh-error" role="alert">${esc(state.meshConfigError || m.message || '')}</div>
         <div class="form-actions">${button('导入文件','mesh-config-import','folder')}${button('按图形配置填充','mesh-config-template','refresh')}${button('保存','mesh-config-save','check')}${button(running ? '停止组网' : '保存并入网','mesh-config-connect','mesh','primary')}</div>
       </section>
       <aside class="panel"><div class="panel-heading"><h2>使用说明</h2></div>
-        <div class="check-item">${icon('terminal')}<div><strong>直接粘贴</strong><br>整份 TOML 照抄即可，网络名称与密钥以文件里的为准。</div></div>
-        <div class="check-item">${icon('folder')}<div><strong>导入文件</strong><br>从磁盘选一份 .toml，保存后立即按它入网。</div></div>
-        <div class="check-item">${icon('shield')}<div><strong>免管理员运行</strong><br>启动时会强制打开 no_tun 与 bind_device = false，缺 [flags] 段会自动补上。</div></div>
-        <div class="check-item">${icon('info')}<div><strong>只支持 TOML</strong><br>EasyTier 2.6.4 只解析 TOML，YAML/JSON 会解析失败。</div></div>
+        <div class="check-item">${icon('terminal')}<div><strong>直接粘贴</strong><br>整份 TOML 粘进编辑框。网络名称与密钥取自文件，面板里的填写不参与。</div></div>
+        <div class="check-item">${icon('folder')}<div><strong>导入文件</strong><br>从磁盘选一份 .toml，内容读入编辑框。</div></div>
+        <div class="check-item">${icon('shield')}<div><strong>启动时改写</strong><br>写入 no_tun = true 与 bind_device = false；没有 [flags] 段时自动追加。</div></div>
+        <div class="check-item">${icon('info')}<div><strong>只接受 TOML</strong><br>其他格式无法保存。</div></div>
         <div class="panel-line"></div>
         <div class="meta-list"><div class="meta-line"><span>虚拟 IP</span><span>${esc(m.virtualIp || '—')}</span></div><div class="meta-line"><span>在线设备</span><span>${remotePeers.length ? `${remotePeers.length} 台` : '—'}</span></div><div class="meta-line"><span>自动入网</span><span>${saved.enabled ? '已开启' : '已关闭'}</span></div></div>
         <div class="live-toolbar">${access ? `<button class="btn" data-copy="${esc(access)}">${icon('copy')}复制观看地址</button>` : ''}${m.state === 'running' ? button('复制入网说明','mesh-invite','copy') : ''}</div>
-        <p class="field-note">需要公共中转节点时切回“图形配置”，在下方卡片测速后填入对端地址。</p>
+        <p class="field-note">对端地址只能在“图形配置”里填，切过去用公共对端卡片测速后填入。</p>
       </aside></div>`;
     return heading('EasyTier 虚拟组网', '把本机加入虚拟局域网，外部设备按虚拟 IP 访问。', tutorial('mesh')) + tabs + (mode === 'config' ? fileBody : formBody) +
       `<section class="panel mesh-devices-panel"><div class="panel-heading"><div class="panel-heading-title"><span class="icon-box">${icon('mesh')}</span><div><h2>在线设备</h2><p class="cli-caption">同一网络内的 EasyTier 节点</p></div></div><span class="pill ${remotePeers.length ? 'green' : ''}"><i></i>${remotePeers.length ? `${remotePeers.length} 台` : '等待加入'}</span></div>${peers.length ? `<div class="mesh-device-grid">${peers.map(peerCard).join('')}</div>` : emptyPeers}</section>`;

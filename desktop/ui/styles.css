@@ -816,10 +816,6 @@ main > div { padding: 0 var(--page-padding) var(--gap-xl); max-width: 1120px; }
   background: var(--accent-tint); color: var(--accent);
 }
 .big-check svg { width: 24px; height: 24px; }
-.certificate-fingerprint {
-  margin-top: 12px; color: var(--text-tertiary);
-  font-family: var(--font-mono); font-size: 11px; line-height: 17px; word-break: break-all;
-}
 
 /* ---------- 高画质代理 ---------- */
 .cli-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; align-items: start; }
