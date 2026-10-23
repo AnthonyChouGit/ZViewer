@@ -200,12 +200,16 @@ func NormalizeMesh(input map[string]any, current MeshConfig, secretPresent bool,
 		return target, fmt.Errorf("组网监听端口不能与本机服务的 %d 端口重复", target.ListenPort)
 	}
 
+	// 实例标识必须落成合法 UUID：easytier-core 遇到空值会直接拒绝加载整份配置
+	// （failed to parse config file，退出码 1），所以缺失或格式不对都重新生成，
+	// 不让用户为「组网进程已退出（1）」这种无信息量的报错买单。
 	if raw, exists := base["instanceId"]; exists {
-		text, isText := asString(raw)
-		if !isText || (text != "" && !meshUUIDPattern.MatchString(text)) {
-			return target, errors.New("组网实例标识无效")
+		if text, isText := asString(raw); isText && meshUUIDPattern.MatchString(text) {
+			target.InstanceID = text
 		}
-		target.InstanceID = text
+	}
+	if target.InstanceID == "" {
+		target.InstanceID = NewMeshInstanceID()
 	}
 
 	target.Enabled = asBool(base["enabled"])
@@ -290,8 +294,13 @@ func tomlString(value string) string {
 // 不写 rpc_portal：实测配置里的 rpc_portal 不生效，RPC 端口靠命令行 -r 传入。
 func MeshTOML(cfg MeshConfig, secret, hostname string) string {
 	port := strconv.Itoa(cfg.ListenPort)
+	instanceID := cfg.InstanceID
+	if instanceID == "" {
+		// 兜底：空 instance_id 会让 easytier-core 拒绝加载，这里再挡一次。
+		instanceID = NewMeshInstanceID()
+	}
 	lines := []string{
-		"instance_id = " + tomlString(cfg.InstanceID),
+		"instance_id = " + tomlString(instanceID),
 		"hostname = " + tomlString(hostname),
 		"dhcp = true",
 		"listeners = [",

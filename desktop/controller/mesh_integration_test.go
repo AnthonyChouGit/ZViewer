@@ -229,3 +229,32 @@ func TestMeshManagerTwoNodes(t *testing.T) {
 		}
 	}
 }
+
+// 回归：GUI 走的是 DefaultMeshConfig（没有实例标识）这条路径。
+// 之前生成的 TOML 是 instance_id = ""，easytier-core 200ms 内退出（1），
+// 界面只显示「组网进程已退出（1）」——这里直接用默认配置跑通启动。
+func TestMeshManagerStartsWithDefaultConfig(t *testing.T) {
+	if !isWindows() {
+		t.Skip("组网组件只有 Windows 版本")
+	}
+	core, host := meshTestBinaries(t)
+	manager := newMeshTestNode(t, core, host)
+	cfg := DefaultMeshConfig()
+	cfg.NetworkName = RandomMeshName()
+	cfg.ListenPort = freeTCPPort(t)
+	status, err := manager.Start(cfg, RandomMeshSecret())
+	if err != nil {
+		t.Fatalf("默认配置应能启动组网：%v（message=%q）", err, status.Message)
+	}
+	defer func() { _, _ = manager.Stop() }()
+	if status.State != "running" {
+		t.Fatalf("状态应为 running，得到 %q（%s）", status.State, status.Message)
+	}
+	raw, readErr := os.ReadFile(filepath.Join(manager.dir, "config.toml"))
+	if readErr != nil {
+		t.Fatalf("读取生成的配置失败：%v", readErr)
+	}
+	if strings.Contains(string(raw), `instance_id = ""`) {
+		t.Fatalf("生成的配置不能是空实例标识：\n%s", string(raw))
+	}
+}

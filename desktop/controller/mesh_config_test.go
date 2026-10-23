@@ -143,3 +143,78 @@ func TestRandomMeshCredentials(t *testing.T) {
 		t.Fatalf("实例标识格式不对：%s", NewMeshInstanceID())
 	}
 }
+
+// 回归：空 instance_id 会让 easytier-core 拒绝加载整份配置（退出码 1），
+// 而 DefaultMeshConfig 一直没有生成实例标识，等于每次入网必失败。
+func TestNormalizeMeshGeneratesInstanceID(t *testing.T) {
+	for _, input := range []map[string]any{
+		{"networkName": "zviewer-home"},
+		{"networkName": "zviewer-home", "instanceId": ""},
+		{"networkName": "zviewer-home", "instanceId": "not-a-uuid"},
+	} {
+		cfg, err := NormalizeMesh(input, DefaultMeshConfig(), true, nil)
+		if err != nil {
+			t.Fatalf("未预期的错误：%v", err)
+		}
+		if !meshUUIDPattern.MatchString(cfg.InstanceID) {
+			t.Fatalf("应生成合法实例标识，得到 %q", cfg.InstanceID)
+		}
+	}
+	kept := "11111111-2222-4333-8444-555555555555"
+	cfg, err := NormalizeMesh(map[string]any{"networkName": "zviewer-home", "instanceId": kept},
+		DefaultMeshConfig(), true, nil)
+	if err != nil {
+		t.Fatalf("未预期的错误：%v", err)
+	}
+	if cfg.InstanceID != kept {
+		t.Fatalf("已有实例标识应原样沿用，得到 %q", cfg.InstanceID)
+	}
+}
+
+// MeshTOML 是最后一道闸门：就算调用方漏了实例标识，也不能写出空值。
+func TestMeshTOMLNeverWritesEmptyInstanceID(t *testing.T) {
+	text := MeshTOML(DefaultMeshConfig(), "secret123", "host")
+	if strings.Contains(text, `instance_id = ""`) {
+		t.Fatalf("空 instance_id 会让 easytier-core 拒绝加载：\n%s", text)
+	}
+	first := strings.Split(text, "\n")[0]
+	value := strings.TrimSuffix(strings.TrimPrefix(first, `instance_id = "`), `"`)
+	if !meshUUIDPattern.MatchString(value) {
+		t.Fatalf("首行应是合法实例标识，得到 %q", first)
+	}
+}
+
+func TestMeshFailureDiagnostics(t *testing.T) {
+	// easytier 启动时会把整份 TOML 打到 stdout，落日志前必须给密钥打码。
+	if got := redactMeshSecret(`network_secret = "abc123"`); strings.Contains(got, "abc123") {
+		t.Fatalf("配置回显里的密钥必须打码：%s", got)
+	}
+	cases := map[string]string{
+		`2026-10-23T17:39:10.2+08:00 ERROR CORE: error=failed to load config file: "config.toml"`:  "配置文件无效",
+		`2026-10-23T17:39:10.2+08:00 ERROR CORE: error=failed to parse rpc portal address`:         "管理端口无效",
+		`2026-10-23T17:39:10.2+08:00 ERROR CORE: error=bind: Address already in use`:               "组网监听端口已被占用",
+		`2026-10-23T17:39:10.2+08:00 ERROR CORE: error=packet.dll: cannot open shared object file`: "缺少组网驱动文件",
+	}
+	for line, want := range cases {
+		if got := meshErrorReason(line); got != want {
+			t.Fatalf("%q 应识别为 %q，得到 %q", line, want, got)
+		}
+	}
+	trimmed := trimMeshLine(`2026-10-23T17:39:10.2+08:00 ERROR CORE: error=failed to load config file: "config.toml"`)
+	if strings.Contains(trimmed, "2026-10-23") || strings.Contains(trimmed, "CORE:") || strings.Contains(trimmed, "error=") {
+		t.Fatalf("应去掉时间戳与级别前缀，得到 %q", trimmed)
+	}
+}
+
+// 界面上的失败原因要能直接看懂，同时缓冲里不能留下明文密钥。
+func TestMeshFailureReasonFromOutput(t *testing.T) {
+	m := &MeshManager{state: "starting"}
+	m.handleLine(`2026-10-23T17:39:10.2+08:00 ERROR CORE: error=failed to load config file: "config.toml"`)
+	m.handleLine(`network_secret = "plain-secret-value"`)
+	if got := m.failureReason("组网组件启动失败", 1); got != "组网组件启动失败：配置文件无效" {
+		t.Fatalf("失败原因不对：%q", got)
+	}
+	if strings.Contains(strings.Join(m.output, "\n"), "plain-secret-value") {
+		t.Fatal("组网密钥不应以明文留在输出缓冲里")
+	}
+}

@@ -3,6 +3,8 @@ package controller
 // 组网密钥与 FRP 密钥是两份独立的密文：任何一次保存都不能把另一份冲掉。
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -109,5 +111,38 @@ func TestStoreSaveMeshRejectsShortSecret(t *testing.T) {
 	short := "abc"
 	if _, err := store.SaveMesh(map[string]any{"enabled": true, "networkName": "zviewer-home"}, &short); err == nil {
 		t.Fatal("过短的密钥应被拒绝")
+	}
+}
+
+// 老配置里没有实例标识（升级前存的），读取时要补上并落盘：
+// 空值会让 easytier-core 拒绝加载配置，每次启动重新生成又会让 peer_id 一直变。
+func TestStoreHealsLegacyEmptyMeshInstanceID(t *testing.T) {
+	dir := t.TempDir()
+	legacy := `{"schema":2,"config":{"mesh":{"enabled":false,"networkName":"zuecle",` +
+		`"peers":["tcp://1.2.3.4:11010"],"listenPort":11010,"instanceId":""}},` +
+		`"frpToken":"","meshSecret":"enc:mesh-network-secret"}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(legacy), 0o600); err != nil {
+		t.Fatalf("写入老配置失败：%v", err)
+	}
+	store, err := NewStore(dir, dir, plainCipher{})
+	if err != nil {
+		t.Fatalf("读取老配置失败：%v", err)
+	}
+	healed := store.Value.Mesh.InstanceID
+	if !meshUUIDPattern.MatchString(healed) {
+		t.Fatalf("应从老配置补出实例标识，得到 %q", healed)
+	}
+	if store.Value.Mesh.NetworkName != "zuecle" || len(store.Value.Mesh.Peers) != 1 {
+		t.Fatalf("其余组网字段应保留：%+v", store.Value.Mesh)
+	}
+	if _, err := store.SaveMesh(map[string]any{"enabled": true}, nil); err != nil {
+		t.Fatalf("保存组网配置失败：%v", err)
+	}
+	reopened, err := NewStore(dir, dir, plainCipher{})
+	if err != nil {
+		t.Fatalf("重新读取配置失败：%v", err)
+	}
+	if reopened.Value.Mesh.InstanceID != healed {
+		t.Fatalf("实例标识应落盘复用，得到 %q（期望 %q）", reopened.Value.Mesh.InstanceID, healed)
 	}
 }

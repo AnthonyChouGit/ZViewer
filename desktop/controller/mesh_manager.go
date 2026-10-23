@@ -18,7 +18,11 @@ import (
 	"time"
 )
 
-const meshReadyTimeout = 15 * time.Second
+const (
+	meshReadyTimeout = 15 * time.Second
+	// meshOutputLimit 是保留的 easytier 输出行数：只在启动失败时用来解释原因。
+	meshOutputLimit = 20
+)
 
 // meshWaitingMessage 是「进程已起来、但还没有虚拟 IP」时的固定文案：
 // DHCP 要等有对端接入才分配，这不是错误。
@@ -49,8 +53,12 @@ type MeshManager struct {
 	lanPeers []string
 	lanPort  int
 	message  string
-	pollStop chan struct{}
-	polling  bool
+	// output / lastError 只在启动失败时用：easytier 的原因全在 stderr 里，
+	// 不留下就等于让用户对着「进程已退出（1）」猜。
+	output    []string
+	lastError string
+	pollStop  chan struct{}
+	polling   bool
 
 	stopMu sync.Mutex
 }
@@ -130,8 +138,21 @@ func (m *MeshManager) Running() bool {
 	return m.child != nil
 }
 
-// handleLine 只挑用户能看懂的事件记录，原始日志不外泄。
+// handleLine 挑用户能看懂的事件更新状态，同时保留一段输出用于失败时解释原因。
+// easytier 启动时会把整份 TOML 回显到 stdout，其中含网络密钥，记录下来之前必须打码。
 func (m *MeshManager) handleLine(line string) {
+	text := strings.TrimSpace(redactMeshSecret(line))
+	if text != "" {
+		m.mu.Lock()
+		m.output = append(m.output, text)
+		if len(m.output) > meshOutputLimit {
+			m.output = m.output[len(m.output)-meshOutputLimit:]
+		}
+		if strings.Contains(text, "ERROR") {
+			m.lastError = text
+		}
+		m.mu.Unlock()
+	}
 	lower := strings.ToLower(line)
 	switch {
 	case strings.Contains(line, "dhcp ip changed"):
@@ -161,6 +182,7 @@ func (m *MeshManager) Start(cfg MeshConfig, secret string) (MeshStatus, error) {
 	}
 	m.state, m.cfg, m.secret = "starting", cfg, secret
 	m.node, m.peers, m.message = MeshNode{}, nil, ""
+	m.output, m.lastError = nil, ""
 	m.mu.Unlock()
 	m.update()
 
@@ -237,13 +259,17 @@ func (m *MeshManager) Start(cfg MeshConfig, secret string) (MeshStatus, error) {
 		return m.Snapshot(), nil
 	}
 
-	m.mu.Lock()
-	message := m.message
-	m.mu.Unlock()
-	_, _ = m.Stop()
-	if message == "" {
-		message = "组网节点未能启动；请检查监听端口是否被占用"
+	code := 0
+	exited := proc.Exited()
+	if exited {
+		code = proc.Wait()
 	}
+	_, _ = m.Stop()
+	message := "组网组件已启动但读不到状态，请检查管理端口是否被占用"
+	if exited {
+		message = m.failureReason("组网组件启动失败", code)
+	}
+	m.logFailureDetail()
 	m.mu.Lock()
 	m.state, m.message = "error", message
 	m.mu.Unlock()
@@ -272,14 +298,100 @@ func (m *MeshManager) watchExit(proc *Proc) {
 	} else {
 		m.state = "error"
 		if m.message == "" {
-			m.message = fmt.Sprintf("组网进程已退出（%d）", code)
+			m.message = m.failureReasonLocked("组网组件异常退出", code)
 		}
 	}
 	m.mu.Unlock()
 	if !intentional {
 		m.log(fmt.Sprintf("EasyTier 虚拟组网进程已退出（%d）", code), "mesh", "WARN")
+		m.logFailureDetail()
 	}
 	m.update()
+}
+
+// failureReason 生成给用户看的失败原因；原始英文报错只写日志。
+func (m *MeshManager) failureReason(prefix string, code int) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.failureReasonLocked(prefix, code)
+}
+
+func (m *MeshManager) failureReasonLocked(prefix string, code int) string {
+	reason := meshErrorReason(m.lastError)
+	if reason == "" {
+		reason = trimMeshLine(m.lastError)
+	}
+	if reason == "" {
+		return fmt.Sprintf("%s（退出码 %d），详情见日志", prefix, code)
+	}
+	return prefix + "：" + reason
+}
+
+// logFailureDetail 把最近一条 easytier 报错写进日志，界面只留一句结论。
+func (m *MeshManager) logFailureDetail() {
+	m.mu.Lock()
+	raw := m.lastError
+	tail := append([]string{}, m.output...)
+	m.mu.Unlock()
+	if raw != "" {
+		m.log("组网组件报错："+trimMeshLine(raw), "mesh", "WARN")
+		return
+	}
+	// 没有任何 ERROR 行时退一步：最后两行输出通常也够看出卡在哪。
+	if len(tail) > 2 {
+		tail = tail[len(tail)-2:]
+	}
+	if len(tail) > 0 {
+		m.log("组网组件输出："+strings.Join(tail, " | "), "mesh", "WARN")
+	}
+}
+
+// redactMeshSecret 给配置回显里的网络密钥打码：easytier 启动时会把整份 TOML
+// 打到 stdout，原样落日志等于把密钥明文写盘。
+func redactMeshSecret(line string) string {
+	index := strings.Index(line, "network_secret")
+	if index < 0 {
+		return line
+	}
+	if equal := strings.Index(line[index:], "="); equal >= 0 {
+		return line[:index+equal+1] + ` "***"`
+	}
+	return line
+}
+
+// meshErrorReason 把 easytier 的报错翻成一句能看懂的原因；认不出来时返回空串。
+func meshErrorReason(line string) string {
+	lower := strings.ToLower(line)
+	switch {
+	case strings.Contains(lower, "parse config file"), strings.Contains(lower, "load config file"):
+		return "配置文件无效"
+	case strings.Contains(lower, "rpc portal"):
+		return "管理端口无效"
+	case strings.Contains(lower, "address already in use"), strings.Contains(lower, "os error 10048"):
+		return "组网监听端口已被占用"
+	case strings.Contains(lower, "cannot open shared object"), strings.Contains(lower, "packet.dll"),
+		strings.Contains(lower, "windivert"):
+		return "缺少组网驱动文件"
+	case strings.Contains(lower, "access is denied"), strings.Contains(lower, "os error 5"):
+		return "权限不足"
+	}
+	return ""
+}
+
+// trimMeshLine 去掉时间戳与日志级别前缀，只留能说明问题的一段。
+func trimMeshLine(line string) string {
+	text := strings.TrimSpace(line)
+	if index := strings.Index(text, "ERROR"); index >= 0 {
+		text = strings.TrimSpace(text[index+len("ERROR"):])
+	}
+	for _, prefix := range []string{"CORE::INSTANCE:", "CORE:", "error="} {
+		text = strings.TrimSpace(strings.TrimPrefix(text, prefix))
+	}
+	runes := []rune(text)
+	if len(runes) > 100 {
+		text = string(runes[:100]) + "…"
+	}
+	return text
 }
 
 // startPolling 每 3 秒读一次节点与对端，只有内容变化时才推送状态。
