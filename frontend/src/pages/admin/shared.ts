@@ -92,8 +92,6 @@ export interface AdminSettings {
   autoDeleteInactiveRooms: boolean
   autoDeleteAfterHours: number
   roomDefaultMusicVolume: number
-  /** 一起听音量均衡（全局开关，仅影响各客户端本地播放） */
-  volumeNormalize: boolean
   registrationMode: RegistrationMode
   roomCreationMode: RoomCreationMode
   roomPermissionMatrix: PermissionMatrix | null

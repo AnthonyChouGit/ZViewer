@@ -464,8 +464,8 @@ export function useListenTogether({
     return () => loudnessNormalizer.setGainListener(null)
   }, [applyOutputVolume])
 
-  // 响度均衡由管理端「基础设置」全局控制；关闭时不建 AudioContext、不跑定时器
-  const volumeNormalize = useSystemSettingsStore((s) => s.volumeNormalize)
+  // 音量均衡是本地设置（设置页「音量均衡」）；关闭时不建 AudioContext、不跑定时器
+  const volumeNormalize = useMusicSettingsStore((s) => s.volumeNormalize)
   useEffect(() => {
     loudnessNormalizer.setEnabled(volumeNormalize)
     applyOutputVolume()

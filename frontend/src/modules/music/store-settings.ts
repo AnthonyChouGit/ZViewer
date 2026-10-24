@@ -58,6 +58,13 @@ export interface MusicSettings {
   gaplessPlayback: boolean
   /** 音频可视化（播放器底部 EQ 频谱动画） */
   audioVisualizer: boolean
+  /**
+   * 音量均衡（响度归一，默认关闭）：旁路测量当前曲目响度，把偏响的歌
+   * 压低到统一目标（只压低、不提升），换歌不用反复调音量。
+   * 纯本地行为：不参与房间同步，不影响其他听众与自己保存的音量值；
+   * 浏览器不支持 captureStream 时静默失效，播放不受影响
+   */
+  volumeNormalize: boolean
   /** 搜索联想下拉条目数量 */
   searchAssistLimit: number
   /** 歌词字体大小（px） */
@@ -159,6 +166,7 @@ export const DEFAULT_MUSIC_SETTINGS: MusicSettings = {
   showSongTranslation: true,
   gaplessPlayback: false,
   audioVisualizer: false,
+  volumeNormalize: false,
   searchAssistLimit: 8,
   lyricSize: 20,
   tlyricSize: 14,

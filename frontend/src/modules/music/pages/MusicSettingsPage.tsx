@@ -591,6 +591,15 @@ export function MusicSettingsPage() {
               }
             />
           </SettingOption>
+          {/* 音量均衡（纯本地播放行为：只压低偏响的曲目，不参与同步） */}
+          <SettingOption name="音量均衡">
+            <SettingToggle
+              on={settings.volumeNormalize}
+              onToggle={() =>
+                setSettings({ volumeNormalize: !settings.volumeNormalize })
+              }
+            />
+          </SettingOption>
           {/* 音频可视化（性能类） */}
           <SettingOption name="音频可视化">
             <SettingToggle

@@ -525,7 +525,6 @@ router.get(
           autoDeleteInactiveRooms: settings.autoDeleteInactiveRooms,
           autoDeleteAfterHours: settings.autoDeleteAfterHours,
           roomDefaultMusicVolume: settings.roomDefaultMusicVolume,
-          volumeNormalize: settings.volumeNormalize,
           dataSourceConfig: settings.dataSourceConfig,
           registrationMode: settings.registrationMode,
           roomCreationMode: settings.roomCreationMode,
@@ -560,15 +559,8 @@ router.put(
   ): Promise<void> => {
     try {
       const {
-        autoDeleteInactiveRooms, autoDeleteAfterHours, roomDefaultMusicVolume, volumeNormalize, dataSourceConfig, registrationMode, roomCreationMode, betaFeaturesEnabled, dashDisabled, bilibiliDefaultParseMode, bilibiliPgcDefaultMode, cdnAccelerate, cdnProxyUrl, playsvideoEnabled, roomMultiInstanceLogin, livekitExternalUrl, roomPermissionMatrix, announceAutoPopupOnUpdate,
+        autoDeleteInactiveRooms, autoDeleteAfterHours, roomDefaultMusicVolume, dataSourceConfig, registrationMode, roomCreationMode, betaFeaturesEnabled, dashDisabled, bilibiliDefaultParseMode, bilibiliPgcDefaultMode, cdnAccelerate, cdnProxyUrl, playsvideoEnabled, roomMultiInstanceLogin, livekitExternalUrl, roomPermissionMatrix, announceAutoPopupOnUpdate,
       } = req.body;
-      if (volumeNormalize !== undefined && typeof volumeNormalize !== 'boolean') {
-        res.status(400).json({
-          success: false,
-          message: 'volumeNormalize 必须是布尔值',
-        });
-        return;
-      }
       if (roomDefaultMusicVolume !== undefined && (
         !Number.isInteger(roomDefaultMusicVolume) ||
         roomDefaultMusicVolume < 0 || roomDefaultMusicVolume > 100
@@ -727,9 +719,6 @@ router.put(
       if (roomDefaultMusicVolume !== undefined) {
         settings.roomDefaultMusicVolume = roomDefaultMusicVolume;
       }
-      if (volumeNormalize !== undefined) {
-        settings.volumeNormalize = volumeNormalize;
-      }
       if (dataSourceConfig !== undefined) {
         settings.dataSourceConfig = dataSourceConfig as Record<string, unknown>;
         clearAnimeProvidersCache();
@@ -801,7 +790,6 @@ router.put(
           autoDeleteInactiveRooms: settings.autoDeleteInactiveRooms,
           autoDeleteAfterHours: settings.autoDeleteAfterHours,
           roomDefaultMusicVolume: settings.roomDefaultMusicVolume,
-          volumeNormalize: settings.volumeNormalize,
           dataSourceConfig: settings.dataSourceConfig,
           registrationMode: settings.registrationMode,
           roomCreationMode: settings.roomCreationMode,

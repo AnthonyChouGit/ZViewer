@@ -88,7 +88,10 @@ class LoudnessNormalizer {
     this.enabled = enabled
     if (enabled) {
       this.acc.reset()
-      this.startTimer()
+      // 开关点击本身是用户手势：立刻建/唤醒 AudioContext，避免首次采样
+      // 落在挂起状态读到静音（之后由定时器兜底重试 resume）
+      this.ensureContext()
+      if (this.supported) this.startTimer()
       return
     }
     this.stopTimer()

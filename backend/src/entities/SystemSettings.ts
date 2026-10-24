@@ -21,15 +21,6 @@ export class SystemSettings {
   @Column({ type: 'integer', default: 50 })
   roomDefaultMusicVolume!: number;
 
-  /**
-   * 一起听音量均衡（响度归一化）全局开关。
-   * - true：各客户端把偏响的歌曲压低到统一目标响度（只衰减不提升），
-   *   仅影响本机播放，不参与房间同步、不改动用户音量设置
-   * - false（默认）：不做任何处理
-   */
-  @Column({ type: 'boolean', default: false })
-  volumeNormalize!: boolean;
-
   @Column({ type: 'json', nullable: true })
   dataSourceConfig!: Record<string, unknown> | null;
 
