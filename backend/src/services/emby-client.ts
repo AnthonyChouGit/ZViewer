@@ -18,9 +18,11 @@ function loginKey(server: string, username: string, password: string): string {
 
 const DEFAULT_TIMEOUT_MS = 10000;
 
+const EMBY_CLIENT = process.env.EMBY_CLIENT_NAME ?? 'ZViewer';
+
 /** Emby 客户端标识头（所有请求都需要，登录请求尤其必需） */
 const EMBY_AUTHORIZATION_HEADER =
-  'MediaBrowser Client="ZViewer", Device="Web Browser", DeviceId="zviewer-web-' +
+  'MediaBrowser Client="' + EMBY_CLIENT + '", Device="Web Browser", DeviceId="zviewer-web-' +
   Math.random().toString(36).slice(2, 12) +
   '", Version="1.0.0"';
 
