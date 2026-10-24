@@ -178,6 +178,25 @@ export function SettingsTab({
           </div>
 
           <Title level={5} className="mb-4 mt-6">
+            一起听音量均衡
+          </Title>
+          <div className="mb-6 max-w-md">
+            <Switch
+              label="均衡不同歌曲的响度"
+              checked={settings.volumeNormalize}
+              onChange={(e) =>
+                onSettingsChange((prev) => ({
+                  ...prev,
+                  volumeNormalize: e.target.checked,
+                }))
+              }
+            />
+            <p className="mt-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]">
+              开启后各客户端把偏响的歌曲压低到同一目标响度，切歌不用反复调音量。只压低、不提升，仅影响各自的本地播放，不改变房间同步与用户自己的音量设置。
+            </p>
+          </div>
+
+          <Title level={5} className="mb-4 mt-6">
             房间创建权限
           </Title>
           <div className="mb-6 max-w-md">

@@ -19,6 +19,12 @@ export interface SystemSettings {
   autoDeleteAfterHours: number
   /** 一起听初始音量（0–100）；仅作为未保存本地音量时的默认值。 */
   roomDefaultMusicVolume: number
+  /**
+   * 一起听音量均衡（响度归一化，管理端基础设置全局开关）。
+   * 开启后各客户端把偏响的歌曲压低到统一目标响度（只衰减不提升），
+   * 仅影响本机播放，不参与房间同步。
+   */
+  volumeNormalize: boolean
   registrationMode: RegistrationMode
   /** 房间创建权限模式：admin-only=仅管理员，all-users=所有登录用户（不含 guest） */
   roomCreationMode: RoomCreationMode
@@ -73,6 +79,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   autoDeleteInactiveRooms: true,
   autoDeleteAfterHours: 24,
   roomDefaultMusicVolume: 50,
+  volumeNormalize: false,
   registrationMode: 'approval',
   roomCreationMode: 'admin-only',
   roomPermissionMatrix: null,

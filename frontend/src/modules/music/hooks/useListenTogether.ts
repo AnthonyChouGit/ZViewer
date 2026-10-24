@@ -34,6 +34,7 @@ import {
   activeQueueOf,
 } from '../store'
 import { useMusicSettingsStore, normalizeMusicLevel } from '../store-settings'
+import { loudnessNormalizer } from '../audio/loudnessNormalizer'
 import {
   MUSIC_SOCKET_EVENT,
   SYNC_ALIGN_THRESHOLD_SEC,
@@ -406,7 +407,9 @@ export function useListenTogether({
   const lastServerHeartbeatAtRef = useRef(0)
   /** 房主端待审批的观众申请 */
   const pendingControlRef = useRef<MusicControlRequest | null>(null)
-  /** 本地音量镜像（音频引擎创建元素时读取，避免依赖 state） */
+  /** 用户音量镜像（0–1，未乘响度均衡增益；UI 与持久化都用它） */
+  const userVolumeRef = useRef(volume)
+  /** 实际写入元素的音量 = 用户音量 × 均衡增益（引擎创建元素时读取） */
   const volumeRef = useRef(volume)
   // latest ref 模式：事件回调经 ref 读取最新身份
   const socketRef = useRef(socket)
@@ -439,30 +442,61 @@ export function useListenTogether({
     playMode,
   })
 
+  /**
+   * 把「用户音量 × 响度均衡增益」写进当前主元素。
+   * 静音只由用户音量决定：均衡最多把音量压到 1/4，不会把非零音量变成静音。
+   */
+  const applyOutputVolume = useCallback(() => {
+    const effective = Math.min(
+      1,
+      Math.max(0, userVolumeRef.current * loudnessNormalizer.getGain())
+    )
+    volumeRef.current = effective
+    const audio = audioRef.current
+    if (!audio) return
+    audio.muted = userVolumeRef.current === 0
+    audio.volume = effective
+  }, [audioRef])
+
+  useEffect(() => {
+    // 增益由均衡器在测量过程中逐步给出（换曲、收敛、关闭时归 1）
+    loudnessNormalizer.setGainListener(applyOutputVolume)
+    return () => loudnessNormalizer.setGainListener(null)
+  }, [applyOutputVolume])
+
+  // 响度均衡由管理端「基础设置」全局控制；关闭时不建 AudioContext、不跑定时器
+  const volumeNormalize = useSystemSettingsStore((s) => s.volumeNormalize)
+  useEffect(() => {
+    loudnessNormalizer.setEnabled(volumeNormalize)
+    applyOutputVolume()
+    return () => loudnessNormalizer.setEnabled(false)
+  }, [volumeNormalize, applyOutputVolume])
+
+  useEffect(() => {
+    userVolumeRef.current = volume
+    applyOutputVolume()
+  }, [volume, applyOutputVolume])
+
   useEffect(() => {
     socketRef.current = socket
     roomIdRef.current = roomId
     isHostRef.current = isHost
     usernameRef.current = username
-    volumeRef.current = volume
-  }, [socket, roomId, isHost, username, volume])
+  }, [socket, roomId, isHost, username])
 
   // 公开设置可能晚于播放器挂载返回。仅在本次未手调且无本地记录时应用。
   useEffect(() => {
     const applyDefault = () => {
       if (volumeAdjustedRef.current) return
       const value = loadPersistedVolume()
-      volumeRef.current = value
+      userVolumeRef.current = value
       setVolumeState(value)
-      if (audioRef.current) {
-        audioRef.current.volume = value
-        audioRef.current.muted = value === 0
-      }
+      applyOutputVolume()
     }
     const unsubscribe = useSystemSettingsStore.subscribe(applyDefault)
     void useSystemSettingsStore.getState().fetchSettings()
     return unsubscribe
-  }, [audioRef])
+  }, [applyOutputVolume])
 
   /**
    * 构造同步状态快照（broadcastSyncState 与房主心跳共用）。
@@ -586,8 +620,9 @@ export function useListenTogether({
       ).indexOf(item)
 
       // 元素加载与起播交给引擎：命中预载（同 URL 且已缓冲）则升格接管，
-      // 否则主元素重新 load；起始进度与起播状态由引擎按元素状态处理
-      playSource(url, positionSec, shouldPlay)
+      // 否则主元素重新 load；起始进度与起播状态由引擎按元素状态处理。
+      // trackKey 用于响度均衡命中增益缓存（换曲前就位，避免前几秒明显偏响）
+      playSource(url, positionSec, shouldPlay, musicItemKey(item))
     },
     [playSource, currentQueueIdxRef]
   )
@@ -1075,10 +1110,11 @@ export function useListenTogether({
         Math.max(0, Number.isFinite(value) ? value : 0)
       )
       volumeAdjustedRef.current = true
-      const audio = getAudio()
-      audio.muted = clamped === 0
-      audio.volume = clamped
-      volumeRef.current = clamped
+      userVolumeRef.current = clamped
+      // 保持既有行为：调节音量即确保播放入口已创建
+      getAudio()
+      // 实际写入元素的是「音量 × 均衡增益」，UI 与持久化仍存用户音量
+      applyOutputVolume()
       setVolumeState(clamped)
       try {
         localStorage.setItem(VOLUME_STORAGE_KEY, String(clamped))
@@ -1086,7 +1122,7 @@ export function useListenTogether({
         // ignore：隐私模式等场景写入失败可忽略
       }
     },
-    [getAudio]
+    [getAudio, applyOutputVolume]
   )
 
   /**

@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: Partial<SystemSettings> = {
   autoDeleteInactiveRooms: true,
   autoDeleteAfterHours: 24,
   roomDefaultMusicVolume: 50,
+  volumeNormalize: false,
   registrationMode: 'approval',
   roomCreationMode: 'admin-only',
   betaFeaturesEnabled: false,

@@ -9,6 +9,7 @@ import {
   playAudioWithRetry,
   unmountMediaElement,
 } from './audioElement'
+import { loudnessNormalizer } from '../audio/loudnessNormalizer'
 
 interface UseAudioEngineOptions {
   /** 本地音量镜像（创建音频元素时应用；音量本身由调用方持有状态） */
@@ -41,8 +42,14 @@ export interface AudioEngine {
   /**
    * 加载指定流地址并起播/暂停。预载元素已缓冲同一首歌时直接升格为主播放
    * 元素并迁移事件监听（零网络/零加载等待），否则退回主元素重新 load。
+   * trackKey 供响度均衡查增益缓存（同一首歌重新起播时不重复收敛）。
    */
-  playSource: (url: string, positionSec: number, shouldPlay: boolean) => void
+  playSource: (
+    url: string,
+    positionSec: number,
+    shouldPlay: boolean,
+    trackKey?: string | null
+  ) => void
   /** 房间媒体拆除：暂停主/预载元素；full 时连 src 一并丢弃（断线仅暂停） */
   stopAll: (full: boolean) => void
   /** 卸载释放：主/预载元素资源全清并清空内部引用 */
@@ -88,6 +95,8 @@ export function useAudioEngine({
       audio.muted = volumeRef.current === 0
       audio.volume = volumeRef.current
       mountMediaElement(audio)
+      // 响度均衡：登记元素（真正开始播时才建立 captureStream 分析支路）
+      loudnessNormalizer.attach(audio)
       audioRef.current = audio
     }
     return audioRef.current
@@ -182,6 +191,7 @@ export function useAudioEngine({
     } catch {
       // ignore
     }
+    loudnessNormalizer.detach(el)
     unmountMediaElement(el)
   }, [])
 
@@ -232,6 +242,7 @@ export function useAudioEngine({
     }
     // 挂 DOM：预载元素升格为主播放元素后承载 MediaSession 展示
     mountMediaElement(el)
+    loudnessNormalizer.attach(el)
     el.src = targetUrl
     preloadRef.current = el
     return () => {
@@ -239,6 +250,7 @@ export function useAudioEngine({
       if (preloadRef.current === el) {
         el.pause()
         preloadRef.current = null
+        loudnessNormalizer.detach(el)
       }
     }
   }, [
@@ -252,8 +264,15 @@ export function useAudioEngine({
   ])
 
   const playSource = useCallback(
-    (url: string, positionSec: number, shouldPlay: boolean) => {
+    (
+      url: string,
+      positionSec: number,
+      shouldPlay: boolean,
+      trackKey?: string | null
+    ) => {
       const audio = getAudio()
+      // 响度均衡：换曲时先按缓存/上一首增益就位，随后的测量在数秒内收敛
+      loudnessNormalizer.beginTrack(trackKey ?? null)
 
       // ===== 预载升格路径 =====
       // 条件：同一 URL（流地址稳定：同 songId/level/roomId/token）、
@@ -269,8 +288,10 @@ export function useAudioEngine({
         // 1) 事件迁移：先从旧主元素摘除（避免 pause 触发暂停状态镜像）
         detachAudioHandlers(audio)
         // 2) 停止旧播放（事件已摘除，不会误镜像暂停状态）并从 DOM 移除
-        //    （元素角色已被预载元素接替，残留隐藏元素会堆积）
+        //    （元素角色已被预载元素接替，残留隐藏元素会堆积）；响度均衡的
+        //    captureStream 支路一并释放，否则每升格一次就多一条游离的分析流
         audio.pause()
+        loudnessNormalizer.detach(audio)
         unmountMediaElement(audio)
         // 3) 挂载事件并接管角色；预载槽消费置空（预载 effect 会重新预载下一首）
         attachAudioHandlers(preloaded)
@@ -334,6 +355,7 @@ export function useAudioEngine({
       stopEl(preloadRef.current)
       if (full) {
         // 引用即将丢弃，从 DOM 一并移除（否则隐藏元素残留 body 无法 GC）
+        loudnessNormalizer.detach(preloadRef.current)
         unmountMediaElement(preloadRef.current)
         preloadRef.current = null
       }
@@ -347,6 +369,7 @@ export function useAudioEngine({
       audio.srcObject = null
       audio.removeAttribute('src')
       audio.load()
+      loudnessNormalizer.detach(audio)
       unmountMediaElement(audio)
     }
     audioRef.current = null
@@ -359,6 +382,7 @@ export function useAudioEngine({
       } catch {
         // ignore
       }
+      loudnessNormalizer.detach(preload)
       unmountMediaElement(preload)
     }
     preloadRef.current = null

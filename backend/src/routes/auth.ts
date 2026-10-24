@@ -348,6 +348,7 @@ router.get(
           roomPermissionMatrix: settings.roomPermissionMatrix,
           announceAutoPopupOnUpdate: settings.announceAutoPopupOnUpdate,
           roomDefaultMusicVolume: settings.roomDefaultMusicVolume,
+          volumeNormalize: settings.volumeNormalize,
           appVersion: getLocalVersion(),
           // 桌面 GUI 托管：网页管理端据此禁用「版本更新」，引导去 GUI 更新
           desktopManaged: isDesktopManaged(),
