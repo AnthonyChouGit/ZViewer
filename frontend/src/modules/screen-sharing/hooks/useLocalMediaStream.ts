@@ -248,6 +248,26 @@ export function useLocalMediaStream(
       setIsSharing(true)
       setIsPaused(false)
 
+      // 系统音频兜底检测（issue #26）：浏览器完全可能不返回音频轨道——
+      // Chrome/Edge 需要在共享选择器里勾选「同时共享系统音频」，
+      // Firefox 不支持屏幕音频采集，WebView2 等内嵌环境也可能静默丢弃
+      // 音频轨道。若不提示，表现为「开了开关、观众却没声音」且双方无从排查。
+      if (shareSystemAudio && mediaStream.getAudioTracks().length === 0) {
+        message.warning(
+          '浏览器未返回系统音频轨道：请在共享选择窗口勾选「同时共享系统音频」后重新开始共享。' +
+            'Firefox 不支持共享系统音频，请改用 Chrome / Edge。',
+          { duration: 10000 }
+        )
+      }
+      // 系统音频轨中途被停止（用户在浏览器共享栏取消音频勾选等）时提示房主
+      mediaStream.getAudioTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          message.warning('系统音频共享已停止，观众将不再听到声音', {
+            duration: 8000,
+          })
+        })
+      })
+
       // 对视频轨道设置 contentHint 并做分辨率兜底
       // - contentHint='motion' 告知浏览器/编码器内容为动态画面，避免静止检测降帧
       // - 帧率不再二次 applyConstraints 限 max：Chromium 对 max 约束的严格
