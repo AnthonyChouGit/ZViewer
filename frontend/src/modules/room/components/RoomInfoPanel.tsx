@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Space } from '@/components/ui/Space'
 import { Text, Paragraph } from '@/components/ui/Typography'
-import { Modal } from '@/components/ui/Modal'
+import { Modal, ConfirmModal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { message } from '@/components/ui/message'
@@ -33,6 +33,7 @@ import {
   canRoomViewerPerform,
 } from '@/store/systemSettingsStore'
 import { cn } from '@/lib/utils'
+import { getAddressScope } from '@/lib/netAddress'
 import {
   USER_ROLE_LABELS,
   USER_ROLE_CSS_COLORS,
@@ -92,6 +93,8 @@ export function RoomInfoPanel({
   const [isEditingName, setIsEditingName] = useState(false)
   const [editingNameValue, setEditingNameValue] = useState(roomName)
   const [savingName, setSavingName] = useState(false)
+  /** 内网地址分享提示：确认后才复制 */
+  const [showLinkWarning, setShowLinkWarning] = useState(false)
 
   // 房间设置表单
   const [passwordValue, setPasswordValue] = useState('')
@@ -246,11 +249,20 @@ export function RoomInfoPanel({
     })
   }
 
-  const handleCopyLink = async () => {
+  const copyShareUrl = async () => {
     await copy(shareUrl, {
       successMessage: '分享链接已复制',
       errorMessage: '复制失败',
     })
+  }
+
+  const handleCopyLink = async () => {
+    // 本机 / 内网地址复制出的链接对外不可达，先提示再复制
+    if (getAddressScope(window.location.hostname) !== 'public') {
+      setShowLinkWarning(true)
+      return
+    }
+    await copyShareUrl()
   }
 
   const handleSaveName = async () => {
@@ -1218,6 +1230,31 @@ export function RoomInfoPanel({
           吗？转交后您将变为观众身份，无法再管理房间。
         </Paragraph>
       </Modal>
+
+      {/* 内网地址分享提示 */}
+      <ConfirmModal
+        open={showLinkWarning}
+        onClose={() => setShowLinkWarning(false)}
+        onCancel={() => setShowLinkWarning(false)}
+        onOk={() => {
+          setShowLinkWarning(false)
+          void copyShareUrl()
+        }}
+        title="当前处于内网地址"
+        okText="仍然复制"
+        cancelText="取消"
+      >
+        <div className="flex flex-col gap-2">
+          <Paragraph className="m-0 text-sm">
+            当前访问地址为内网地址（{window.location.hostname}
+            ），复制出的链接只有本机或同一内网的用户能打开，其他用户无法访问。
+          </Paragraph>
+          <Paragraph type="secondary" className="m-0 text-xs leading-relaxed">
+            请改用公网 IPv4 或 IPv6 地址访问本服务后再复制，或通过内网穿透（如
+            FRP）把服务映射到公网。
+          </Paragraph>
+        </div>
+      </ConfirmModal>
     </>
   )
 }
